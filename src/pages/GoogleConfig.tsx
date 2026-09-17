@@ -196,17 +196,17 @@ export const GoogleConfig: React.FC = () => {
       setMaintenanceFolder(currentConfig.maintenanceFolder || '');
       setMirrorRecursive(currentConfig.mirrorRecursive !== undefined ? currentConfig.mirrorRecursive : true);
       setR2AccountId(currentConfig.r2AccountId || '35014a2514680107d74e1e68d96e6c32');
-      setR2BucketName(currentConfig.r2BucketName || 'kiyeun-storage');
+      setR2BucketName(currentConfig.r2BucketName || 'ebro-it-demo');
       setR2AccessKeyId(currentConfig.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030');
       setR2SecretAccessKey(currentConfig.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986');
-      setR2PublicDomain(currentConfig.r2PublicDomain || 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev');
+      setR2PublicDomain(currentConfig.r2PublicDomain || '');
       setIsDevMode(currentConfig.isDevMode !== undefined ? currentConfig.isDevMode : true);
     } else {
       setR2AccountId('35014a2514680107d74e1e68d96e6c32');
-      setR2BucketName('kiyeun-storage');
+      setR2BucketName('ebro-it-demo');
       setR2AccessKeyId('03cdb7560d37242de608a5db2a976030');
       setR2SecretAccessKey('b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986');
-      setR2PublicDomain('https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev');
+      setR2PublicDomain('');
     }
   }, [currentConfig]);
 

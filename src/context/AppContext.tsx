@@ -857,7 +857,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             bankbookCopyUrl: '',
             transactionStatementTemplateUrl: 'templates/거래명세서_양식.html',
             r2AccountId: '35014a2514680107d74e1e68d96e6c32',
-            r2BucketName: 'kiyeun-storage',
+            r2BucketName: 'ebro-it-demo',
             r2AccessKeyId: '03cdb7560d37242de608a5db2a976030',
             r2SecretAccessKey: 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986',
             r2PublicDomain: 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev'
