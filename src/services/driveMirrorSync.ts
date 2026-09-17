@@ -95,7 +95,7 @@ async function downloadFromR2(publicDomain: string, key: string): Promise<ArrayB
   return null;
 }
 
-const DEFAULT_CF_PUBLIC_DOMAIN = 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev';
+const DEFAULT_CF_PUBLIC_DOMAIN = 'https://pub-a2468b66c450440dab37e0c02d516ca6.r2.dev';
 
 const CF_MANIFEST_FILES: Array<{ key: string; size: number }> = [
   { key: '00.거래명세서양식.xlsx', size: 65463 },

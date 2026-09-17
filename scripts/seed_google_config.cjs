@@ -16,22 +16,24 @@ async function run() {
     INSERT INTO google_configs (
       id, "googleEmail", "contractFolder", "consumableFolder",
       "deliveryFolder", "maintenanceFolder", "isDevMode",
-      "r2AccountId", "r2BucketName", "r2AccessKeyId", "r2SecretAccessKey",
+      "r2AccountId", "r2BucketName", "r2AccessKeyId", "r2SecretAccessKey", "r2PublicDomain",
       "createdAt", "updatedAt"
     ) VALUES (
       'cfg-ebro-it', 'admin@ebro-it.com', 'contracts', 'consumables',
       'deliveries', 'repairs', false,
       '35014a2514680107d74e1e68d96e6c32', 'ebro-it-demo',
       '03cdb7560d37242de608a5db2a976030', 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986',
+      'https://pub-a2468b66c450440dab37e0c02d516ca6.r2.dev',
       $1, $1
     ) ON CONFLICT (id) DO UPDATE SET
       "r2AccountId" = EXCLUDED."r2AccountId",
       "r2BucketName" = EXCLUDED."r2BucketName",
       "r2AccessKeyId" = EXCLUDED."r2AccessKeyId",
       "r2SecretAccessKey" = EXCLUDED."r2SecretAccessKey",
+      "r2PublicDomain" = EXCLUDED."r2PublicDomain",
       "updatedAt" = EXCLUDED."updatedAt";
   `, [now]);
-  console.log('google_configs pre-seeded successfully!');
+  console.log('google_configs updated with public domain successfully!');
   await client.end();
 }
 
