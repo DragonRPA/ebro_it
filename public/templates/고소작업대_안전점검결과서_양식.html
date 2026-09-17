@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>고소작업대 안전점검 결과서</title>
+    <style>
+        body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; margin: 30px; color: #333; line-height: 1.3; }
+        .title { text-align: center; font-size: 22px; font-weight: 800; border: 2px solid #000; padding: 6px; width: 60%; margin: 0 auto 20px auto; letter-spacing: 2px; }
+        
+        table { width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 10px; }
+        th, td { border: 1px solid #000; padding: 5px; text-align: center; }
+        th { background-color: #f3f4f6; font-weight: bold; }
+        td.left { text-align: left; padding-left: 10px; }
+
+        /* Fluid font scaling container to ensure manufacturer name fits inside the box without wrapping or overflowing */
+        .fluid-manufacturer {
+            display: inline-block;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            width: 100%;
+            /* Adjust size based on length of text using javascript or CSS clamp */
+            font-size: clamp(8px, 2.5vw, 11px);
+            font-weight: bold;
+        }
+
+        .category-header { background-color: #e5e7eb; font-weight: bold; text-align: left; padding-left: 8px; font-size: 10px; }
+        
+        .footer-note { font-size: 8px; text-align: left; color: #666; margin-top: 10px; }
+        .stamp-container { position: relative; display: inline-block; }
+        .stamp { position: absolute; right: -5px; top: -10px; width: 30px; height: 30px; opacity: 0.8; }
+    </style>
+</head>
+<body>
+
+    <div class="title">고소작업대(T/L) 안전점검 결과서</div>
+
+    <table>
+        <tr>
+            <th style="width: 12%;">사업장명</th>
+            <td style="width: 20%;">SINOBOOM (주)기연리프트</td>
+            <th style="width: 12%;">형식</th>
+            <td style="width: 20%;">수직상승형 고소작업대</td>
+            <th style="width: 12%;">제조사(렌탈사)</th>
+            <td style="width: 24%;">
+                <!-- Dynamic fluid scaling cell -->
+                <span class="fluid-manufacturer">{{manufacturer}} (주)기연리프트</span>
+            </td>
+        </tr>
+        <tr>
+            <th>사용업체</th>
+            <td>{{customerName}}</td>
+            <th>동력전달방식</th>
+            <td>배터리충전식</td>
+            <th>모델명</th>
+            <td><strong>{{modelName}}</strong></td>
+        </tr>
+        <tr>
+            <th>장비중량</th>
+            <td>{{weight}} kg</td>
+            <th>운행속도</th>
+            <td>4 Km/h</td>
+            <th>작업높이/용량</th>
+            <td>{{maxHeight}} M / {{loadCapacity}} kg</td>
+        </tr>
+        <tr>
+            <th>차량번호</th>
+            <td><strong>{{assetNo}}</strong></td>
+            <th>제조년도</th>
+            <td>{{productionYear}}년</td>
+            <th>안전인증일</th>
+            <td>{{safetyCertDate}}</td>
+        </tr>
+        <tr>
+            <th>안전점검일시</th>
+            <td>{{inspectionDate}}</td>
+            <th>점검부서</th>
+            <td>정비팀</td>
+            <th>점검자</th>
+            <td class="stamp-container">
+                {{inspectorName}}
+                <img class="stamp" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAAAXNSR0IArs4c6QAAAAlwSFlzAAALEwAACxMBAJqcGAAAAadJREFUaEPtmWFOwzAMhW/uA+4/90HACUgIEoc0ad26/lhq1STN19hOqN9SJfFjO/4e3pI3S5F3fFw8bFp97dZz8/G2abfB2wZ7D6/J+69bWJ6L52P7mHy+Xz8+Lx+fr6v6Xv5m9fP69Vrfy//2Wl/L217ra/s5t4/J91+vybE9bHl9TNu3vVbeXsszW/k59pq2r3up1+TYHk2Ove61/e01ObaHLa+PyWvbq63PseW5eE2OpvXl1XNl9dxyZe7/7M9V33t7eW/sPbfvjXXeW8u5+PzcXq7P5er293v7b8u5+O/rZ/bZ+97bf1vXz+yzz/f+3FauXN6eKz/n8q51/cw+++zzvT+3lSuXt+fKz7m8a10/s88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a/wdzK+i+0EagAAAAABJRU5ErkJggg==" alt="김관주 직인">
+            </td>
+        </tr>
+    </table>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 15%;">검사구분</th>
+                <th style="width: 70%;">검사항목</th>
+                <th style="width: 15%;">검사결과</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td rowspan="2" style="font-weight: bold;">1. 공통사항</td>
+                <td class="left">제조일로부터 15년 이내의 장비일 것</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td class="left">붐대, 아웃트리거, 용접부등 비파괴 검사 성적서 비치되어 있을것</td>
+                <td>-</td>
+            </tr>
+            <tr>
+                <td rowspan="2" style="font-weight: bold;">2. 차대와 타이어</td>
+                <td class="left">차체의 균열, 변형, 손상 및 부식이 없을것</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td class="left">타이어의 이상마모 및 변형이 없고 림부의 체결볼트, 너트 등이 견고하게 체결될것</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td rowspan="2" style="font-weight: bold;">3. 동력원 및 배터리</td>
+                <td class="left">유압펌프 및 모터는 설치상태가 견고하고 작동상태가 원활할 것</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td class="left">축전지 배선 단락, 변형 및 전선 노후 피복 상태 양호할 것</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td style="font-weight: bold;">4. 작업대 마스트</td>
+                <td class="left">구조물의 균열, 변형이 없고 마스트 잠금 고정상태 양호할 것</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td rowspan="2" style="font-weight: bold;">5. 작업대</td>
+                <td class="left">안전난간대 높이 1.0M 이상, 발끝막이판 0.15M 이상 설치 상태</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td class="left">작업대 바닥면은 미끄럼 방지 구조이며 배수가 원활할 것</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td style="font-weight: bold;">6. 제어장치</td>
+                <td class="left">상/하부 조작레버 중립 복귀 작동 상태 및 비상정지 스위치 상태</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td style="font-weight: bold;">7. 경고 및 표시</td>
+                <td class="left">명판 제조사, 모델명, 제조번호, 정격하중, 주의사항 표시 부착 상태</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td rowspan="4" style="font-weight: bold;">8. 안전장치</td>
+                <td class="left">상승 주행 시 속도 제한 장치 및 오작동 방지 안전 가드 작동상태</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td class="left">차대의 경사 허용 한도 초과 시 작동 방지 경보음 및 상승 제한 상태</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td class="left">비상정지용 누름버튼이 돌출형식으로 수동 복귀 양호할 것</td>
+                <td>O</td>
+            </tr>
+            <tr>
+                <td class="left">비상 하강 밸브(비상 조작 유압 밸브) 작동 상태 상태 양호</td>
+                <td>O</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div style="border: 1px solid #000; padding: 6px; font-size: 10px; text-align: left; background-color: #fafafa;">
+        <strong>검사의견:</strong> 상기 기연리프트 임대 장비는 규격 및 안전 검사 기준에 부합하며, 반입 전 최종 점검 결과 이상이 없으므로 임대 출고를 승인함.
+    </div>
+
+    <div class="footer-note">* 검사결과 표시: 양호 O, 불량 X, 해당무 -</div>
+
+</body>
+</html>

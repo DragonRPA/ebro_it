@@ -1,0 +1,224 @@
+// src/config/menu_config.ts
+export interface MenuItemConfig {
+  id: string;
+  name: string;
+}
+
+export interface MenuGroupConfig {
+  id: string;
+  name: string;
+  items: MenuItemConfig[];
+}
+
+// 전사 전체 메뉴 그룹 및 항목 통합 관리 (Single Source of Truth)
+export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
+  {
+    id: 'grp_dashboard',
+    name: 'ERP 대시보드',
+    items: [
+      { id: 'dashboard', name: 'ERP 대시보드 메인' }
+    ]
+  },
+  {
+    id: 'grp_sales',
+    name: '영업관리',
+    items: [
+      { id: 'customer', name: '고객 관리 (담당자/현장)' },
+      { id: 'contract', name: '계약 관리' },
+      { id: 'billing', name: '청구/수납 관리' },
+      { id: 'receivable', name: '외상미수금 대장' },
+      { id: 'smart_dispatch4', name: '출고 요청' },
+      { id: 'smart_return', name: '회수 요청' },
+      { id: 'smart_as_request', name: 'AS 요청' },
+      { id: 'delinquency', name: '미수 채권 연체 관리' }
+    ]
+  },
+  {
+    id: 'grp_product_asset',
+    name: '제품 / 자산관리',
+    items: [
+      { id: 'product', name: '제품 관리' },
+      { id: 'asset', name: '자산 관리 (대장)' },
+      { id: 'acquisition_disposal', name: '당사자산 취득/매각' },
+      { id: 'rent_asset', name: '임차 장비 관리' }
+    ]
+  },
+  {
+    id: 'grp_logistics',
+    name: '배차 / 운송관리',
+    items: [
+      { id: 'delivery', name: '배차/운송 관리 (비용정산)' },
+      { id: 'transport_master', name: '운송 거래처 관리' }
+    ]
+  },
+  {
+    id: 'grp_inout',
+    name: '입출고관리',
+    items: [
+      { id: 'asset_inout_history', name: '자산 입출고' },
+      { id: 'dispatch_assign', name: '장비 할당 (매핑)' },
+      { id: 'outbound_inspections', name: '출고 검수 관리' },
+      { id: 'print_queue_monitor', name: '프린트 큐 모니터' }
+    ]
+  },
+  {
+    id: 'grp_maintenance',
+    name: '정비 / 소모품관리',
+    items: [
+      { id: 'consumable_purchase', name: '소모품 구매' },
+      { id: 'consumable_inout', name: '소모품 입출고' },
+      { id: 'consumable_stock', name: '소모품 재고' },
+      { id: 'field_as', name: '현장 AS 관리' },
+      { id: 'repair', name: 'RMA / 정비 관리' },
+      { id: 'inspection_checklist_manage', name: '정비 항목 관리' }
+    ]
+  },
+  {
+    id: 'grp_management',
+    name: '경영관리',
+    items: [
+      { id: 'leave_application', name: '연차신청' },
+      { id: 'ot_management', name: 'OT 관리' },
+      { id: 'vehicle_log', name: '차량 / 주유관리' },
+      { id: 'purchase_settlement', name: '월말 매입 정산' },
+      { id: 'vendors', name: '매입처 (공급자/외주처) 관리' },
+      { id: 'bank_matching', name: '은행 입출금 대장' },
+      { id: 'corporate_card', name: '법인카드 매입정산' },
+      { id: 'cash_flow', name: '자금 흐름 분석' },
+      { id: 'depreciation_execution', name: '감가상각 마감 실행' },
+      { id: 'regular_reports', name: '정기보고서 생성' },
+      { id: 'agent_badge', name: '계약 패키지 발행 관리' }
+    ]
+  },
+  {
+    id: 'grp_management_special',
+    name: '경영관리 - 특수',
+    items: [
+      { id: 'organization', name: '조직/인사 관리' },
+      { id: 'permission', name: '사용자 및 권한 설정' },
+      { id: 'payroll', name: '급여 정산 (보안 강제)' },
+      { id: 'leave_management', name: '연차관리' },
+      { id: 'privacy_audit', name: '개인정보 접속 감사' }
+    ]
+  },
+  {
+    id: 'grp_tools',
+    name: '도구 및 다운로드',
+    items: [
+      { id: 'operations_manual', name: '업무매뉴얼' },
+      { id: 'error_report', name: '오류 신고' }
+    ]
+  },
+  {
+    id: 'grp_system_dev',
+    name: '시스템관리 - 개발자',
+    items: [
+      { id: 'agentic_ai_lab', name: '에이전틱 AI 샌드박스 랩' },
+      { id: 'agentic_dispatch_studio', name: '에이전틱 배차 관제 스튜디오' },
+      { id: 'agentic_settlement_autopilot', name: '에이전틱 월말 대사 정산 오토파일럿' },
+      { id: 'agentic_asset_lifecycle', name: '에이전틱 자산 라이프사이클 관제' },
+      { id: 'initial_db_upload', name: '초기DB 업로드' },
+      { id: 'google_config', name: '구글 관리자 설정' },
+      { id: 'dev_uploader', name: '[개발] DB 데이터 업로더' }
+    ]
+  }
+];
+
+// 전사 모든 menuId 목록 추출 도우미
+export const getAllSystemMenuIds = (): string[] => {
+  const ids: string[] = [];
+  SYSTEM_MENU_CONFIG.forEach(grp => {
+    grp.items.forEach(item => {
+      ids.push(item.id);
+    });
+  });
+  return ids;
+};
+
+// 전사 복수형/변형 메뉴 ID를 단일 표준(SSOT) 단수형 ID로 정규화하는 별칭 맵
+export const CANONICAL_MENU_ALIASES: Record<string, string> = {
+  'consumables': 'consumable_stock',
+  'consumable': 'consumable_stock',
+  'consumable-purchase': 'consumable_purchase',
+  'consumable-purchases': 'consumable_purchase',
+  'consumable_purchases': 'consumable_purchase',
+  'consumable-inout': 'consumable_inout',
+  'consumable-stock': 'consumable_stock',
+  'repairs': 'repair',
+  'repairing': 'repair',
+  'billings': 'billing',
+  'contracts': 'contract',
+  'customers': 'customer',
+  'deliveries': 'delivery',
+  'products': 'product',
+  'assets': 'asset',
+  'sites': 'customer',
+  'organizations': 'organization',
+  'permissions': 'permission',
+  'dispatch': 'delivery',
+  'dispatches': 'delivery',
+  'truck_dispatch': 'delivery',
+  'truck-dispatch': 'delivery',
+  'delivery-dispatch': 'delivery',
+  'smart-dispatch': 'smart_dispatch',
+  'smart-dispatch4': 'smart_dispatch4',
+  'smart-return': 'smart_return',
+  'smart-as-request': 'smart_as_request',
+  'smart_as': 'smart_as_request',
+  'purchase_settlements': 'purchase_settlement',
+  'payrolls': 'payroll',
+  'corporate_cards': 'corporate_card',
+  'leave-ot': 'leave_ot',
+  'leave_application': 'leave_application',
+  'leave-application': 'leave_application',
+  'leave_apply': 'leave_application',
+  'leave-apply': 'leave_application',
+  'leave_applications': 'leave_application',
+  'leave_management': 'leave_management',
+  'leave-management': 'leave_management',
+  'ot_management': 'ot_management',
+  'ot-management': 'ot_management',
+  'overtime_management': 'ot_management',
+  'overtime-management': 'ot_management',
+  'overtime': 'ot_management',
+  'vehicle-log': 'vehicle_log',
+  'outbound_inspection': 'outbound_inspections',
+  'print_queue_monitor': 'print_queue_monitor',
+  'print-queue-monitor': 'print_queue_monitor',
+  'print_queue': 'print_queue_monitor',
+  'print-queue': 'print_queue_monitor',
+  'agent': 'agent_badge',
+  'agent-badge': 'agent_badge',
+  'agentbadge': 'agent_badge',
+  'privacy-audit': 'privacy_audit',
+  'privacy_access_logs': 'privacy_audit',
+  'privacy_access_log': 'privacy_audit',
+  'error_report': 'error_report',
+  'error-report': 'error_report',
+  'error_reports': 'error_report',
+  'error-reports': 'error_report',
+  'error': 'error_report',
+  'errors': 'error_report',
+  '오류신고': 'error_report',
+  'agentic-ai-lab': 'agentic_ai_lab',
+  'agentic-dispatch-studio': 'agentic_dispatch_studio',
+  'agentic-settlement-autopilot': 'agentic_settlement_autopilot',
+  'agentic-asset-lifecycle': 'agentic_asset_lifecycle'
+};
+
+export function normalizeMenuId(menuId: string): string {
+  if (!menuId) return '';
+  const trimmed = menuId.trim().toLowerCase();
+  return CANONICAL_MENU_ALIASES[trimmed] || trimmed;
+}
+
+// menuId로 메뉴 한글 명칭 검색 도우미
+export const getMenuNameById = (menuId: string): string => {
+  const normId = normalizeMenuId(menuId);
+  for (const grp of SYSTEM_MENU_CONFIG) {
+    const item = grp.items.find(i => i.id === normId);
+    if (item) return item.name;
+  }
+  return menuId;
+};
+

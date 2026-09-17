@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>렌탈 견적서</title>
+    <style>
+        body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; margin: 40px; color: #333; line-height: 1.4; }
+        .title { text-align: center; font-size: 28px; font-weight: 800; letter-spacing: 5px; margin-bottom: 30px; text-decoration: underline; }
+        
+        .header-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        .header-table td { border: none; padding: 0; vertical-align: top; }
+        .info-box { border: 1px solid #000; padding: 12px; height: 130px; }
+        .info-box.to { width: 45%; }
+        .info-box.from { width: 50%; }
+        .info-box h3 { margin: 0 0 10px 0; font-size: 16px; font-weight: bold; border-bottom: 1px dashed #ccc; padding-bottom: 5px; }
+        .info-row { display: flex; margin-bottom: 6px; font-size: 13px; }
+        .info-label { width: 70px; font-weight: bold; color: #555; }
+        .info-value { flex: 1; }
+
+        .price-summary { background-color: #f5f5f5; border: 1px solid #000; padding: 10px; font-size: 14px; font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; }
+
+        .main-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 12px; }
+        .main-table th, .main-table td { border: 1px solid #000; padding: 8px; text-align: center; }
+        .main-table th { background-color: #e5e7eb; font-weight: bold; }
+        .main-table td.left { text-align: left; }
+        .main-table td.right { text-align: right; }
+        
+        .details-list { margin: 0; padding-left: 15px; font-size: 11px; color: #444; line-height: 1.5; }
+
+        .terms-box { border: 1px solid #000; padding: 12px; font-size: 12px; background-color: #fafafa; }
+        .terms-box h4 { margin: 0 0 8px 0; font-size: 13px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 4px; }
+        .terms-box ul { margin: 0; padding-left: 20px; line-height: 1.6; }
+        .terms-box li { margin-bottom: 4px; }
+        
+        .stamp-container { position: relative; display: inline-block; }
+        .stamp { position: absolute; right: 10px; top: -15px; width: 45px; height: 45px; opacity: 0.85; }
+    </style>
+</head>
+<body>
+
+    <div class="title">렌탈 견적서</div>
+
+    <table class="header-table">
+        <tr>
+            <td style="width: 48%;">
+                <div class="info-box to">
+                    <h3>TO</h3>
+                    <div class="info-row"><div class="info-label">수신처</div><div class="info-value"><strong>{{customerName}}</strong></div></div>
+                    <div class="info-row"><div class="info-label">담당자</div><div class="info-value">{{contactName}} {{contactPosition}}</div></div>
+                    <div class="info-row"><div class="info-label">연락처</div><div class="info-value">{{contactPhone}}</div></div>
+                    <div class="info-row"><div class="info-label">견적일</div><div class="info-value">{{quotationDate}}</div></div>
+                    <div class="info-row"><div class="info-label">유효기간</div><div class="info-value">견적일로부터 1개월</div></div>
+                </div>
+            </td>
+            <td style="width: 4%;"></td>
+            <td style="width: 48%;">
+                <div class="info-box from">
+                    <div style="display: flex; justify-content: space-between; border-bottom: 1px dashed #ccc; padding-bottom: 5px; margin-bottom: 10px; align-items: center;">
+                        <h3 style="margin: 0; border: none; padding: 0;">From</h3>
+                        <div class="stamp-container">
+                            <span style="font-size: 12px; color: #777;">(인)</span>
+                            <img class="stamp" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAAAXNSR0IArs4c6QAAAAlwSFlzAAALEwAACxMBAJqcGAAAAadJREFUaEPtmWFOwzAMhW/uA+4/90HACUgIEoc0ad26/lhq1STN19hOqN9SJfFjO/4e3pI3S5F3fFw8bFp97dZz8/G2abfB2wZ7D6/J+69bWJ6L52P7mHy+Xz8+Lx+fr6v6Xv5m9fP69Vrfy//2Wl/L217ra/s5t4/J91+vybE9bHl9TNu3vVbeXsszW/k59pq2r3up1+TYHk2Ove61/e01ObaHLa+PyWvbq63PseW5eE2OpvXl1XNl9dxyZe7/7M9V33t7eW/sPbfvjXXeW8u5+PzcXq7P5er293v7b8u5+O/rZ/bZ+97bf1vXz+yzz/f+3FauXN6eKz/n8q51/cw+++zzvT+3lSuXt+fKz7m8a10/s88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a/wdzK+i+0EagAAAAABJRU5ErkJggg==" alt="기연리프트 직인">
+                        </div>
+                    </div>
+                    <div class="info-row"><div class="info-label">상호</div><div class="info-value"><strong>(주)기연리프트</strong> (대표자: 이수용)</div></div>
+                    <div class="info-row"><div class="info-label">등록번호</div><div class="info-value">138-81-83251</div></div>
+                    <div class="info-row"><div class="info-label">담당자</div><div class="info-value">{{salespersonName}} ({{salespersonPhone}})</div></div>
+                    <div class="info-row"><div class="info-label">이메일</div><div class="info-value">giyeonlift@naver.com</div></div>
+                    <div class="info-row"><div class="info-label">TEL / FAX</div><div class="info-value">031-334-5296 / 031-335-5297</div></div>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <div class="price-summary">
+        <span>견적 금액 (공급가액 + 세액)</span>
+        <span>₩{{totalPrice}} (부가세 포함)</span>
+    </div>
+
+    <table class="main-table">
+        <thead>
+            <tr>
+                <th style="width: 25%;">품명</th>
+                <th style="width: 30%;">사양</th>
+                <th style="width: 8%;">수량</th>
+                <th style="width: 12%;">단가 (30일 기준)</th>
+                <th style="width: 13%;">공급가액</th>
+                <th style="width: 12%;">세액</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{equipmentLines}}
+            <tr>
+                <td>상하차 편도 운송료</td>
+                <td>배송/회수 차량 배차 비용 (1회 청구)</td>
+                <td>1</td>
+                <td class="right">₩{{deliveryCost}}</td>
+                <td class="right">₩{{deliveryCost}}</td>
+                <td class="right">₩{{deliveryTax}}</td>
+            </tr>
+            <tr>
+                <td colspan="2" style="font-weight: bold; background-color: #f9fafb;">합 계</td>
+                <td style="font-weight: bold;">{{totalQty}}</td>
+                <td class="right" style="background-color: #f9fafb;">-</td>
+                <td class="right" style="font-weight: bold; background-color: #f9fafb;">₩{{totalSupply}}</td>
+                <td class="right" style="font-weight: bold; background-color: #f9fafb;">₩{{totalTax}}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <div class="terms-box">
+        <h4>기타 약관 및 거래 조건</h4>
+        <ul>
+            <li><strong>운송약관:</strong> 2개월 이하 사용 시 왕복 운반비 임차인 부담, 4개월 이하 사용 시 편도 운임 임차인 부담, 4개월 이상 사용 시 왕복 운반비 임대인 부담을 원칙으로 합니다.</li>
+            <li><strong>보험조건:</strong> 생산물배상책임보험 1사고당 총 보상 한도 5억원에 가입되어 있습니다.</li>
+            <li><strong>상하차비:</strong> 현장에 장비 도착 및 회수 반출 시 지게차 사용 비용은 임차인이 부담합니다.</li>
+            <li><strong>유지보수:</strong> 일반적인 소모품 및 정비는 임대인이 부담하나, 사용자 과실 및 부주의로 인한 파손 발생 시 정비 수리 비용은 임차인이 전액 부담합니다.</li>
+            <li><strong>반납조건:</strong> 장비 반납 시 외관상의 심각한 손상이나 훼손이 확인되는 경우 세차 및 도색비용이 합의 청구될 수 있습니다.</li>
+            <li><strong>결제조건:</strong> 청구 발행일로부터 익월 30일 이내에 현금결제를 기준으로 합니다. (귀사 결제일 또는 사전 협의 가능)</li>
+        </ul>
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>반입 전 CHECK LIST</title>
+    <style>
+        body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; margin: 30px; color: #333; line-height: 1.2; }
+        .header { display: flex; justify-content: space-between; border: 2px solid #000; padding: 6px 12px; font-weight: bold; margin-bottom: 15px; font-size: 13px; }
+        
+        .container { display: flex; gap: 15px; }
+        .column { width: 50%; }
+        
+        table { width: 100%; border-collapse: collapse; font-size: 9px; }
+        th, td { border: 1px solid #000; padding: 3px 4px; text-align: center; }
+        th { background-color: #f3f4f6; }
+        td.left { text-align: left; }
+        
+        .section-header { background-color: #e5e7eb; font-weight: bold; text-align: left; padding-left: 6px; }
+        
+        .footer-note { font-size: 8px; margin-top: 10px; color: #555; text-align: left; line-height: 1.4; }
+        .stamp-container { position: relative; display: inline-block; }
+        .stamp { position: absolute; right: 5px; top: -5px; width: 20px; height: 20px; opacity: 0.8; }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <span>( 모델명: {{modelName}} )</span>
+        <span style="font-size: 15px; text-decoration: underline;">■ 반입 전 CHECK LIST</span>
+        <span>( 관리번호: {{assetNo}} )</span>
+    </div>
+
+    <div class="container">
+        <!-- Left Column (Items 1-35) -->
+        <div class="column">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 8%;">NO</th>
+                        <th style="width: 45%;">검사 항목</th>
+                        <th style="width: 12%;">검사기준</th>
+                        <th style="width: 10%;">양호</th>
+                        <th style="width: 10%;">불량</th>
+                        <th style="width: 15%;">점검자</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="section-header"><td colspan="6">▣ 입고 및 작동검사</td></tr>
+                    <tr><td>1</td><td class="left">장비 외관 및 도장 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>2</td><td class="left">스위치 박스 및 케이블 작동 상태</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>3</td><td class="left">상/하부 비상정지 작동 상태</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>4</td><td class="left">전후진 주행 및 속도 제어 상태</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>5</td><td class="left">고속/저속 주행 전환 상태</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>6</td><td class="left">조향 실린더 및 킹핀 조작</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>7</td><td class="left">리프트 상승 및 하강 상태</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>8</td><td class="left">수동 비상 하강 밸브 작동</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>9</td><td class="left">주행 경보음 및 경광등 작동 상태</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    
+                    <tr class="section-header"><td colspan="6">▣ 세차 상태</td></tr>
+                    <tr><td>10</td><td class="left">흙, 콘크리트 등 이물질 제거</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>11</td><td class="left">하부 프레임 세차 완료 여부</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>12</td><td class="left">휠 및 타이어 청소 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>13</td><td class="left">배터리 및 충전기 오염 제거</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    
+                    <tr class="section-header"><td colspan="6">▣ 도장 및 마킹</td></tr>
+                    <tr><td>14</td><td class="left">외관 도장 상태 (부분 도색 포함)</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>15</td><td class="left">자산 관리번호(스티커) 부착 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>16</td><td class="left">경고 표시 및 주의 마킹 확인</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>17</td><td class="left">안전 점검 스티커 부착 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    
+                    <tr class="section-header"><td colspan="6">▣ 유압 장치</td></tr>
+                    <tr><td>18</td><td class="left">유압 오일 게이지 확인 (적정량)</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>19</td><td class="left">유압 탱크 누유 여부</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>20</td><td class="left">유압 호스 및 피팅 상태 (누유 없음)</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>21</td><td class="left">리프트 실린더 누유 및 작동 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>22</td><td class="left">조향 실린더 누유 및 마찰 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>23</td><td class="left">모터 및 매니폴드 블록 누유</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>24</td><td class="left">수동 하강 케이블 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>25</td><td class="left">작동유 탱크 필터 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>26</td><td class="left">유압 압력 밸브 설정 세팅</td><td>측정</td><td>V</td><td></td><td>김관주</td></tr>
+
+                    <tr class="section-header"><td colspan="6">▣ 전기 및 제어 장치</td></tr>
+                    <tr><td>27</td><td class="left">배터리 단자 연결 및 부식 여부</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>28</td><td class="left">배터리 액 레벨 상태 (증류수)</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>29</td><td class="left">배터리 팩 충전 테스트 완료</td><td>측정</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>30</td><td class="left">충전용 전원 플러그 및 선 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>31</td><td class="left">메인 릴레이 및 접촉기 작동</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>32</td><td class="left">하부 컨트롤 박스 작동 및 상태</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>33</td><td class="left">조이스틱 레버 중립 스위치</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>34</td><td class="left">조이스틱 프로포셔널 밸브 연계</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>35</td><td class="left">전선 커넥터 및 배선 정리 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Right Column (Items 36-71) -->
+        <div class="column">
+            <table>
+                <thead>
+                    <tr>
+                        <th style="width: 8%;">NO</th>
+                        <th style="width: 45%;">검사 항목</th>
+                        <th style="width: 12%;">검사기준</th>
+                        <th style="width: 10%;">양호</th>
+                        <th style="width: 10%;">불량</th>
+                        <th style="width: 15%;">점검자</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="section-header"><td colspan="6">▣ 전기 및 제어 장치 (계속)</td></tr>
+                    <tr><td>36</td><td class="left">릴레이 박스 퓨즈 교체 여부</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>37</td><td class="left">배터리 전압 편차 및 상태</td><td>측정</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>38</td><td class="left">배터리 로드 테스트 (방전기 측정)</td><td>측정</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>39</td><td class="left">하부 리미트 스위치 작동 상태</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>40</td><td class="left">상부 과부하 방지 리미트 확인</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>41</td><td class="left">경적(혼) 작동 상태</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>42</td><td class="left">접지 체인 접촉 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+
+                    <tr class="section-header"><td colspan="6">▣ 차체 및 마스트 구조</td></tr>
+                    <tr><td>43</td><td class="left">가이드 블록 마모도 및 그리스</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>44</td><td class="left">타이어 파손 및 균열 확인</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>45</td><td class="left">킹핀 및 조향 힌지 유격 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>46</td><td class="left">샤시 마스트 볼트 체결 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>47</td><td class="left">확장용 작업대 슬라이딩 상태</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>48</td><td class="left">출입구 안전문 및 잠금 장치</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>49</td><td class="left">사다리 고정 상태 및 디딤판</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>50</td><td class="left">바퀴 허브 베어링 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>51</td><td class="left">마스트 핀 및 부싱 유격 확인</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>52</td><td class="left">포트홀(Pothole) 가드 전개 상태</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>53</td><td class="left">포트홀 리미트 스위치 정상 작동</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>54</td><td class="left">안전 받침대 설치 및 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>55</td><td class="left">아웃트리거(보조 다리) 체결 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>56</td><td class="left">그리스 니플 상태 및 주입 완료</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+
+                    <tr class="section-header"><td colspan="6">▣ 출고 전 정비 점검</td></tr>
+                    <tr><td>57</td><td class="left">주행 및 승하강 작동 테스트 3회</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>58</td><td class="left">경사지 브레이크 홀딩 테스트</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>59</td><td class="left">비상 정지 하강 스피드 확인</td><td>측정</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>60</td><td class="left">최대 적재 하중 상승 테스트</td><td>작동</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>61</td><td class="left">누유 전수 육안 점검 완료</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>62</td><td class="left">배터리 액 보충 및 세척 완료</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>63</td><td class="left">각 볼트류 토크 렌치 확인</td><td>측정</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>64</td><td class="left">최종 출고 정비 승인 서명</td><td>서명</td><td>V</td><td></td><td>김관주</td></tr>
+
+                    <tr class="section-header"><td colspan="6">▣ 옵션 장치 확인</td></tr>
+                    <tr><td>65</td><td class="left">상부 조작함 안전 덮개 장착</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>66</td><td class="left">협착 방지 센서 및 바 장착</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>67</td><td class="left">타이어 커버/클린 타이어 여부</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>68</td><td class="left">안전 벨트 걸이대 보강 유무</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>69</td><td class="left">하부 가설 패널 및 함석 상태</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>70</td><td class="left">기타 요청 옵션 장착 확인</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                    <tr><td>71</td><td class="left">사용 가이드북 부착 여부</td><td>육안</td><td>V</td><td></td><td>김관주</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="footer-note">
+        ※ 주의사항: 1. 기준은 장비 출고 시 최종 성능 검사 기준이며 배터리 충전 및 전압 상태에 따라 일부 오차가 있을 수 있습니다.<br>
+        &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;2. 배터리 소모품의 충전 상태에 따라 속도 편차가 발생할 수 있으니 반입 즉시 정상 충전을 확인하시기 바랍니다.
+    </div>
+
+</body>
+</html>

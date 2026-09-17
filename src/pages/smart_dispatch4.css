@@ -1,0 +1,568 @@
+/* src/pages/smart_dispatch4.css */
+@import '../mobile/mobile.css';
+/* ─────────────────────────────────────────────────────────────────────────────
+   출고의뢰 (통합 스튜디오) smart_dispatch4 전용 레이아웃 & 고밀도 스타일
+   - 전사 표준 헌장 3.1, 3.2, 3.4, 3.5, 3.6 완벽 준수
+   - PC 와이드 100% 핏 좌우 2분할 (57% : 43%) 마스터-디테일 스튜디오
+   - 좌측 독립 스크롤 & 우측 실시간 서식/스키마 실드/우하단 완결 바 상시 고정
+   ───────────────────────────────────────────────────────────────────────────── */
+
+.dispatch4-container {
+  width: 100%;
+  /* 부모 main(overflow-y:auto)의 전체 스크롤 차단 → 컨테이너가 직접 높이 관리 */
+  height: 100%;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
+  color: #f8fafc;
+}
+
+/* 상단 통합 슬림 툴바 (타이틀 + 탭 + 녹음 업로드) */
+.dispatch4-toolbar {
+  flex-shrink: 0;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid #1e293b;
+  box-sizing: border-box;
+}
+
+.dispatch4-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dispatch4-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.dispatch4-tab-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dispatch4-tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.dispatch4-tab-btn:hover {
+  color: #f1f5f9;
+  background-color: #1e293b;
+}
+
+.dispatch4-tab-btn.active {
+  background-color: rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.4);
+  color: #60a5fa;
+  font-weight: 800;
+}
+
+/* 메인 스튜디오 2열 바디 — flex:1로 남은 높이 전부 차지, overflow:hidden */
+.dispatch4-studio-row {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: row;
+  gap: 12px;
+  overflow: hidden; /* 자식이 이 경계 밖으로 나가지 않도록 */
+  box-sizing: border-box;
+  align-items: stretch; /* 좌우 패널 동일 높이로 늘어남 */
+}
+
+/* 좌측 마스터 입력 폼 — overflow-y:auto로 좌측만 독립 스크롤 */
+.dispatch4-left-pane {
+  flex: 5.7;
+  min-width: 0;
+  height: 100%;
+  overflow-y: auto;  /* ← 좌측만 스크롤 */
+  overflow-x: hidden;
+  padding-right: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+}
+
+.dispatch4-left-pane > * {
+  flex-shrink: 0;
+}
+
+/* 우측 디테일 & 터미널 인스펙터 — sticky 제거, height:100%로 항상 고정 */
+.dispatch4-right-pane {
+  flex: 4.3;
+  min-width: 440px;
+  max-width: 580px;
+  height: 100%;        /* ← studio-row 높이와 동일 */
+  position: relative;  /* sticky 제거 */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  background-color: #0b1329;
+  border: 1px solid #1e293b;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+  box-sizing: border-box;
+}
+
+/* 우측 스크롤 내부 영역 (스키마 실드 + 정형화 서식) */
+.dispatch4-right-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+}
+
+.dispatch4-right-scroll > * {
+  flex-shrink: 0;
+}
+
+/* 우측 최하단 완결 바 (Z-Pattern Terminal Action 영구 고정) */
+.dispatch4-terminal-bar {
+  flex-shrink: 0;
+  padding: 12px 14px;
+  background-color: #020617;
+  border-top: 1px solid #1e293b;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-sizing: border-box;
+}
+
+/* 9대 필수 스키마 실드 2열 슬림 그리드 */
+.dispatch4-shield-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+/* ── 상하 스크롤바: 시인성 극대화 (전사 표준 헌장 1.1 준수) ── */
+.dispatch4-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #64748b #0f172a;
+  scroll-behavior: smooth;
+}
+
+.dispatch4-scrollbar::-webkit-scrollbar {
+  width: 10px !important;
+  height: 10px !important;
+}
+
+.dispatch4-scrollbar::-webkit-scrollbar-track {
+  background: #0f172a !important;
+  border-radius: 6px;
+  border: 1px solid #1e293b;
+}
+
+.dispatch4-scrollbar::-webkit-scrollbar-thumb {
+  background: #475569 !important;
+  border-radius: 6px;
+  border: 2px solid #0f172a !important;
+  transition: background-color 0.15s ease;
+}
+
+.dispatch4-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #3b82f6 !important;
+}
+
+/* 모바일/태블릿 반응형 폴백 (화면 폭 1023px 이하 시 세로 스택 전환) */
+@media (max-width: 1023px) {
+  .dispatch4-studio-row {
+    flex-direction: column;
+  }
+  .dispatch4-left-pane {
+    padding-right: 0;
+  }
+  .dispatch4-right-pane {
+    position: static;
+    min-width: 100%;
+    max-width: 100%;
+    max-height: none;
+  }
+  .dispatch4-right-scroll {
+    overflow-y: visible;
+  }
+}
+
+/* 화면 높이가 낮은 환경 대응 */
+@media (max-height: 720px) {
+  .dispatch4-right-pane {
+    max-height: calc(100vh - 80px);
+  }
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   고밀도 입력 폼 전용 규격
+   ───────────────────────────────────────────────────────────────────────────── */
+.dispatch4-left-pane input:not([type="checkbox"]):not([type="radio"]):not(.dispatch4-qty-input),
+.dispatch4-left-pane select {
+  height: 36px !important;
+  min-height: 36px !important;
+  padding: 6px 12px !important;
+  font-size: 13px !important;
+  background-color: #1e293b !important;
+  border: 1px solid #334155 !important;
+  border-radius: 6px !important;
+  color: #f8fafc !important;
+  box-sizing: border-box !important;
+}
+
+/* 🌟 수량 조절 전용 고밀도 인풋 & 컨트롤러 규격 (선택된 장비 목록 완벽 방어) */
+.dispatch4-left-pane input.dispatch4-qty-input,
+.dispatch4-qty-input {
+  width: 44px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  padding: 2px 4px !important;
+  font-size: 13px !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace !important;
+  font-weight: 800 !important;
+  text-align: center !important;
+  background-color: #020617 !important;
+  border: 1px solid #334155 !important;
+  border-radius: 6px !important;
+  color: #34d399 !important; /* emerald-400 */
+  box-sizing: border-box !important;
+  line-height: 1 !important;
+  -moz-appearance: textfield !important;
+}
+
+.dispatch4-qty-input:focus {
+  border-color: #10b981 !important;
+  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.25) !important;
+  outline: none !important;
+}
+
+.dispatch4-qty-input::-webkit-outer-spin-button,
+.dispatch4-qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+
+/* 수량 조절 버튼군 [-], [+] 공통 규격 */
+.dispatch4-qty-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  border-radius: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  transition: all 0.15s ease !important;
+  flex-shrink: 0 !important;
+  border: 1px solid #475569 !important;
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  padding: 0 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+.dispatch4-qty-btn:hover:not(:disabled) {
+  background-color: #334155 !important;
+  border-color: #64748b !important;
+  color: #ffffff !important;
+}
+
+.dispatch4-qty-btn:active:not(:disabled) {
+  background-color: #0f172a !important;
+  transform: scale(0.95);
+}
+
+.dispatch4-qty-btn:disabled {
+  opacity: 0.35 !important;
+  cursor: not-allowed !important;
+  border-color: #334155 !important;
+}
+
+/* 삭제 액션 버튼 [휴지통] — 고시인성 위험 피드백 */
+.dispatch4-delete-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  border-radius: 6px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  user-select: none !important;
+  transition: all 0.15s ease !important;
+  flex-shrink: 0 !important;
+  border: 1px solid #475569 !important;
+  background-color: #0f172a !important;
+  color: #94a3b8 !important;
+  padding: 0 !important;
+}
+
+.dispatch4-delete-btn:hover {
+  background-color: #450a0a !important; /* red-950 */
+  border-color: #dc2626 !important;     /* red-600 */
+  color: #f87171 !important;             /* red-400 */
+}
+
+.dispatch4-delete-btn:active {
+  background-color: #7f1d1d !important;
+  transform: scale(0.95);
+}
+
+.dispatch4-left-pane input:focus,
+.dispatch4-left-pane select:focus,
+.dispatch4-left-pane textarea:focus {
+  border-color: #3b82f6 !important;
+  outline: none !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2) !important;
+}
+
+.dispatch4-left-pane textarea {
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  background-color: #1e293b !important;
+  border: 1px solid #334155 !important;
+  border-radius: 6px !important;
+  color: #f8fafc !important;
+  box-sizing: border-box !important;
+}
+
+/* 블록 헤더 */
+.dispatch4-block-header {
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 13px;
+  font-weight: 700;
+  transition: background-color 0.15s ease;
+}
+
+.dispatch4-block-body {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background-color: #0f172a;
+}
+
+.dispatch4-block-body > * {
+  flex-shrink: 0;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   상차/하차 시간 구분 슬롯 버튼군 & 대차 다수 회수 자산 스타일
+   ───────────────────────────────────────────────────────────────────────────── */
+.dispatch4-slot-group {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.dispatch4-slot-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid #334155;
+  background-color: #1e293b;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dispatch4-slot-btn:hover {
+  background-color: #334155;
+  color: #f1f5f9;
+}
+
+.dispatch4-slot-btn.active {
+  background-color: rgba(59, 130, 246, 0.25);
+  border-color: #3b82f6;
+  color: #60a5fa;
+  font-weight: 800;
+}
+
+.dispatch4-slot-btn.active-amber {
+  background-color: rgba(245, 158, 11, 0.25);
+  border-color: #f59e0b;
+  color: #fbbf24;
+  font-weight: 800;
+}
+
+.dispatch4-exchange-list {
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  background-color: #020617;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   처리 대기 좌우 2열 분할 스튜디오 & 고밀도 마스터 그리드 (헌장 3.2, 3.6)
+   ───────────────────────────────────────────────────────────────────────────── */
+.dispatch4-master-stage {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: row; /* 좌우 2열 분할 */
+  gap: 10px;
+  padding: 6px 8px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.dispatch4-grid-section {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background-color: #0b1329;
+  border: 1px solid #1e293b;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.dispatch4-grid-section.left-panel {
+  flex: 4.8;
+}
+
+.dispatch4-grid-section.right-panel {
+  flex: 5.2;
+}
+
+.dispatch4-section-header {
+  flex-shrink: 0;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background-color: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.dispatch4-table-container {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.dispatch4-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.dispatch4-table th {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: 32px;
+  background-color: #090e1a;
+  color: #94a3b8;
+  font-weight: 700;
+  text-align: left;
+  padding: 0 8px;
+  border-bottom: 1px solid #1e293b;
+  border-right: 1px solid #1e293b;
+}
+
+.dispatch4-table td {
+  height: 36px;
+  padding: 0 8px;
+  border-bottom: 1px solid #1e293b;
+  border-right: 1px solid #1e293b;
+  color: #e2e8f0;
+}
+
+.dispatch4-table tr:hover td {
+  background-color: rgba(59, 130, 246, 0.08);
+}
+
+.dispatch4-table tr.selected td {
+  background-color: rgba(59, 130, 246, 0.16);
+}
+
+.dispatch4-col-sticky-0 {
+  position: sticky;
+  left: 0;
+  z-index: 20;
+  background-color: #0b1329 !important;
+  width: 58px;
+  min-width: 58px;
+  text-align: center;
+  border-right: 2px solid #1e293b !important;
+}
+
+/* 좌우 패널 하단 내장형 상세 인스펙터 */
+.dispatch4-panel-inspector {
+  flex-shrink: 0;
+  border-top: 1px solid #1e293b;
+  background-color: #080e1e;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.dispatch4-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.dispatch4-scrollbar::-webkit-scrollbar-track {
+  background: #090e1a;
+}
+.dispatch4-scrollbar::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+.dispatch4-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>거래명세서</title>
+    <style>
+        body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; margin: 30px; color: #1e293b; line-height: 1.4; background-color: #ffffff; }
+        .statement-box { border: 2px solid #0f172a; padding: 24px; max-width: 800px; margin: 0 auto; background-color: #ffffff; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        .title-container { text-align: center; margin-bottom: 20px; border-bottom: 2px double #0f172a; padding-bottom: 10px; position: relative; }
+        .title { font-size: 28px; font-weight: 900; letter-spacing: 6px; color: #0f172a; margin: 0; }
+        .subtitle { font-size: 11px; color: #64748b; margin-top: 4px; }
+        
+        .header-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 12px; }
+        .header-table td { vertical-align: top; padding: 0; border: none; }
+        
+        .party-box { border: 1px solid #334155; padding: 10px 12px; min-height: 125px; border-radius: 4px; background-color: #f8fafc; }
+        .party-title { font-size: 13px; font-weight: 800; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 4px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+        .info-row { display: flex; margin-bottom: 4px; font-size: 12px; }
+        .info-label { width: 75px; font-weight: 700; color: #475569; flex-shrink: 0; }
+        .info-val { flex: 1; color: #0f172a; word-break: break-all; }
+
+        .meta-bar { display: flex; justify-content: space-between; background-color: #e2e8f0; padding: 8px 14px; border-radius: 4px; font-size: 12px; font-weight: 700; color: #1e293b; margin-bottom: 14px; border: 1px solid #cbd5e1; }
+        
+        .amount-summary-box { background-color: #eff6ff; border: 1.5px solid #3b82f6; padding: 12px 16px; border-radius: 6px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+        .amount-title { font-size: 13px; font-weight: 800; color: #1e40af; }
+        .amount-value { font-size: 18px; font-weight: 900; color: #1e3a8a; }
+        .amount-sub { font-size: 11px; color: #3b82f6; margin-top: 2px; }
+
+        .main-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; font-size: 11.5px; }
+        .main-table th, .main-table td { border: 1px solid #334155; padding: 8px 6px; text-align: center; }
+        .main-table th { background-color: #f1f5f9; font-weight: 800; color: #0f172a; }
+        .main-table td.left { text-align: left; }
+        .main-table td.right { text-align: right; }
+        .main-table tr.total-row td { background-color: #f8fafc; font-weight: 800; border-top: 2px solid #0f172a; }
+
+        .footer-note { font-size: 11px; color: #475569; border: 1px solid #cbd5e1; padding: 10px 14px; border-radius: 4px; background-color: #fafafa; line-height: 1.6; }
+        .footer-note strong { color: #0f172a; }
+
+        .stamp-container { position: relative; display: inline-block; }
+        .stamp { position: absolute; right: -5px; top: -12px; width: 42px; height: 42px; opacity: 0.9; }
+    </style>
+</head>
+<body>
+
+    <div class="statement-box" id="transaction-statement-pdf-target">
+        <div class="title-container">
+            <h1 class="title">거 래 명 세 서</h1>
+            <div class="subtitle">(공급받는자 보관용 - 구글 드라이브 표준 양식)</div>
+        </div>
+
+        <table class="header-table">
+            <tr>
+                <td style="width: 49%;">
+                    <div class="party-box">
+                        <div class="party-title">
+                            <span>[공급자]</span>
+                        </div>
+                        <div class="info-row"><div class="info-label">등록번호</div><div class="info-val"><strong>138-81-83251</strong></div></div>
+                        <div class="info-row">
+                            <div class="info-label">상 호</div>
+                            <div class="info-val"><strong>(주)기연리프트</strong></div>
+                        </div>
+                        <div class="info-row">
+                            <div class="info-label">대 표 자</div>
+                            <div class="info-val stamp-container">
+                                <strong>이수용</strong>
+                                <img class="stamp" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAAAXNSR0IArs4c6QAAAAlwSFlzAAALEwAACxMBAJqcGAAAAadJREFUaEPtmWFOwzAMhW/uA+4/90HACUgIEoc0ad26/lhq1STN19hOqN9SJfFjO/4e3pI3S5F3fFw8bFp97dZz8/G2abfB2wZ7D6/J+69bWJ6L52P7mHy+Xz8+Lx+fr6v6Xv5m9fP69Vrfy//2Wl/L217ra/s5t4/J91+vybE9bHl9TNu3vVbeXsszW/k59pq2r3up1+TYHk2Ove61/e01ObaHLa+PyWvbq63PseW5eE2OpvXl1XNl9dxyZe7/7M9V33t7eW/sPbfvjXXeW8u5+PzcXq7P5er293v7b8u5+O/rZ/bZ+97bf1vXz+yzz/f+3FauXN6eKz/n8q51/cw+++zzvT+3lSuXt+fKz7m8a10/s88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a/wdzK+i+0EagAAAAABJRU5ErkJggg==" alt="직인">
+                            </div>
+                        </div>
+                        <div class="info-row"><div class="info-label">주 소</div><div class="info-val">경기도 용인시 처인구 남사읍 성호로 81</div></div>
+                        <div class="info-row"><div class="info-label">TEL / FAX</div><div class="info-val">031-334-5296 / 031-335-5297</div></div>
+                    </div>
+                </td>
+                <td style="width: 2%;"></td>
+                <td style="width: 49%;">
+                    <div class="party-box">
+                        <div class="party-title">[공급받는자]</div>
+                        <div class="info-row"><div class="info-label">등록번호</div><div class="info-val"><strong>{{bizRegNo}}</strong></div></div>
+                        <div class="info-row"><div class="info-label">상 호</div><div class="info-val"><strong>{{customerName}}</strong></div></div>
+                        <div class="info-row"><div class="info-label">대 표 자</div><div class="info-val">{{representative}}</div></div>
+                        <div class="info-row"><div class="info-label">주 소</div><div class="info-val">{{address}}</div></div>
+                        <div class="info-row"><div class="info-label">작업현장</div><div class="info-val"><strong>{{siteName}}</strong></div></div>
+                    </div>
+                </td>
+            </tr>
+        </table>
+
+        <div class="meta-bar">
+            <span>🗓️ 청구귀속월: {{billingYm}}</span>
+            <span>📅 발행일자: {{billingDate}}</span>
+            <span>📑 계약번호: {{contractNo}}</span>
+        </div>
+
+        <div class="amount-summary-box">
+            <div>
+                <div class="amount-title">청구 합계 금액 (부가가치세 포함)</div>
+                <div class="amount-sub">공급가액: ₩{{totalSupplyFormatted}} | 부가가치세: ₩{{totalVatFormatted}}</div>
+            </div>
+            <div style="text-align: right;">
+                <div class="amount-value">일금 {{totalAmountKorean}} 원정</div>
+                <div style="font-size: 13px; color: #1e40af; font-weight: 800;">(₩{{totalAmountFormatted}})</div>
+            </div>
+        </div>
+
+        <table class="main-table">
+            <thead>
+                <tr>
+                    <th style="width: 6%;">No</th>
+                    <th style="width: 36%;">품명 및 적용 기준</th>
+                    <th style="width: 8%;">수량</th>
+                    <th style="width: 14%;">단가</th>
+                    <th style="width: 12%;">공급가액</th>
+                    <th style="width: 12%;">부가가치세</th>
+                    <th style="width: 12%;">합계</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{detailRows}}
+                <tr class="total-row">
+                    <td colspan="4" style="text-align: center;">합 계</td>
+                    <td class="right">₩{{totalSupplyFormatted}}</td>
+                    <td class="right">₩{{totalVatFormatted}}</td>
+                    <td class="right">₩{{totalAmountFormatted}}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="footer-note">
+            <div><strong>[입금 계좌 안내]</strong> 기업은행 138-81-83251 예금주: (주)기연리프트</div>
+            <div style="font-size: 10.5px; color: #64748b; margin-top: 2px;">
+                • 본 거래명세서는 (주)기연리프트 구글 드라이브 표준 양식 기반으로 자동 발행되었습니다.<br>
+                • 대금 입금 시 반드시 입금자명을 상호명으로 지정하여 주시기 바랍니다. (문의: 031-334-5296)
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

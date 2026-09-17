@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>고소작업대 임대차 계약서</title>
+    <style>
+        body { font-family: 'Malgun Gothic', '맑은 고딕', sans-serif; margin: 40px; color: #333; line-height: 1.4; }
+        .title { text-align: center; font-size: 26px; font-weight: 800; letter-spacing: 3px; margin-bottom: 5px; }
+        .date-subtitle { text-align: center; font-size: 14px; margin-bottom: 25px; font-weight: bold; }
+        
+        table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 11px; }
+        th, td { border: 1px solid #000; padding: 6px; text-align: center; }
+        th { background-color: #f3f4f6; font-weight: bold; }
+        
+        .section-title { font-size: 13px; font-weight: bold; text-align: left; margin: 15px 0 6px 0; border-left: 4px solid #000; padding-left: 8px; }
+        
+        .sign-table { margin-top: 15px; }
+        .sign-table td { height: 50px; }
+        
+        .footer-info { font-size: 10px; color: #555; text-align: left; margin-top: 20px; border-top: 1px solid #000; padding-top: 8px; line-height: 1.6; }
+        
+        .stamp-container { position: relative; display: inline-block; }
+        .stamp { position: absolute; right: 10px; top: -15px; width: 40px; height: 40px; opacity: 0.85; }
+    </style>
+</head>
+<body>
+
+    <div class="title">고소작업대 임대차 계약서</div>
+    <div class="date-subtitle">{{contractYear}}년 {{contractMonth}}월 {{contractDay}}일</div>
+
+    <table>
+        <tr>
+            <th rowspan="3" style="width: 10%;">임대인<br>(갑)</th>
+            <td style="width: 15%; background-color: #fafafa; font-weight: bold;">등록번호</td>
+            <td style="width: 25%;">138-81-83251</td>
+            <th rowspan="3" style="width: 10%;">임차인<br>(을)</th>
+            <td style="width: 15%; background-color: #fafafa; font-weight: bold;">등록번호</td>
+            <td style="width: 25%;">{{bizRegNo}}</td>
+        </tr>
+        <tr>
+            <td style="background-color: #fafafa; font-weight: bold;">상 호</td>
+            <td>주식회사 기연리프트</td>
+            <td style="background-color: #fafafa; font-weight: bold;">상 호</td>
+            <td>{{customerName}}</td>
+        </tr>
+        <tr>
+            <td style="background-color: #fafafa; font-weight: bold;">대표자</td>
+            <td class="stamp-container">
+                이수용
+                <img class="stamp" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADIAAAAyCAYAAAAeP4ixAAAAAXNSR0IArs4c6QAAAAlwSFlzAAALEwAACxMBAJqcGAAAAadJREFUaEPtmWFOwzAMhW/uA+4/90HACUgIEoc0ad26/lhq1STN19hOqN9SJfFjO/4e3pI3S5F3fFw8bFp97dZz8/G2abfB2wZ7D6/J+69bWJ6L52P7mHy+Xz8+Lx+fr6v6Xv5m9fP69Vrfy//2Wl/L217ra/s5t4/J91+vybE9bHl9TNu3vVbeXsszW/k59pq2r3up1+TYHk2Ove61/e01ObaHLa+PyWvbq63PseW5eE2OpvXl1XNl9dxyZe7/7M9V33t7eW/sPbfvjXXeW8u5+PzcXq7P5er293v7b8u5+O/rZ/bZ+97bf1vXz+yzz/f+3FauXN6eKz/n8q51/cw+++zzvT+3lSuXt+fKz7m8a10/s88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a18/ss88++3zvz23lyuXtufJzLu9a/wdzK+i+0EagAAAAABJRU5ErkJggg==" alt="대표인인">
+            </td>
+            <td style="background-color: #fafafa; font-weight: bold;">대표자</td>
+            <td>{{ceoName}}</td>
+        </tr>
+    </table>
+    <div style="font-size: 10px; margin-bottom: 10px; text-align: left;">임대인과 임차인은 아래의 내용과 같이 임대차 계약을 체결하고, 계약서에 명시된 계약조건을 증명하기 위하여 본 계약서를 2부 작성하여 각 1부씩 보관한다.</div>
+
+    <div class="section-title">임대차 계약 내용</div>
+    <table>
+        <tr>
+            <td style="width: 15%; background-color: #fafafa; font-weight: bold;">장비 인도장소</td>
+            <td style="width: 35%;">{{deliverySite}}</td>
+            <td style="width: 15%; background-color: #fafafa; font-weight: bold;">장비 인도 예정일</td>
+            <td style="width: 35%;">{{deliveryDate}}</td>
+        </tr>
+        <tr>
+            <td style="background-color: #fafafa; font-weight: bold;">현장 상세 위치</td>
+            <td colspan="3" style="text-align: left;">{{siteAddress}}</td>
+        </tr>
+        <tr>
+            <td rowspan="3" style="background-color: #fafafa; font-weight: bold;">임차 신청자<br>(임차인의 대리인)</td>
+            <td style="background-color: #fafafa; font-weight: bold;">상호(법인명)</td>
+            <td>{{customerName}}</td>
+            <td style="background-color: #fafafa; font-weight: bold;">사무실 전화</td>
+            <td>{{officePhone}}</td>
+        </tr>
+        <tr>
+            <td style="background-color: #fafafa; font-weight: bold;">장비 신청자</td>
+            <td>{{applicantName}}</td>
+            <td style="background-color: #fafafa; font-weight: bold;">핸드폰</td>
+            <td>{{applicantPhone}}</td>
+        </tr>
+        <tr>
+            <td style="background-color: #fafafa; font-weight: bold;">현장 담당자</td>
+            <td>{{siteContactName}}</td>
+            <td style="background-color: #fafafa; font-weight: bold;">핸드폰</td>
+            <td>{{siteContactPhone}}</td>
+        </tr>
+    </table>
+
+    <div class="section-title">임대 장비 규격 및 납품 명세</div>
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 25%;">품목 (모델명)</th>
+                <th style="width: 8%;">수량</th>
+                <th style="width: 22%;">장비 번호 (S/N)</th>
+                <th style="width: 15%;">임대료 (1대/1개월)</th>
+                <th style="width: 15%;">소계</th>
+                <th style="width: 15%;">비고</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{rentalLines}}
+            <tr>
+                <td colspan="3" style="font-weight: bold; background-color: #fafafa;">합 계 금액</td>
+                <td colspan="2" style="font-weight: bold; text-align: right; padding-right: 15px;">₩{{totalFee}}</td>
+                <td style="font-size: 9px; color: red;">부가세 별도 / 운송료 별도</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <table>
+        <tr>
+            <td style="width: 15%; background-color: #fafafa; font-weight: bold;">운송료 청구 기준</td>
+            <td style="text-align: left; padding-left: 10px;">
+                {{transportationTerms}}
+            </td>
+        </tr>
+        <tr>
+            <td style="background-color: #fafafa; font-weight: bold;">첨부 서류</td>
+            <td style="text-align: left; padding-left: 10px; font-size: 10px;">
+                임대차계약서, 장비반입원장, 장비제원표, 반입전체크리스트, 안전점검결과서, 안전인증서, 사업자등록증사본, 통장사본
+            </td>
+        </tr>
+        <tr>
+            <td style="background-color: #fafafa; font-weight: bold;">특이 사항</td>
+            <td style="text-align: left; padding-left: 10px; font-weight: bold; color: red;">
+                * 1개월 미만 사용 시에도 최소 1개월분의 기본 임대료가 전액 청구됩니다.
+            </td>
+        </tr>
+        <tr>
+            <td style="background-color: #fafafa; font-weight: bold;">건설기계 사용 시<br>주의 사항</td>
+            <td style="text-align: left; font-size: 9px; line-height: 1.5; color: #444;">
+                1. 지게차 및 크레인을 이용한 장비의 상·하차 비용 및 안전사고 책임은 임차인이 전액 부담합니다.<br>
+                2. 계약기간 만료 후에도 반납 통보가 없을 시에는 임대차 계약이 동일 조건으로 자동 연장됩니다.<br>
+                3. 임차인의 과실, 관리 소홀 및 오작동으로 인한 장비의 파손 및 해체 발생 시 수리 비용 일체는 임차인이 부담합니다.<br>
+                4. 그 외 법적 규정되지 않은 사항은 건설기계임대차 표준계약서(공정거래위원회 표준약관)의 일반 조건에 따릅니다.
+            </td>
+        </tr>
+        <tr>
+            <td style="background-color: #fafafa; font-weight: bold;">결제 계좌</td>
+            <td style="text-align: left; padding-left: 10px; font-weight: bold;">
+                신한은행 140-010-007060 (예금주: 주식회사 기연리프트)
+            </td>
+        </tr>
+    </table>
+
+    <div class="footer-info">
+        <strong>본사/공장:</strong> 경기도 용인시 처인구 모현읍 갈담로112번길 21-3 &nbsp;&nbsp;|&nbsp;&nbsp; 
+        <strong>영업 사무소:</strong> 경기도 용인시 기흥구 기흥로 60-1, C동 1004호 (기흥ICT밸리)<br>
+        <strong>A/S 접수 문의:</strong> 031-334-5296 &nbsp;&nbsp;|&nbsp;&nbsp; 
+        <strong>업무 담당자:</strong> 김동우 팀장 (010-9402-5296)
+    </div>
+
+</body>
+</html>

@@ -1,0 +1,183 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "systemName": "Giyeun Lift e-Bro ERP",
+  "description": "전사 전체 메뉴 UIA 기계 가독형 매니페스트 (에이전틱 AI Tool Calling 및 UI 자동화용)",
+  "constitutionalGuardrails": [
+    {
+      "id": "GUARD-1.3",
+      "rule": "출고 검수 승인 마감 시 자산 상태는 반드시 'RENTED'로 전환되어야 하며 배차 단계에서 자산 상태를 조작할 수 없다.",
+      "targetTables": ["assets", "deliveries", "outbound_inspections"]
+    },
+    {
+      "id": "GUARD-2.3",
+      "rule": "대차 교체 배차 의뢰 시 출고/입고 2건으로 분할하지 않고 단일 'EXCHANGE' 1건만 발행하며 왕복할인(₩60,000)을 자동 적용한다.",
+      "targetTables": ["deliveries"]
+    },
+    {
+      "id": "GUARD-4.1",
+      "rule": "자산별 누적 매출 기여액을 1원의 오차 없이 일할 집계하며 대차 교체 시 전자산 전일 마감 및 후장비 당일 승계한다.",
+      "targetTables": ["contracts", "contract_assets", "billings"]
+    },
+    {
+      "id": "GUARD-5.2",
+      "rule": "모든 CUD 액션은 DB 동기 저장을 검증하며 실패 시 무음 처리하지 않고 에러를 표출한다.",
+      "targetTables": ["*"]
+    }
+  ],
+  "readinessCheck": {
+    "recommendedMcpTool": "system_check_readiness",
+    "domSelector": "body[data-erp-status=\"ready\"]",
+    "windowFlag": "window.__ERP_READY__ === true",
+    "windowPromise": "await window.whenErpReady()",
+    "description": "에이전틱 AI가 시스템을 조작하기 전에 반드시 이 도구 또는 DOM 셀렉터를 확인하여 준비 상태를 검증해야 합니다."
+  },
+  "menus": [
+    {
+      "id": "dashboard",
+      "name": "ERP 대시보드",
+      "group": "grp_dashboard",
+      "archetype": "TYPE_A_CARD_STUDIO",
+      "tools": ["system_check_readiness"],
+      "actionableElements": [
+        { "id": "btn-refresh-feed", "role": "button", "description": "ToDo 피드 새로고침" }
+      ]
+    },
+    {
+      "id": "customer",
+      "name": "고객 관리",
+      "group": "grp_sales",
+      "archetype": "TYPE_B_HIGH_DENSITY_GRID",
+      "actionableElements": [
+        { "id": "btn-excel-upload-customer", "role": "button", "description": "고객사/현장/담당자 엑셀 일괄 등록" },
+        { "id": "btn-add-customer", "role": "button", "description": "신규 고객사 단건 등록" },
+        { "id": "input-customer-search", "role": "input", "description": "고객사/사업자번호 검색어 입력" }
+      ],
+      "tools": ["customer_create", "customer_update", "customer_get_sites"]
+    },
+    {
+      "id": "contract",
+      "name": "계약 관리",
+      "group": "grp_sales",
+      "archetype": "TYPE_A_CARD_STUDIO",
+      "actionableElements": [
+        { "id": "btn-new-contract", "role": "button", "description": "신규 계약 작성" },
+        { "id": "btn-add-contract-asset", "role": "button", "description": "계약 자산 추가 매핑" }
+      ],
+      "tools": ["contract_create", "contract_exchange_asset", "contract_extend_period"]
+    },
+    {
+      "id": "delivery",
+      "name": "배차 / 운송 관리",
+      "group": "grp_logistics",
+      "archetype": "TYPE_A_CARD_AND_TYPE_B_GRID",
+      "actionableElements": [
+        { "id": "btn-excel-upload-delivery", "role": "button", "description": "배차 의뢰 엑셀 일괄 등록" },
+        { "id": "btn-assign-driver", "role": "button", "description": "운송 기사/차량 배정" },
+        { "id": "input-delivery-cost", "role": "input", "description": "운송비 확정 금액 입력" }
+      ],
+      "tools": ["dispatch_create_order", "dispatch_assign_driver", "dispatch_confirm_cost"]
+    },
+    {
+      "id": "outbound_inspections",
+      "name": "출고 검수 관리",
+      "group": "grp_inout",
+      "archetype": "TYPE_A_CARD_STUDIO",
+      "actionableElements": [
+        { "id": "btn-approve-outbound", "role": "button", "description": "출고 검수 최종 승인 마감 (상태 RENTED 전환)" }
+      ],
+      "tools": ["asset_approve_outbound"]
+    },
+    {
+      "id": "consumable_purchase",
+      "name": "소모품 구매",
+      "group": "grp_maintenance",
+      "archetype": "TYPE_B_HIGH_DENSITY_GRID",
+      "actionableElements": [
+        { "id": "btn-excel-upload-consumable", "role": "button", "description": "소모품 구매 엑셀 일괄 등록" }
+      ],
+      "tools": ["consumable_request_purchase", "consumable_accept_inbound"]
+    },
+    {
+      "id": "bank_matching",
+      "name": "은행 입출금 대장",
+      "group": "grp_management",
+      "archetype": "TYPE_B_HIGH_DENSITY_GRID",
+      "actionableElements": [
+        { "id": "btn-bank-excel-upload", "role": "button", "description": "통장 거래내역 엑셀 업로드" },
+        { "id": "btn-confirm-reconciliation", "role": "button", "description": "통장 입금 1:1 대사 확정" }
+      ],
+      "tools": ["settlement_reconcile_bank"]
+    },
+    {
+      "id": "vehicle_log",
+      "name": "차량 / 주유관리",
+      "group": "grp_management",
+      "archetype": "TYPE_B_HIGH_DENSITY_GRID",
+      "actionableElements": [
+        { "id": "btn-excel-upload-vehicle-fuel", "role": "button", "description": "주유 명세서 엑셀 일괄 등록" }
+      ],
+      "tools": ["vehicle_record_fuel", "vehicle_update_mileage"]
+    },
+    {
+      "id": "agentic_dispatch_studio",
+      "name": "에이전틱 배차 관제 스튜디오",
+      "group": "grp_system_dev",
+      "archetype": "TYPE_A_CARD_STUDIO",
+      "actionableElements": [
+        { "id": "agentic-dispatch-prompt", "role": "input", "description": "자연어 배차 지시" },
+        { "id": "btn-auto-match-driver", "role": "button", "description": "AI 최적 기사 자동 배정" },
+        { "id": "badge-exchange-discount", "role": "badge", "description": "단일 EXCHANGE 및 왕복할인 검증 상태" }
+      ],
+      "tools": ["dispatch_create_order", "dispatch_assign_driver", "dispatch_confirm_cost"]
+    },
+    {
+      "id": "agentic_settlement_autopilot",
+      "name": "에이전틱 월말 대사 정산 오토파일럿",
+      "group": "grp_system_dev",
+      "archetype": "TYPE_B_HIGH_DENSITY_GRID",
+      "actionableElements": [
+        { "id": "btn-run-autopilot", "role": "button", "description": "원클릭 오토파일럿 대사 실행" },
+        { "id": "summary-terminal-balance", "role": "summary", "description": "대차 차액 ₩0 종단 대차대조식" }
+      ],
+      "tools": ["settlement_reconcile_bank", "settlement_calculate_prorata", "settlement_finalize_period"]
+    },
+    {
+      "id": "agentic_asset_lifecycle",
+      "name": "에이전틱 자산 라이프사이클 관제",
+      "group": "grp_system_dev",
+      "archetype": "TYPE_A_CARD_STUDIO",
+      "actionableElements": [
+        { "id": "btn-execute-lifecycle-action", "role": "button", "description": "자율 라이프사이클 전이 실행" },
+        { "id": "badge-guard-rented", "role": "badge", "description": "헌장 1.3 RENTED 강제 가드 상태" }
+      ],
+      "tools": ["asset_approve_outbound", "asset_complete_repair", "asset_recommend_exchange"]
+    },
+    {
+      "id": "operations_manual",
+      "name": "업무매뉴얼",
+      "group": "grp_tools",
+      "archetype": "TYPE_A_CARD_STUDIO",
+      "actionableElements": [
+        { "id": "input-search-manual", "role": "input", "description": "업무 지침 및 검색어 입력" },
+        { "id": "btn-quick-clause", "role": "button", "description": "헌장 조항 및 절차 원클릭 탐색" }
+      ],
+      "tools": ["system_check_readiness"]
+    },
+    {
+      "id": "error_report",
+      "name": "오류 신고",
+      "group": "grp_tools",
+      "archetype": "TYPE_B_HIGH_DENSITY_GRID",
+      "actionableElements": [
+        { "id": "btn-open-report-modal", "role": "button", "description": "오류 신고 등록 모달 열기" },
+        { "id": "dropzone-attachments", "role": "region", "description": "스크린샷/엑셀 드래그&드롭 및 Ctrl+V 클립보드 붙여넣기 영역" },
+        { "id": "btn-submit-report", "role": "button", "description": "오류 신고 등록 확정" },
+        { "id": "btn-confirm-reception", "role": "button", "description": "담당자 지정 및 접수 처리 확정" },
+        { "id": "btn-confirm-completion", "role": "button", "description": "조치내역 및 반영버전 기록 후 완료 확정" },
+        { "id": "btn-export-excel", "role": "button", "description": "오류 신고 내역 엑셀 내보내기" }
+      ],
+      "tools": ["error_report_create", "error_report_update_status"]
+    }
+  ]
+}
