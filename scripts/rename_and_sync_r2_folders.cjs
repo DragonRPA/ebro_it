@@ -5,10 +5,10 @@ const path = require('path');
 
 const config = {
   accountId: '35014a2514680107d74e1e68d96e6c32',
-  bucketName: 'kiyeun-storage',
-  accessKeyId: '03cdb7560d37242de608a5db2a976030',
-  secretAccessKey: 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986',
-  publicDomain: 'https://pub-a2fd3c2ae0cc450b8ebe34baf1b051e1.r2.dev'
+  bucketName: 'ebro-it-demo',
+  accessKeyId: '109db3cb8cf82f919041be9fa3d41250',
+  secretAccessKey: 'f80aed8584d0735c7350feb780e2e6665ca0cdf53895d80042fea758b6045c88',
+  publicDomain: 'https://pub-a2468b66c450440dab37e0c02d516ca6.r2.dev'
 };
 
 const s3 = new S3Client({

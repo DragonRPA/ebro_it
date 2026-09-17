@@ -2,9 +2,9 @@ const { S3Client, ListObjectsV2Command } = require('@aws-sdk/client-s3');
 
 const config = {
   accountId: '35014a2514680107d74e1e68d96e6c32',
-  bucketName: 'kiyeun-storage',
-  accessKeyId: '03cdb7560d37242de608a5db2a976030',
-  secretAccessKey: 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986'
+  bucketName: 'ebro-it-demo',
+  accessKeyId: '109db3cb8cf82f919041be9fa3d41250',
+  secretAccessKey: 'f80aed8584d0735c7350feb780e2e6665ca0cdf53895d80042fea758b6045c88'
 };
 
 const client = new S3Client({

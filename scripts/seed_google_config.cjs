@@ -22,7 +22,7 @@ async function run() {
       'cfg-ebro-it', 'admin@ebro-it.com', 'contracts', 'consumables',
       'deliveries', 'repairs', false,
       '35014a2514680107d74e1e68d96e6c32', 'ebro-it-demo',
-      '03cdb7560d37242de608a5db2a976030', 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986',
+      '109db3cb8cf82f919041be9fa3d41250', 'f80aed8584d0735c7350feb780e2e6665ca0cdf53895d80042fea758b6045c88',
       'https://pub-a2468b66c450440dab37e0c02d516ca6.r2.dev',
       $1, $1
     ) ON CONFLICT (id) DO UPDATE SET
@@ -33,7 +33,7 @@ async function run() {
       "r2PublicDomain" = EXCLUDED."r2PublicDomain",
       "updatedAt" = EXCLUDED."updatedAt";
   `, [now]);
-  console.log('google_configs updated with public domain successfully!');
+  console.log('google_configs updated with new dedicated R2 credentials successfully!');
   await client.end();
 }
 

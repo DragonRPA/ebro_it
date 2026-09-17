@@ -65,8 +65,8 @@ async function listR2AllFiles(config?: GoogleConfig): Promise<Array<{ key: strin
     action: 'list',
     accountId: config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32',
     bucketName: config?.r2BucketName || 'ebro-it-demo',
-    accessKeyId: config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030',
-    secretAccessKey: config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986'
+    accessKeyId: config?.r2AccessKeyId || '109db3cb8cf82f919041be9fa3d41250',
+    secretAccessKey: config?.r2SecretAccessKey || 'f80aed8584d0735c7350feb780e2e6665ca0cdf53895d80042fea758b6045c88'
   });
 
   const res = await fetch(`/api/r2?${params.toString()}`, {

@@ -858,8 +858,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             transactionStatementTemplateUrl: 'templates/거래명세서_양식.html',
             r2AccountId: '35014a2514680107d74e1e68d96e6c32',
             r2BucketName: 'ebro-it-demo',
-            r2AccessKeyId: '03cdb7560d37242de608a5db2a976030',
-            r2SecretAccessKey: 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986',
+            r2AccessKeyId: '109db3cb8cf82f919041be9fa3d41250',
+            r2SecretAccessKey: 'f80aed8584d0735c7350feb780e2e6665ca0cdf53895d80042fea758b6045c88',
             r2PublicDomain: 'https://pub-a2468b66c450440dab37e0c02d516ca6.r2.dev'
           };
 

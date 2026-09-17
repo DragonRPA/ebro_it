@@ -63,8 +63,8 @@ export const Products: React.FC = () => {
     const config = googleConfigs[0];
     const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
     const bucketName = config?.r2BucketName || 'ebro-it-demo';
-    const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
-    const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
+    const accessKeyId = config?.r2AccessKeyId || '109db3cb8cf82f919041be9fa3d41250';
+    const secretAccessKey = config?.r2SecretAccessKey || 'f80aed8584d0735c7350feb780e2e6665ca0cdf53895d80042fea758b6045c88';
     const publicDomain = config?.r2PublicDomain || 'https://pub-a2468b66c450440dab37e0c02d516ca6.r2.dev';
 
     setLoadingR2Docs(true);
@@ -330,8 +330,8 @@ export const Products: React.FC = () => {
       const config = googleConfigs[0];
       const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
       const bucketName = config?.r2BucketName || 'ebro-it-demo';
-      const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
-      const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
+      const accessKeyId = config?.r2AccessKeyId || '109db3cb8cf82f919041be9fa3d41250';
+      const secretAccessKey = config?.r2SecretAccessKey || 'f80aed8584d0735c7350feb780e2e6665ca0cdf53895d80042fea758b6045c88';
 
       const reader = new FileReader();
       reader.onload = async (event) => {
@@ -375,8 +375,8 @@ export const Products: React.FC = () => {
       const config = googleConfigs[0];
       const accountId = config?.r2AccountId || '35014a2514680107d74e1e68d96e6c32';
       const bucketName = config?.r2BucketName || 'ebro-it-demo';
-      const accessKeyId = config?.r2AccessKeyId || '03cdb7560d37242de608a5db2a976030';
-      const secretAccessKey = config?.r2SecretAccessKey || 'b2407ab4532e02317860bc3d63226fb7bc232e88083b150c15023906ed141986';
+      const accessKeyId = config?.r2AccessKeyId || '109db3cb8cf82f919041be9fa3d41250';
+      const secretAccessKey = config?.r2SecretAccessKey || 'f80aed8584d0735c7350feb780e2e6665ca0cdf53895d80042fea758b6045c88';
 
       const res = await fetch('/api/r2', {
         method: 'POST',
