@@ -32,7 +32,7 @@ export const DEFAULT_AUTHORIZED_DEVICES: DeveloperDeviceProfile[] = [
     developerName: '대표 개발자 (시스템 총괄)',
     machineName: '대표 개발자 공인 워크스테이션',
     macAddress: 'D4-AB-61-46-47-82',
-    hardwareFingerprint: 'HW-6A2F-F12E-24C32G',
+    hardwareFingerprint: 'HW-47A4-E661-24C32G',
     platform: 'Win32/x86_64',
     status: 'ACTIVE',
     isPrimary: true,
@@ -40,7 +40,24 @@ export const DEFAULT_AUTHORIZED_DEVICES: DeveloperDeviceProfile[] = [
     note: '기본 공인 개발자 메인 PC (사전 인가)',
     registeredAt: '2026-10-11T00:00:00.000Z',
     lastVerifiedAt: '2026-10-11T00:00:00.000Z',
-    tenant_id: 'tenant-giyeonlift'
+    tenant_id: 'tenant-ebro-it'
+  },
+  {
+    id: 'DEV-PC-PRIMARY-ALT',
+    deviceId: 'DEV-PC-PRIMARY-ALT',
+    developerId: 'sys-admin',
+    developerName: '대표 개발자 (시스템 총괄)',
+    machineName: '대표 개발자 보조/이전 워크스테이션',
+    macAddress: 'D4-AB-61-46-47-82',
+    hardwareFingerprint: 'HW-6A2F-F12E-24C32G',
+    platform: 'Win32/x86_64',
+    status: 'ACTIVE',
+    isPrimary: false,
+    emergencyBreakGlassUsed: false,
+    note: '기본 공인 개발자 보조 기기 (사전 인가)',
+    registeredAt: '2026-10-11T00:00:00.000Z',
+    lastVerifiedAt: '2026-10-11T00:00:00.000Z',
+    tenant_id: 'tenant-ebro-it'
   },
   {
     id: 'DEV-PC-PRIMARY-02',

@@ -4409,6 +4409,73 @@ const mockDataAssets = generateMockAssets(mockDataProducts);
 const mockDataCont = generateMockContracts(mockDataCust.customers, mockDataCust.contacts, mockDataCust.sites, mockDataAssets);
 export const SEED_TENANTS: Tenant[] = [
   {
+    id: 'tenant-ebro-it',
+    tenantCode: 'EBRO_IT',
+    solutionType: 'IT',
+    systemName: 'e-Bro IT ERP',
+    displayName: 'eBroIT 렌탈',
+    corporateName: '주식회사 이브로아이티',
+    tradeName: '(주)이브로아이티',
+    businessNumber: '123-86-56789',
+    corporateRegistrationNumber: '110111-8888888',
+    representativeName: '이정용',
+    openingDate: '2026-01-01',
+    businessAddress: '서울특별시 금천구 가산디지털1로 186 (eBro IT 데모 센터)',
+    headOfficeAddress: '서울특별시 금천구 가산디지털1로 186',
+    businessCategory: '정보통신업 / 임대서비스업',
+    businessItem: '컴퓨터 및 주변장치 임대업',
+    tel: '02-1588-0000',
+    fax: '02-1588-0001',
+    salesPhone: '010-3344-5566',
+    taxEmail: 'tax@ebro-it.com',
+    taxOffice: '금천세무서장',
+    websiteUrl: 'https://it-demo.ebro.run',
+    ciUrl: '/favicon.svg',
+    logoUrl: '/favicon.svg',
+    subdomain: 'it-demo',
+    targetRepo: 'DragonRPA/ebro_it',
+    status: 'ACTIVE',
+    isDefault: true,
+    subscription: {
+      memo: '공식 IT 렌탈 데모 시연 및 테스트 전용 테넌트',
+      plan: 'ENTERPRISE',
+      status: 'ACTIVE',
+      startDate: '2026-01-01',
+      endDate: '2029-12-31',
+      maxUsers: 0,
+      maxAssets: 0,
+      autoRenew: true,
+      billingCycle: 'YEARLY',
+      monthlyFee: 0,
+      gracePeriodDays: 30,
+      licenseKey: 'EBR-DEMO-IT-20291231-LIVE'
+    },
+    features: {
+      r2Config: {
+        updatedAt: '2026-10-19T08:00:00.000Z',
+        r2AccountId: '35014a2514680107d74e1e68d96e6c32',
+        r2BucketName: 'ebro-it-demo',
+        r2AccessKeyId: '109db3cb8cf82f919041be9fa3d41250',
+        r2PublicDomain: 'https://pub-a2468b66c450440dab37e0c02d516ca6.r2.dev',
+        r2SecretAccessKey: 'f80aed8584d0735c7350feb780e2e6665ca0cdf53895d80042fea758b6045c88'
+      },
+      telegramBot: false,
+      customDomain: 'it-demo.ebro.run',
+      kakaoContract: true,
+      agentAiEnabled: true,
+      autoTaxInvoice: true,
+      voiceAssistance: true,
+      callRecordingStt: true,
+      specialFeatures: [
+        'tab:truck_dispatch:audit_settle',
+        'btn:truck_dispatch:bulk_approve',
+        'btn:courier_dispatch:direct_dispatch'
+      ]
+    },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: new Date().toISOString()
+  },
+  {
     id: 'tenant-giyeonlift',
     tenantCode: 'GIYEONLIFT',
     solutionType: 'AWP',
@@ -4554,7 +4621,7 @@ export const SEED_TENANTS: Tenant[] = [
     },
     stampImageUrl: OFFICIAL_STAMP_BASE64,
     status: 'ACTIVE',
-    isDefault: true,
+    isDefault: false,
     createdAt: '2013-04-03T00:00:00.000Z',
     updatedAt: new Date().toISOString(),
     allowCustomBillingStatement: true,
@@ -5531,7 +5598,7 @@ export const SEED_DEVELOPER_AUTHORIZED_DEVICES: DeveloperDeviceProfile[] = [
     developerName: '대표 개발자 (시스템 총괄)',
     machineName: '대표 개발자 공인 워크스테이션',
     macAddress: 'D4-AB-61-46-47-82',
-    hardwareFingerprint: 'HW-6A2F-F12E-24C32G',
+    hardwareFingerprint: 'HW-47A4-E661-24C32G',
     platform: 'Win32/x86_64',
     status: 'ACTIVE',
     isPrimary: true,
@@ -5539,7 +5606,24 @@ export const SEED_DEVELOPER_AUTHORIZED_DEVICES: DeveloperDeviceProfile[] = [
     note: '기본 공인 개발자 메인 PC (사전 인가)',
     registeredAt: '2026-10-11T00:00:00.000Z',
     lastVerifiedAt: '2026-10-11T00:00:00.000Z',
-    tenant_id: 'tenant-giyeonlift'
+    tenant_id: 'tenant-ebro-it'
+  },
+  {
+    id: 'DEV-PC-PRIMARY-ALT',
+    deviceId: 'DEV-PC-PRIMARY-ALT',
+    developerId: 'sys-admin',
+    developerName: '대표 개발자 (시스템 총괄)',
+    machineName: '대표 개발자 보조/이전 워크스테이션',
+    macAddress: 'D4-AB-61-46-47-82',
+    hardwareFingerprint: 'HW-6A2F-F12E-24C32G',
+    platform: 'Win32/x86_64',
+    status: 'ACTIVE',
+    isPrimary: false,
+    emergencyBreakGlassUsed: false,
+    note: '기본 공인 개발자 보조 기기 (사전 인가)',
+    registeredAt: '2026-10-11T00:00:00.000Z',
+    lastVerifiedAt: '2026-10-11T00:00:00.000Z',
+    tenant_id: 'tenant-ebro-it'
   },
   {
     id: 'DEV-PC-PRIMARY-02',
@@ -6003,8 +6087,9 @@ class LocalDB {
                  code === sub ||
                  sub.startsWith(code) ||
                  code.startsWith(sub) ||
-                 (sub.includes('demo') && (code === 'ebro_awp' || subField === 'awp-demo') ||
-                 sub.includes('giyeon') && (code === 'giyeonlift' || code === 'giyeon')) ||
+                 (sub.includes('it-demo') && (code === 'ebro_it' || subField === 'it-demo')) ||
+                 (sub.includes('demo') && !sub.includes('it') && (code === 'ebro_awp' || subField === 'awp-demo')) ||
+                 (sub.includes('giyeon') && (code === 'giyeonlift' || code === 'giyeon')) ||
                  (sub.includes('giyeonlift') && (code === 'giyeonlift' || code === 'giyeon')) ||
                  (sub.includes('giyeun') && (code === 'giyeonlift' || code === 'giyeun')) ||
                  (sub.includes('giyuen') && (code === 'giyeonlift' || code === 'giyeun')) ||
