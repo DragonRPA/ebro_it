@@ -10,8 +10,125 @@ export interface MenuGroupConfig {
   items: MenuItemConfig[];
 }
 
-// 전사 전체 메뉴 그룹 및 항목 통합 관리 (Single Source of Truth)
-export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
+// IT 렌탈 및 유통 전문 솔루션 메뉴 구성 (Single Source of Truth for ebro_it)
+export const IT_MENU_CONFIG: MenuGroupConfig[] = [
+  {
+    id: 'grp_distribution',
+    name: '영업-유통',
+    items: [
+      { id: 'trade_products', name: '상품 등록 및 관리' },
+      { id: 'trade_purchases', name: '구매 및 입고' },
+      { id: 'trade_contracts', name: '유통 수주' },
+      { id: 'trade_outbounds', name: '출고 요청' },
+      { id: 'courier_dispatch', name: '택배 배송 관리' },
+      { id: 'trade_billing', name: '유통 청구 및 명세' },
+      { id: 'trade_returns', name: '환입 및 반품' },
+      { id: 'trade_profitability', name: '수익성 관리' }
+    ]
+  },
+  {
+    id: 'grp_approval',
+    name: '결재 센터',
+    items: [
+      { id: 'approvalInbox', name: '내 결재함' },
+      { id: 'approvalRules', name: '결재선 규칙 설정' }
+    ]
+  },
+  {
+    id: 'grp_sales',
+    name: '영업관리',
+    items: [
+      { id: 'customer', name: '고객 관리' },
+      { id: 'contract', name: '계약 관리' },
+      { id: 'billing', name: '청구 수납 관리' },
+      { id: 'receivable', name: '외상미수금 대장' },
+      { id: 'smart_dispatch4', name: '출고 요청' },
+      { id: 'smart_return', name: '회수 요청' },
+      { id: 'smart_as_request', name: 'AS 요청' },
+      { id: 'delinquency', name: '미수 채권 연체 관리' },
+      { id: 'official_mail', name: '공식 메일 발송' }
+    ]
+  },
+  {
+    id: 'grp_product_asset',
+    name: '자산관리',
+    items: [
+      { id: 'product', name: '제품 관리' },
+      { id: 'asset', name: '자산 관리' },
+      { id: 'acquisition_disposal', name: '자산 취득 매각' },
+      { id: 'stocktaking', name: '재고 실사' }
+    ]
+  },
+  {
+    id: 'grp_logistics',
+    name: '배송 및 물류관리',
+    items: [
+      { id: 'delivery', name: '배송 및 운송 관리' },
+      { id: 'transport_master', name: '운송 거래처 관리' }
+    ]
+  },
+  {
+    id: 'grp_inout',
+    name: '입출고관리',
+    items: [
+      { id: 'daily_inout', name: '일일 입출고 조회' },
+      { id: 'asset_inout_history', name: '입고등록/입출고조회' },
+      { id: 'dispatch_assign', name: '장비 할당' },
+      { id: 'outbound_inspections', name: '출고 검수 관리' },
+      { id: 'print_queue_monitor', name: '프린트 큐 모니터' }
+    ]
+  },
+  {
+    id: 'grp_management',
+    name: '경영관리',
+    items: [
+      { id: 'leave_application', name: '연차신청' },
+      { id: 'ot_management', name: '연장근무 관리' },
+      { id: 'purchase_settlement', name: '월말 매입 정산' },
+      { id: 'vendors', name: '매입처 관리' },
+      { id: 'bank_matching', name: '은행 입출금 대장' },
+      { id: 'corporate_card', name: '법인카드 매입정산' },
+      { id: 'cash_flow', name: '자금 흐름 분석' },
+      { id: 'depreciation_execution', name: '감가상각 마감 실행' },
+      { id: 'regular_reports', name: '정기보고서 생성' }
+    ]
+  },
+  {
+    id: 'grp_management_special',
+    name: '경영관리 - 특수',
+    items: [
+      { id: 'organization', name: '조직 인사 관리' },
+      { id: 'permission', name: '사용자 및 권한' },
+      { id: 'manual_dictionary', name: '전사 업무 매뉴얼 사전' },
+      { id: 'payroll', name: '급여 정산' },
+      { id: 'leave_management', name: '연차관리' },
+      { id: 'privacy_audit', name: '개인정보 접속 감사' }
+    ]
+  },
+  {
+    id: 'grp_tools',
+    name: '도구 및 다운로드',
+    items: [
+      { id: 'operations_manual', name: '업무매뉴얼' },
+      { id: 'error_report', name: '오류 신고' }
+    ]
+  },
+  {
+    id: 'grp_system_dev',
+    name: '시스템관리 - 개발자',
+    items: [
+      { id: 'agentic_ai_lab', name: 'AI 샌드박스 랩' },
+      { id: 'agentic_settlement_autopilot', name: '월말 대사 정산' },
+      { id: 'agentic_asset_lifecycle', name: '자산 라이프사이클 관제' },
+      { id: 'initial_db_upload', name: '초기DB 업로드' },
+      { id: 'dev_uploader', name: 'DB 데이터 업로더' },
+      { id: 'tenant_management', name: '테넌트 관리' }
+    ]
+  }
+];
+
+// 레거시 AWP(고소작업대) 솔루션 메뉴 구성 (하위 호환 및 AWP 테넌트 전용)
+export const AWP_MENU_CONFIG: MenuGroupConfig[] = [
   {
     id: 'grp_distribution',
     name: '영업-유통',
@@ -142,10 +259,22 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
   }
 ];
 
-// 전사 모든 menuId 목록 추출 도우미
-export const getAllSystemMenuIds = (): string[] => {
+// 전사 기본 메뉴 단일 진실의 원천 (SSOT) - ebro_it 기본은 IT_MENU_CONFIG
+export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = IT_MENU_CONFIG;
+
+// 테넌트 솔루션 업종별 메뉴 구성 반환 헬퍼 (AWP vs IT 분기)
+export function getSystemMenuConfigBySolution(solutionType?: string): MenuGroupConfig[] {
+  if (solutionType === 'AWP') {
+    return AWP_MENU_CONFIG;
+  }
+  return IT_MENU_CONFIG;
+}
+
+// 솔루션 업종별 모든 menuId 목록 추출 도우미
+export const getAllSystemMenuIds = (solutionType?: string): string[] => {
+  const config = getSystemMenuConfigBySolution(solutionType);
   const ids: string[] = [];
-  SYSTEM_MENU_CONFIG.forEach(grp => {
+  config.forEach(grp => {
     grp.items.forEach(item => {
       ids.push(item.id);
     });
@@ -271,6 +400,10 @@ export function normalizeMenuId(menuId: string): string {
 export const getMenuNameById = (menuId: string): string => {
   const normId = normalizeMenuId(menuId);
   for (const grp of SYSTEM_MENU_CONFIG) {
+    const item = grp.items.find(i => i.id === normId);
+    if (item) return item.name;
+  }
+  for (const grp of AWP_MENU_CONFIG) {
     const item = grp.items.find(i => i.id === normId);
     if (item) return item.name;
   }

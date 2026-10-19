@@ -16,7 +16,7 @@ import { encryptSecret, decryptSecret } from '../utils/cryptoVault';
 import { exportToExcel } from '../services/excel';
 import { SortableTh } from '../components/SortableTh';
 import { useSortableData } from '../hooks/useSortableData';
-import { SYSTEM_MENU_CONFIG, getAllSystemMenuIds, MenuGroupConfig } from '../config/menu_config';
+import { SYSTEM_MENU_CONFIG, getAllSystemMenuIds, getSystemMenuConfigBySolution, MenuGroupConfig } from '../config/menu_config';
 import { syncTenantPolicyToAgent } from '../services/agentService';
 import { 
   STANDARD_DOCUMENTS, 
@@ -588,7 +588,8 @@ export const TenantManagementPage: React.FC = () => {
   };
 
   // ── 페이지 노출/숨김 판정 및 제어 헬퍼 ──
-  const allSystemMenuIds = useMemo(() => getAllSystemMenuIds(), []);
+  const currentMenuConfig = useMemo(() => getSystemMenuConfigBySolution(formData.solutionType || 'IT'), [formData.solutionType]);
+  const allSystemMenuIds = useMemo(() => getAllSystemMenuIds(formData.solutionType || 'IT'), [formData.solutionType]);
 
   const isPageVisible = (pageId: string): boolean => {
     const hidden = formData.hiddenPages || [];
@@ -639,8 +640,50 @@ export const TenantManagementPage: React.FC = () => {
     }));
   };
 
+  // 1) IT 렌탈 전문 기본 업무 프리셋 (유통 메뉴 제외, IT 렌탈 중심)
+  const handleSetItRentalOnly = () => {
+    const rentalIds = [
+      'approvalInbox', 'approvalRules',
+      'customer', 'contract', 'billing', 'receivable', 'smart_dispatch4', 'smart_return', 'smart_as_request', 'delinquency', 'official_mail',
+      'product', 'asset', 'acquisition_disposal', 'stocktaking',
+      'delivery', 'transport_master',
+      'daily_inout', 'asset_inout_history', 'dispatch_assign', 'outbound_inspections', 'print_queue_monitor',
+      'leave_application', 'ot_management', 'purchase_settlement', 'vendors', 'bank_matching', 'corporate_card', 'cash_flow', 'depreciation_execution', 'regular_reports',
+      'organization', 'permission', 'manual_dictionary', 'payroll', 'leave_management', 'privacy_audit',
+      'operations_manual', 'error_report', 'tenant_management'
+    ];
+    const allowed = allSystemMenuIds.filter(id => rentalIds.includes(id));
+    const hidden = allSystemMenuIds.filter(id => !rentalIds.includes(id));
+    setFormData(prev => ({
+      ...prev,
+      allowedPages: allowed,
+      hiddenPages: hidden
+    }));
+  };
+
+  // 2) IT 하드웨어 유통 전문 기본 업무 프리셋 (렌탈 메뉴 제외, 유통 중심)
+  const handleSetItTradeOnly = () => {
+    const tradeIds = [
+      'trade_products', 'trade_purchases', 'trade_contracts', 'trade_outbounds', 'courier_dispatch', 'trade_billing', 'trade_returns', 'trade_profitability',
+      'approvalInbox', 'approvalRules',
+      'customer', 'billing', 'receivable',
+      'leave_application', 'ot_management', 'purchase_settlement', 'vendors', 'bank_matching', 'corporate_card', 'cash_flow', 'regular_reports',
+      'organization', 'permission', 'manual_dictionary', 'payroll', 'leave_management', 'privacy_audit',
+      'operations_manual', 'error_report', 'tenant_management'
+    ];
+    const allowed = allSystemMenuIds.filter(id => tradeIds.includes(id));
+    const hidden = allSystemMenuIds.filter(id => !tradeIds.includes(id));
+    setFormData(prev => ({
+      ...prev,
+      allowedPages: allowed,
+      hiddenPages: hidden
+    }));
+  };
+
+  // 3) IT 복합/표준 코어 기본 업무 프리셋 (렌탈 + 유통 핵심 통합)
   const handleSetCorePagesOnly = () => {
-    const coreIds = [
+    const isAwp = (formData.solutionType || 'IT') === 'AWP';
+    const coreIds = isAwp ? [
       'approvalInbox', 'approvalRules',
       'customer', 'contract', 'billing', 'receivable', 'smart_dispatch4', 'smart_return', 'smart_as_request',
       'product', 'asset', 'acquisition_disposal', 'rent_asset',
@@ -648,6 +691,16 @@ export const TenantManagementPage: React.FC = () => {
       'daily_inout', 'asset_inout_history', 'dispatch_assign', 'outbound_inspections',
       'repair', 'inspection_checklist_manage',
       'operations_manual', 'error_report', 'organization', 'permission', 'tenant_management'
+    ] : [
+      'trade_products', 'trade_purchases', 'trade_contracts', 'trade_outbounds', 'courier_dispatch', 'trade_billing', 'trade_returns', 'trade_profitability',
+      'approvalInbox', 'approvalRules',
+      'customer', 'contract', 'billing', 'receivable', 'smart_dispatch4', 'smart_return', 'smart_as_request', 'delinquency',
+      'product', 'asset', 'acquisition_disposal', 'stocktaking',
+      'delivery', 'transport_master',
+      'daily_inout', 'asset_inout_history', 'dispatch_assign', 'outbound_inspections', 'print_queue_monitor',
+      'purchase_settlement', 'vendors', 'bank_matching', 'corporate_card', 'cash_flow', 'depreciation_execution', 'regular_reports',
+      'organization', 'permission', 'manual_dictionary', 'payroll', 'leave_management',
+      'operations_manual', 'error_report', 'tenant_management'
     ];
     const allowed = allSystemMenuIds.filter(id => coreIds.includes(id));
     const hidden = allSystemMenuIds.filter(id => !coreIds.includes(id));
@@ -659,7 +712,7 @@ export const TenantManagementPage: React.FC = () => {
   };
 
   const handleToggleGroupVisibility = (groupId: string, show: boolean) => {
-    const grp = SYSTEM_MENU_CONFIG.find(g => g.id === groupId);
+    const grp = currentMenuConfig.find(g => g.id === groupId);
     if (!grp) return;
     const grpItemIds = grp.items.map(i => i.id).filter(id => id !== 'dashboard' && id !== 'tenant_management');
 
@@ -3232,14 +3285,14 @@ export const TenantManagementPage: React.FC = () => {
                     </div>
 
                     {/* 우측: 일괄 액션 버튼군 */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'nowrap' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
                       <button
                         type="button"
                         onClick={handleShowAllPages}
                         style={{
-                          padding: '6px 12px',
+                          padding: '6px 11px',
                           borderRadius: '6px',
-                          fontSize: '12px',
+                          fontSize: '11.5px',
                           fontWeight: 700,
                           backgroundColor: 'var(--bg-card)',
                           border: '1px solid var(--border-color)',
@@ -3252,11 +3305,48 @@ export const TenantManagementPage: React.FC = () => {
                       </button>
                       <button
                         type="button"
-                        onClick={handleSetCorePagesOnly}
+                        onClick={handleSetItRentalOnly}
+                        title="영업-유통을 제외하고 IT 렌탈 비즈니스 핵심 페이지만 노출합니다"
                         style={{
-                          padding: '6px 12px',
+                          padding: '6px 11px',
                           borderRadius: '6px',
-                          fontSize: '12px',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          backgroundColor: '#ecfdf5',
+                          border: '1px solid #a7f3d0',
+                          color: '#047857',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        IT 렌탈 기본
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSetItTradeOnly}
+                        title="렌탈 전용을 제외하고 IT 하드웨어 유통 비즈니스 페이지만 노출합니다"
+                        style={{
+                          padding: '6px 11px',
+                          borderRadius: '6px',
+                          fontSize: '11.5px',
+                          fontWeight: 700,
+                          backgroundColor: '#fef3c7',
+                          border: '1px solid #fde68a',
+                          color: '#b45309',
+                          cursor: 'pointer',
+                          whiteSpace: 'nowrap'
+                        }}
+                      >
+                        IT 유통 기본
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleSetCorePagesOnly}
+                        title="IT 렌탈 및 유통 통합 핵심 업무 페이지만 노출합니다"
+                        style={{
+                          padding: '6px 11px',
+                          borderRadius: '6px',
+                          fontSize: '11.5px',
                           fontWeight: 700,
                           backgroundColor: '#eff6ff',
                           border: '1px solid #bfdbfe',
@@ -3265,15 +3355,15 @@ export const TenantManagementPage: React.FC = () => {
                           whiteSpace: 'nowrap'
                         }}
                       >
-                        기본 업무 설정
+                        통합 기본 설정
                       </button>
                       <button
                         type="button"
                         onClick={handleHideAllPages}
                         style={{
-                          padding: '6px 12px',
+                          padding: '6px 11px',
                           borderRadius: '6px',
-                          fontSize: '12px',
+                          fontSize: '11.5px',
                           fontWeight: 700,
                           backgroundColor: 'var(--bg-card)',
                           border: '1px solid var(--border-color)',
@@ -3289,7 +3379,7 @@ export const TenantManagementPage: React.FC = () => {
 
                   {/* 메뉴 그룹 목록 */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                    {SYSTEM_MENU_CONFIG.map(grp => {
+                    {currentMenuConfig.map(grp => {
                       const kw = pageSearchKeyword.trim().toLowerCase();
                       const filteredItems = kw
                         ? grp.items.filter(item => 

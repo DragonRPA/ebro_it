@@ -684,7 +684,6 @@ const App: React.FC = () => {
         { id: 'smart_as_request', name: 'AS 요청', icon: <Wrench size={16} />, component: <SmartAsRequest /> },
         { id: 'delinquency', name: '미수 채권 연체 관리', icon: <AlertTriangle size={16} />, component: <DelinquencyPage /> },
         { id: 'official_mail', name: '공식 메일 발송', icon: <Mail size={16} />, component: <OfficialMailPage /> },
-        { id: 'public_construction_permits', name: '인허가 건축공정 조회', icon: <Building2 size={16} />, component: <PublicConstructionPermitsPage /> },
       ]
     },
     {
@@ -695,15 +694,15 @@ const App: React.FC = () => {
         { id: 'product', name: '제품 관리', icon: <Package size={16} />, component: <Products /> },
         { id: 'asset', name: '자산 관리', icon: <Layers size={16} />, component: <Assets /> },
         { id: 'acquisition_disposal', name: '자산 취득 매각', icon: <PlusCircle size={16} />, component: <AssetAcquisitionDisposal /> },
-        { id: 'rent_asset', name: '임차 장비 관리', icon: <ShoppingBag size={16} />, component: <RentAssets /> },
+        { id: 'stocktaking', name: '재고 실사', icon: <ClipboardList size={16} />, component: <StocktakingPage /> },
       ]
     },
     {
       id: 'grp_logistics',
-      name: '배차 운송관리',
+      name: '배송 및 물류관리',
       icon: <Truck size={17} />,
       items: [
-        { id: 'delivery', name: '배차 운송 관리', icon: <Truck size={16} />, component: <TruckDispatch /> },
+        { id: 'delivery', name: '배송 및 운송 관리', icon: <Truck size={16} />, component: <TruckDispatch /> },
         { id: 'transport_master', name: '운송 거래처 관리', icon: <Settings size={16} />, component: <TransportMaster /> },
       ]
     },
@@ -716,20 +715,7 @@ const App: React.FC = () => {
         { id: 'asset_inout_history', name: '입고등록/입출고조회', icon: <Clock size={16} />, component: <AssetHistory /> },
         { id: 'dispatch_assign', name: '장비 할당', icon: <Layers size={16} />, component: <AssetAssignment /> },
         { id: 'outbound_inspections', name: '출고 검수 관리', icon: <CheckSquare size={16} />, component: <OutboundInspections /> },
-          { id: 'stocktaking', name: '재고 실사', icon: <ClipboardList size={16} />, component: <StocktakingPage /> },
         { id: 'print_queue_monitor', name: '프린트 큐 모니터', icon: <Printer size={16} />, component: <PrintQueueManager /> },
-      ]
-    },
-    {
-      id: 'grp_maintenance',
-      name: '정비 소모품관리',
-      icon: <Wrench size={17} />,
-      items: [
-        { id: 'consumable_purchase', name: '소모품 구매', icon: <ShoppingBag size={16} />, component: <ConsumablePurchasesPage /> },
-        { id: 'consumable_inout', name: '소모품 입출고', icon: <PackagePlus size={16} />, component: <ConsumableInOutPage /> },
-        { id: 'consumable_stock', name: '소모품 재고', icon: <Boxes size={16} />, component: <ConsumableStockPage /> },
-        { id: 'repair', name: '주기장 정비 관리', icon: <Wrench size={16} />, component: <Repairs /> },
-        { id: 'inspection_checklist_manage', name: '정비 항목 관리', icon: <Shield size={16} />, component: <InspectionChecklistManage /> },
       ]
     },
     {
@@ -739,7 +725,6 @@ const App: React.FC = () => {
       items: [
         { id: 'leave_application', name: '연차신청', icon: <Calendar size={16} />, component: <LeaveApplicationPage /> },
         { id: 'ot_management', name: '연장근무 관리', icon: <Clock size={16} />, component: <OtManagementPage /> },
-        { id: 'vehicle_log', name: '차량 주유관리', icon: <Car size={16} />, component: <VehicleOperationLogPage /> },
         { id: 'purchase_settlement', name: '월말 매입 정산', icon: <CreditCard size={16} />, component: <PurchaseSettlementPage /> },
         { id: 'vendors', name: '매입처 관리', icon: <Building2 size={16} />, component: <Vendors /> },
         { id: 'bank_matching', name: '은행 입출금 대장', icon: <TrendingUp size={16} />, component: <BankMatching /> },
@@ -777,7 +762,6 @@ const App: React.FC = () => {
       icon: <Terminal size={17} />,
       items: [
         { id: 'agentic_ai_lab', name: 'AI 샌드박스 랩', icon: <Bot size={16} />, component: <AgenticAiLabPage /> },
-        { id: 'agentic_dispatch_studio', name: '배차 관제 스튜디오', icon: <Truck size={16} />, component: <AgenticDispatchStudioPage /> },
         { id: 'agentic_settlement_autopilot', name: '월말 대사 정산', icon: <TrendingUp size={16} />, component: <AgenticSettlementAutopilotPage /> },
         { id: 'agentic_asset_lifecycle', name: '자산 라이프사이클 관제', icon: <Layers size={16} />, component: <AgenticAssetLifecyclePage /> },
         { id: 'initial_db_upload', name: '초기DB 업로드', icon: <DatabaseIcon size={16} />, component: <InitialDbUploader /> },
