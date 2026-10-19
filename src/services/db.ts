@@ -1186,40 +1186,93 @@ export interface CustomerSite {
   updatedAt?: string;
 }
 
+export type ProductCategory = 
+  | 'LAPTOP' 
+  | 'DESKTOP' 
+  | 'MONITOR' 
+  | 'TV' 
+  | 'SERVER' 
+  | 'NETWORK' 
+  | 'TABLET' 
+  | 'PRINTER' 
+  | 'SOFTWARE' 
+  | 'OTHER';
+
+export const PRODUCT_CATEGORIES: ProductCategory[] = [
+  'LAPTOP', 'DESKTOP', 'MONITOR', 'TV', 'SERVER', 'NETWORK', 'TABLET', 'PRINTER', 'SOFTWARE', 'OTHER'
+];
+
+export const PRODUCT_CATEGORY_LABELS: Record<ProductCategory, string> = {
+  LAPTOP: '노트북',
+  DESKTOP: '데스크탑/PC',
+  MONITOR: '모니터',
+  TV: 'TV/디스플레이',
+  SERVER: '서버/스토리지',
+  NETWORK: '네트워크장비',
+  TABLET: '태블릿',
+  PRINTER: '복합기/프린터',
+  SOFTWARE: '소프트웨어',
+  OTHER: '기타 IT'
+};
+
+export interface StorageDrive {
+  slot: number | string;
+  type: string;
+  size: string;
+  model?: string;
+}
+
 export interface Product {
   id: string;
+  category?: ProductCategory;
   modelName: string;
-  shortName?: string;            // 실무 축약 모델명 (예: '1930', 'GS1930', 'GS-1930')
-  feet: number;
+  shortName?: string;
+  feet?: number;                 // 하위 호환용 (화면 인치 또는 랙 유닛 등 대체 가능)
   spec: string;
   manufacturer: string;
-  isActive?: boolean; // 사용/미사용 (단종/매각 등)
-  
-  // 🌟 [신규 확장] 장비 제원표 상세 규격 (1대1 매핑)
-  powerSource?: string;          // 동력 (예: '배터리', '디젤', '전동')
-  workingHeight?: string;        // 작업 높이 (예: '6.57 M')
-  platformHeight?: string;       // 발판 높이 (예: '4.57 M')
-  weight?: string;               // 장비 중량 (예: '1,148 Kg')
-  machineDimensions?: string;    // 장비 크기 전장x전폭x전고 (예: '1.80 x 0.81 x 1.92 M')
-  platformDimensions?: string;   // 플랫폼 크기 길이x폭 (예: '1.55 x 0.66 M')
-  gradeability?: string;         // 등판 능력 (예: '25 %')
-  speed?: string;                // 주행 속도 (예: '3.4 Km/h')
-  asContact?: string;            // A/S 접수처 (예: '031-334-5296')
+  isActive?: boolean;
+  releaseYear?: string;
+  warrantyType?: string;
+  bundledAccessories?: string;
 
-  // 🌟 [신규 확장] 작업대 확장 전/후 적재중량 및 안전 기준
-  capacityPreExt?: string;       // 확장 전 적재중량 (예: '272 kg' - 작업자 2인)
-  capacityPostExtMain?: string;  // 확장 후 본체 적재중량 (예: '159 kg' - 작업자 1인)
-  capacityPostExtDeck?: string;  // 확장 후 확장부 적재중량 (예: '113 kg' - 작업자 1인)
-  maxWindSpeed?: string;         // 최대 허용 풍속 (예: '12.5 m/s 이내')
+  // 하드웨어 스펙 및 확장 슬롯
+  cpu?: string;
+  onboardRam?: number;
+  ramSlots?: number;
+  maxRam?: number;
+  baseRam?: string;
+  storageSlots?: number;
+  storageFormFactors?: string;
+  baseStorage?: string;
+  gpuType?: 'INTEGRATED' | 'DEDICATED' | 'HYBRID';
+  defaultGpu?: string;
+  gpuSlots?: number;
 
-  // 기존 안전/문서 URL
-  maxHeightCapacity?: string;    // 작업최대높이/적재용량
-  safetyCertDate?: string;       // 안전인증년월일 (예: '2009-09-14', '2024-03-01')
-  safetyCertUrl?: string;
+  // 카테고리별 특화 제원
+  displaySize?: number;
+  resolution?: string;
+  panelType?: string;
+  refreshRate?: string;
+  aspectRatio?: string;
+  weight?: string;
+  formFactor?: string;
+  rackUnit?: number;
+  cpuSockets?: number;
+  networkPorts?: string;
+  powerRedundancy?: boolean;
+  printType?: string;
+  printSpeed?: string;
+  paperSize?: string;
+  defaultOs?: string;
+  tvStandType?: string;
+
+  // 문서 및 다운로드 URL
   specSheetUrl?: string;
-  emergencyGuideUrl?: string;
+  manualUrl?: string;
+  driverDownloadUrl?: string;
   createdAt: string;
   updatedAt?: string;
+  tenant_id?: string;
 }
 
 /**
@@ -1270,12 +1323,30 @@ export interface Asset {
   assetNo: string; // 관리번호
   vendorId?: string; // 임차처/매입처 외래키
   vendorAssetNo?: string; // 타사(임차처) 원래 관리번호
-  serialNo?: string; // 제조번호
+  serialNo?: string; // 제조번호 (S/N / Service Tag)
+  wiredMac?: string; // 유선 MAC 주소
+  wifiMac?: string; // 무선 MAC 주소
+  imei?: string; // 태블릿/셀룰러 IMEI
   manufacturer?: string;
-  manufactureYear?: string; // 제조년도 (예: 2023)
+  manufactureYear?: string; // 제조년도 (예: 2024)
   ownerType: 'OWNED' | 'RENTED'; // 당사자산 / 임차자산
-  antiEntrapmentOwnership?: AntiEntrapmentOwnership; // 협착방지봉 소유권 ('VENDOR': 임차처 소유, 'OURS': 당사 소유, 'NONE': 미장착)
   status: 'AVAILABLE' | 'ASSIGNED' | 'RENTED' | 'REPAIRING' | 'RENTED_RETURNED' | 'SOLD' | 'LOST' | 'DISPOSED';
+
+  // IT 실물 자산 실장 하드웨어 커스텀 스펙 (확장/업그레이드)
+  ramConfig?: string; // 예: "16GB (8GB*2)", "32GB (온보드 16GB + 슬롯1 16GB)"
+  totalRamGb?: number; // 총 장착 RAM (GB)
+  storageDrives?: StorageDrive[]; // 슬롯별 실장 드라이브 목록
+  totalStorageText?: string; // 예: "512GB NVMe + 1TB NVMe = 1.5TB"
+  installedGpu?: string; // 실제 사용 GPU (내장/외장 모델명)
+  installedOs?: string; // 실제 설치 OS
+  customSpec?: string; // 자산별 커스텀 사양 요약
+
+  // 소프트웨어 라이선스 관리
+  licenseKey?: string; // 소프트웨어 라이선스/제품키
+  licenseExpiryDate?: string; // 라이선스 만료일
+  licenseType?: 'PERPETUAL' | 'SUBSCRIPTION' | 'DSP' | 'FPP' | 'VOLUME';
+
+  antiEntrapmentOwnership?: AntiEntrapmentOwnership; // 하위 호환용
   
   maintenanceScore?: number; // 정비 소요 점수 (0이 최상 상태)
 

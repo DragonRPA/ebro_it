@@ -127,12 +127,12 @@ export const Assets: React.FC = () => {
     return '-';
   };
 
-  // 헬퍼: 모델별 규격(피트) 조회 (O(1) 즉각 조회)
-  const getAssetFeet = (a: Asset): string => {
-    const feet = productFeetMap.get(a.modelName);
-    if (feet) return feet;
-    const m = a.modelName.match(/(\d{2})/);
-    return m ? `${m[1]} ft` : '-';
+  // 헬퍼: IT 자산 실장 하드웨어 요약 (O(1) 즉각 조회)
+  const getAssetHardwareSummary = (a: Asset): string => {
+    const ram = a.ramConfig || (a.totalRamGb ? `${a.totalRamGb}GB RAM` : '');
+    const storage = a.totalStorageText || '';
+    if (ram && storage) return `${ram} / ${storage}`;
+    return ram || storage || a.customSpec || '-';
   };
 
   const getCustomerName = (id?: string) => {
@@ -300,11 +300,20 @@ export const Assets: React.FC = () => {
 
       if (tokenMatchers.length === 0) return true;
 
-      // [1] Bulk 다중 검색 (OR 조건): 엑셀 복붙 등에서 정확한 자산/시리얼 번호가 1개라도 일치하면 포함
+      // [1] Bulk 다중 검색 (OR 조건): 엑셀 복붙 등에서 정확한 자산/시리얼/MAC/IMEI/라이선스가 1개라도 일치하면 포함
       const assetNoLower = a.assetNo.toLowerCase();
       const serialNoLower = a.serialNo ? a.serialNo.toLowerCase() : '';
+      const wiredMacLower = a.wiredMac ? a.wiredMac.toLowerCase() : '';
+      const wifiMacLower = a.wifiMac ? a.wifiMac.toLowerCase() : '';
+      const imeiLower = a.imei ? a.imei.toLowerCase() : '';
+      const licenseLower = a.licenseKey ? a.licenseKey.toLowerCase() : '';
       const isExactOrMatch = tokenMatchers.some(({ token }) =>
-        assetNoLower === token || (serialNoLower !== '' && serialNoLower === token)
+        assetNoLower === token || 
+        (serialNoLower !== '' && serialNoLower === token) ||
+        (wiredMacLower !== '' && wiredMacLower === token) ||
+        (wifiMacLower !== '' && wifiMacLower === token) ||
+        (imeiLower !== '' && imeiLower === token) ||
+        (licenseLower !== '' && licenseLower === token)
       );
       if (isExactOrMatch) return true;
 
@@ -318,6 +327,14 @@ export const Assets: React.FC = () => {
         matcher.test(a.modelName) ||
         matcher.test(assetProduct?.shortName) ||
         matcher.test(a.serialNo) ||
+        matcher.test(a.wiredMac) ||
+        matcher.test(a.wifiMac) ||
+        matcher.test(a.imei) ||
+        matcher.test(a.ramConfig) ||
+        matcher.test(a.totalStorageText) ||
+        matcher.test(a.installedGpu) ||
+        matcher.test(a.installedOs) ||
+        matcher.test(a.licenseKey) ||
         matcher.test(a.manufacturer) ||
         matcher.test(renterName) ||
         matcher.test(supplierName)
@@ -332,9 +349,12 @@ export const Assets: React.FC = () => {
       switch (key) {
         case 'assetNo': return a.assetNo;
         case 'modelName': return a.modelName;
-        case 'feet': return getAssetFeet(a);
+        case 'ramConfig': return a.totalRamGb || (a.ramConfig || '');
+        case 'totalStorageText': return a.totalStorageText || '';
         case 'manufacturer': return a.manufacturer || '';
         case 'serialNo': return a.serialNo || '';
+        case 'wiredMac': return a.wiredMac || '';
+        case 'licenseKey': return a.licenseKey || '';
         case 'manufacturingYear': return a.manufactureYear || 0;
         case 'ownerType': return a.ownerType;
         case 'status': return a.status;
@@ -439,9 +459,16 @@ export const Assets: React.FC = () => {
         'No': idx + 1,
         '관리번호': a.assetNo || '-',
         '모델명': a.modelName || '-',
-        '규격(피트)': getAssetFeet(a),
+        '실장 RAM': a.ramConfig || (a.totalRamGb ? `${a.totalRamGb}GB` : '-'),
+        '실장 스토리지': a.totalStorageText || '-',
+        '장착 GPU': a.installedGpu || '-',
+        '설치 OS': a.installedOs || '-',
         '제조사': a.manufacturer || '-',
         '제조번호': a.serialNo || '-',
+        '유선 MAC': a.wiredMac || '-',
+        '무선 MAC': a.wifiMac || '-',
+        'IMEI': a.imei || '-',
+        '라이선스 키': a.licenseKey || '-',
         '연식': a.manufactureYear || '-',
         '소유구분': a.ownerType === 'OWNED' ? '당사자산' : '외부임차',
         '상태': isReturned ? '임차처 반납완료' : getAssetStatusLabel(a.status),
@@ -722,12 +749,12 @@ export const Assets: React.FC = () => {
                 <SortableTh sortKey="assetNo" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px', width: '90px', position: 'sticky', left: '50px', zIndex: 12, backgroundColor: 'var(--bg-app)' }}>관리번호</SortableTh>
                 {/* 3. 모델명 */}
                 <SortableTh sortKey="modelName" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px', width: '100px' }}>모델명</SortableTh>
-                {/* 4. 규격/피트 */}
-                <SortableTh sortKey="feet" currentSort={sortConfig} onSort={requestSort} align="center" style={{ padding: '7px 8px', width: '75px' }}>규격(피트)</SortableTh>
+                {/* 4. 실장 RAM / 스토리지 */}
+                <SortableTh sortKey="ramConfig" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px', width: '160px' }}>실장 RAM / 스토리지</SortableTh>
                 {/* 5. 제조사 */}
                 <SortableTh sortKey="manufacturer" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px', width: '90px' }}>제조사</SortableTh>
-                {/* 6. 제조번호 */}
-                <SortableTh sortKey="serialNo" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px', width: '100px' }}>제조번호</SortableTh>
+                {/* 6. 제조번호 및 통신/라이선스 식별자 */}
+                <SortableTh sortKey="serialNo" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px', width: '130px' }}>제조번호 / MAC / KEY</SortableTh>
                 {/* 7. 연식 */}
                 <SortableTh sortKey="manufacturingYear" currentSort={sortConfig} onSort={requestSort} align="center" style={{ padding: '7px 8px', width: '70px' }}>연식</SortableTh>
                 {/* 8. 소유구분 */}
@@ -835,17 +862,37 @@ export const Assets: React.FC = () => {
                       {/* 3. 모델명 */}
                       <td style={{ padding: '6px 8px', color: 'var(--text-main)', fontWeight: 600, whiteSpace: 'nowrap' }}>{a.modelName}</td>
 
-                      {/* 4. 규격(피트) */}
-                      <td style={{ padding: '6px 8px', textAlign: 'center', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                        <span className="badge badge-secondary" style={{ fontSize: '10px' }}>{getAssetFeet(a)}</span>
+                      {/* 4. 실장 RAM / 스토리지 */}
+                      <td style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '11px' }}>
+                            {a.ramConfig || (a.totalRamGb ? `${a.totalRamGb}GB RAM` : '-')}
+                          </span>
+                          {a.totalStorageText && (
+                            <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                              {a.totalStorageText}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* 5. 제조사 */}
                       <td style={{ padding: '6px 8px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>{a.manufacturer || '-'}</td>
 
-                      {/* 6. 시리얼번호 */}
-                      <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                        {a.serialNo || '-'}
+                      {/* 6. 제조번호 및 통신/라이선스 식별자 */}
+                      <td style={{ padding: '6px 8px', fontFamily: 'monospace', fontSize: '11px', whiteSpace: 'nowrap' }}>
+                        <div style={{ fontWeight: 600, color: 'var(--text-main)' }}>{a.serialNo || '-'}</div>
+                        {(a.wiredMac || a.wifiMac) && (
+                          <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                            {a.wiredMac ? `LAN: ${a.wiredMac}` : ''} {a.wifiMac ? `Wi-Fi: ${a.wifiMac}` : ''}
+                          </div>
+                        )}
+                        {a.imei && (
+                          <div style={{ fontSize: '10px', color: '#0070C0' }}>IMEI: {a.imei}</div>
+                        )}
+                        {a.licenseKey && (
+                          <div style={{ fontSize: '10px', color: 'var(--success)' }}>KEY: {a.licenseKey.slice(0, 16)}...</div>
+                        )}
                       </td>
 
                       {/* 7. 연식 */}
@@ -857,16 +904,6 @@ export const Assets: React.FC = () => {
                           <span className={`badge ${a.ownerType === 'OWNED' ? 'badge-success' : 'badge-info'}`} style={{ fontSize: '10px', padding: '1px 5px' }}>
                             {a.ownerType === 'OWNED' ? '당사' : '임차'}
                           </span>
-                          {a.ownerType === 'RENTED' && a.antiEntrapmentOwnership === 'VENDOR' && (
-                            <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: 'rgba(220, 38, 38, 0.1)', color: '#dc2626', fontWeight: 700, border: '1px solid rgba(220, 38, 38, 0.25)', whiteSpace: 'nowrap' }}>
-                              원사협착봉
-                            </span>
-                          )}
-                          {a.ownerType === 'RENTED' && a.antiEntrapmentOwnership === 'OURS' && (
-                            <span style={{ fontSize: '9px', padding: '1px 4px', borderRadius: '3px', backgroundColor: 'rgba(37, 99, 235, 0.1)', color: '#2563eb', fontWeight: 700, border: '1px solid rgba(37, 99, 235, 0.25)', whiteSpace: 'nowrap' }}>
-                              당사협착봉
-                            </span>
-                          )}
                         </div>
                       </td>
 
@@ -1138,9 +1175,9 @@ export const Assets: React.FC = () => {
             {/* 서랍 본문 스크롤 영역 */}
             <div style={{ padding: '16px', flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '14px', fontSize: '12px' }}>
               
-              {/* 1. 기본 장비 물리 제원 */}
+              {/* 1. IT 실물 자산 식별 정보 */}
               <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>1. 기본 장비 물리 제원</div>
+                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>1. IT 실물 자산 식별 정보</div>
                 {isEditing ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     <div><label style={labelStyle}>관리번호</label><input style={inputStyle} value={editForm.assetNo || ''} onChange={ef('assetNo')} /></div>
@@ -1149,9 +1186,12 @@ export const Assets: React.FC = () => {
                       <input style={inputStyle} value={editForm.modelName || ''} onChange={ef('modelName')} />
                       {(() => { const mp = editForm.modelName ? productByModelMap.get(editForm.modelName) : undefined; return mp?.shortName ? <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', marginTop: '2px' }}>축약명: {mp.shortName}</div> : null; })()}
                     </div>
-                    <div><label style={labelStyle}>제조번호</label><input style={inputStyle} value={editForm.serialNo || ''} onChange={ef('serialNo')} /></div>
                     <div><label style={labelStyle}>제조사</label><input style={inputStyle} value={editForm.manufacturer || ''} onChange={ef('manufacturer')} /></div>
-                    <div><label style={labelStyle}>제조년도</label><input style={inputStyle} value={editForm.manufactureYear || ''} onChange={ef('manufactureYear')} /></div>
+                    <div><label style={labelStyle}>제조번호 (S/N / Service Tag)</label><input style={inputStyle} value={editForm.serialNo || ''} onChange={ef('serialNo')} /></div>
+                    <div><label style={labelStyle}>유선 MAC 주소</label><input style={inputStyle} placeholder="예: 00:1A:2B:3C:4D:5E" value={editForm.wiredMac || ''} onChange={ef('wiredMac')} /></div>
+                    <div><label style={labelStyle}>무선 MAC 주소</label><input style={inputStyle} placeholder="예: 00:1A:2B:3C:4D:5F" value={editForm.wifiMac || ''} onChange={ef('wifiMac')} /></div>
+                    <div><label style={labelStyle}>태블릿 / 셀룰러 IMEI</label><input style={inputStyle} placeholder="예: 352099001761482" value={editForm.imei || ''} onChange={ef('imei')} /></div>
+                    <div><label style={labelStyle}>연식 / 제조년도</label><input style={inputStyle} value={editForm.manufactureYear || ''} onChange={ef('manufactureYear')} /></div>
                     <div>
                       <label style={labelStyle}>소유구분</label>
                       <select style={inputStyle} value={editForm.ownerType || 'OWNED'} onChange={ef('ownerType')} disabled>
@@ -1159,16 +1199,6 @@ export const Assets: React.FC = () => {
                         <option value="RENTED">임차자산</option>
                       </select>
                     </div>
-                    {editForm.ownerType === 'RENTED' && (
-                      <div>
-                        <label style={labelStyle}>협착방지봉 소유권</label>
-                        <select style={inputStyle} value={editForm.antiEntrapmentOwnership || 'NONE'} onChange={ef('antiEntrapmentOwnership')}>
-                          <option value="VENDOR">임차처 소유 (탈거 절대 금지)</option>
-                          <option value="OURS">당사 소유 (원사 반납 전 회수)</option>
-                          <option value="NONE">미장착 (없음)</option>
-                        </select>
-                      </div>
-                    )}
                     <div>
                       <label style={labelStyle}>상태 (자동 변경)</label>
                       <select style={inputStyle} value={editForm.status || 'AVAILABLE'} onChange={ef('status')} disabled>
@@ -1183,28 +1213,70 @@ export const Assets: React.FC = () => {
                     <div><span style={{ color: 'var(--text-secondary)' }}>관리번호:</span> <strong>{selectedAsset.assetNo}</strong></div>
                     <div><span style={{ color: 'var(--text-secondary)' }}>모델명:</span> <strong>{selectedAsset.modelName}</strong></div>
                     <div><span style={{ color: 'var(--text-secondary)' }}>제조사:</span> {selectedAsset.manufacturer || '-'}</div>
-                    <div><span style={{ color: 'var(--text-secondary)' }}>제조번호:</span> {selectedAsset.serialNo || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>제조번호:</span> <strong>{selectedAsset.serialNo || '-'}</strong></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>유선 MAC:</span> <span style={{ fontFamily: 'monospace' }}>{selectedAsset.wiredMac || '-'}</span></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>무선 MAC:</span> <span style={{ fontFamily: 'monospace' }}>{selectedAsset.wifiMac || '-'}</span></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>태블릿 IMEI:</span> <span style={{ fontFamily: 'monospace' }}>{selectedAsset.imei || '-'}</span></div>
                     <div><span style={{ color: 'var(--text-secondary)' }}>연식:</span> {selectedAsset.manufactureYear || '-'}</div>
                     <div><span style={{ color: 'var(--text-secondary)' }}>소유구분:</span> {selectedAsset.ownerType === 'OWNED' ? '당사자산' : `임차자산 (${selectedAsset.renter || '임차처'})`}</div>
-                    {selectedAsset.ownerType === 'RENTED' && (
-                      <div style={{ gridColumn: 'span 2', marginTop: '2px', padding: '6px 8px', borderRadius: '4px', backgroundColor: selectedAsset.antiEntrapmentOwnership === 'VENDOR' ? 'rgba(220, 38, 38, 0.1)' : selectedAsset.antiEntrapmentOwnership === 'OURS' ? 'rgba(37, 99, 235, 0.1)' : 'var(--bg-app)', border: `1px solid ${selectedAsset.antiEntrapmentOwnership === 'VENDOR' ? 'rgba(220, 38, 38, 0.3)' : selectedAsset.antiEntrapmentOwnership === 'OURS' ? 'rgba(37, 99, 235, 0.3)' : 'var(--border-color)'}` }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>협착방지봉:</span>{' '}
-                        {selectedAsset.antiEntrapmentOwnership === 'VENDOR' ? (
-                          <strong style={{ color: '#dc2626' }}>임차처 소유 (주기장 입고 시 탈거 절대 금지 / 원형 보존)</strong>
-                        ) : selectedAsset.antiEntrapmentOwnership === 'OURS' ? (
-                          <strong style={{ color: '#2563eb' }}>당사 소유 (임차처 반납 전 탈거 회수)</strong>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)' }}>미장착 (없음)</span>
-                        )}
+                    <div><span style={{ color: 'var(--text-secondary)' }}>상태:</span> <span className={`badge ${getAssetStatusBadgeClass(selectedAsset.status)}`} style={{ fontSize: '10px' }}>{getAssetStatusLabel(selectedAsset.status)}</span></div>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. 실장 하드웨어 커스텀 사양 (확장/업그레이드) */}
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>2. 실장 하드웨어 커스텀 사양 (업그레이드)</div>
+                {isEditing ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                    <div><label style={labelStyle}>실장 RAM 구성</label><input style={inputStyle} placeholder="예: 16GB (8GB*2), 32GB (온보드 16GB + 슬롯 16GB)" value={editForm.ramConfig || ''} onChange={ef('ramConfig')} /></div>
+                    <div><label style={labelStyle}>총 장착 RAM (GB)</label><input type="number" style={inputStyle} placeholder="예: 16, 32, 64" value={editForm.totalRamGb ?? ''} onChange={ef('totalRamGb')} /></div>
+                    <div style={{ gridColumn: 'span 2' }}>
+                      <label style={labelStyle}>실장 스토리지 요약</label>
+                      <input style={inputStyle} placeholder="예: 512GB NVMe + 1TB SSD" value={editForm.totalStorageText || ''} onChange={ef('totalStorageText')} />
+                    </div>
+                    <div><label style={labelStyle}>장착 GPU</label><input style={inputStyle} placeholder="예: NVIDIA RTX 4060 8GB" value={editForm.installedGpu || ''} onChange={ef('installedGpu')} /></div>
+                    <div><label style={labelStyle}>설치 OS</label><input style={inputStyle} placeholder="예: Windows 11 Pro 64-bit" value={editForm.installedOs || ''} onChange={ef('installedOs')} /></div>
+                    <div><label style={labelStyle}>소프트웨어 라이선스 키</label><input style={inputStyle} placeholder="예: XXXXX-XXXXX-XXXXX-XXXXX" value={editForm.licenseKey || ''} onChange={ef('licenseKey')} /></div>
+                    <div>
+                      <label style={labelStyle}>라이선스 형태</label>
+                      <select style={inputStyle} value={editForm.licenseType || 'PERPETUAL'} onChange={ef('licenseType')}>
+                        <option value="PERPETUAL">영구 라이선스 (PERPETUAL)</option>
+                        <option value="SUBSCRIPTION">구독형 라이선스 (SUBSCRIPTION)</option>
+                        <option value="DSP">DSP (장비 귀속)</option>
+                        <option value="FPP">FPP (패키지 박스)</option>
+                        <option value="VOLUME">기업용 볼륨 라이선스 (VOLUME)</option>
+                      </select>
+                    </div>
+                    <div><label style={labelStyle}>라이선스 만료일</label><input type="date" style={inputStyle} value={editForm.licenseExpiryDate || ''} onChange={ef('licenseExpiryDate')} /></div>
+                    <div><label style={labelStyle}>자산 커스텀 메모</label><input style={inputStyle} placeholder="하드웨어 변경 및 부착물 메모" value={editForm.customSpec || ''} onChange={ef('customSpec')} /></div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11.5px' }}>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>실장 RAM 구성:</span> <strong>{selectedAsset.ramConfig || (selectedAsset.totalRamGb ? `${selectedAsset.totalRamGb} GB` : '-')}</strong></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>실장 스토리지:</span> <strong>{selectedAsset.totalStorageText || '-'}</strong></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>장착 GPU:</span> {selectedAsset.installedGpu || '-'}</div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>설치 OS:</span> {selectedAsset.installedOs || '-'}</div>
+                    {selectedAsset.licenseKey && (
+                      <div style={{ gridColumn: 'span 2' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>S/W 라이선스:</span>{' '}
+                        <code style={{ backgroundColor: 'var(--bg-card)', padding: '2px 6px', borderRadius: '3px', border: '1px solid var(--border-color)', color: 'var(--primary)' }}>
+                          {selectedAsset.licenseKey}
+                        </code>
+                        {selectedAsset.licenseType && <span style={{ marginLeft: '6px', color: 'var(--text-muted)' }}>({selectedAsset.licenseType})</span>}
+                        {selectedAsset.licenseExpiryDate && <span style={{ marginLeft: '6px', color: 'var(--danger)' }}>~{selectedAsset.licenseExpiryDate} 만료</span>}
                       </div>
+                    )}
+                    {selectedAsset.customSpec && (
+                      <div style={{ gridColumn: 'span 2' }}><span style={{ color: 'var(--text-secondary)' }}>사양 메모:</span> {selectedAsset.customSpec}</div>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* 2. 현재 운용 / 임대 현황 */}
+              {/* 3. 현재 운용 / 임대 현황 */}
               <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>2. 현재 운용 / 임대 현황</div>
+                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>3. 현재 운용 / 임대 현황</div>
                 {isEditing ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                     <div><label style={labelStyle}>월 렌탈료 (원)</label><input type="number" style={inputStyle} value={editForm.monthlyRentalFee ?? ''} onChange={ef('monthlyRentalFee')} /></div>

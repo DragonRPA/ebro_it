@@ -1,5 +1,5 @@
 // scripts/seed_it_initial_data.cjs
-// ebro_it IT 장비 전용 ERP 초기 기초 시드 데이터셋 적재 스크립트
+// ebro_it IT 장비 및 소프트웨어 전용 ERP 기초 시드 데이터셋 적재 스크립트
 
 const { Client } = require('pg');
 
@@ -16,7 +16,7 @@ const TENANT_ID = 'ebro_it';
 const NOW = new Date().toISOString();
 
 async function seed() {
-  console.log('=== ebro_it IT 장비 ERP 기초 데이터 적재 시작 ===');
+  console.log('=== ebro_it IT 장비 & 소프트웨어 ERP 기초 데이터 적재 시작 ===');
   const client = new Client(DB_CONFIG);
   await client.connect();
   console.log('✅ PostgreSQL 접속 성공!');
@@ -80,29 +80,87 @@ async function seed() {
       `, [uId, lId, pw, name, dId, pos, st, role, phone, email, NOW, TENANT_ID]);
     }
 
-    // 4. IT 제품 카탈로그 등록
-    console.log('💻 4. IT 하드웨어 제품 카탈로그 등록...');
+    // 4. IT 10대 카테고리 제품 카탈로그 등록
+    console.log('💻 4. IT 10대 카테고리 제품 카탈로그 등록...');
     const products = [
-      ['p-nb-tp-t14', 'ThinkPad T14 Gen 4', 14, 'Lenovo', 'i7-1360P / 32GB RAM / 1TB NVMe / 14인치 WUXGA / Win11 Pro', '1.36kg', '1670-0088 (레노버)'],
-      ['p-nb-mbp16', 'MacBook Pro 16 M3 Pro', 16, 'Apple', 'M3 Pro 12C / 36GB Unified / 512GB SSD / Liquid Retina XDR', '2.14kg', '080-333-4000 (애플)'],
-      ['p-nb-gb4', 'Galaxy Book4 Pro 16', 16, 'Samsung', 'Core Ultra 7 / 32GB LPDDR5X / 1TB NVMe / 16인치 3K AMOLED', '1.56kg', '1588-3366 (삼성)'],
-      ['p-dt-opt7010', 'Dell OptiPlex 7010 Micro', 0, 'Dell', 'i7-13700T / 32GB DDR5 / 1TB NVMe / 초소형 미니PC / Win11 Pro', '1.09kg', '080-854-0066 (델)'],
-      ['p-ws-hpz2', 'HP Z2 Mini G9 Workstation', 0, 'HP', 'i9-13900K / 64GB ECC / 2TB NVMe / RTX A2000 12GB / Win11 Pro', '2.40kg', '1588-3003 (HP)'],
-      ['p-mon-dell27', 'Dell UltraSharp U2723QE', 27, 'Dell', '27인치 4K UHD IPS Black / 90W PD USB-C Hub / RJ45 이더넷', '6.64kg', '080-854-0066 (델)'],
-      ['p-mon-lg34', 'LG 34WN80C-B UltraWide', 34, 'LG', '34인치 21:9 WQHD 커브드 / sRGB 99% / 60W USB-C 연결', '8.50kg', '1544-7777 (LG)'],
-      ['p-srv-r750', 'Dell PowerEdge R750', 2, 'Dell', '2U Rack / Dual Xeon 4314 / 128GB ECC / 8x 1.92TB NVMe SAS', '28.6kg', '080-854-0066 (델)'],
-      ['p-net-c9200', 'Cisco Catalyst C9200L-48P-4X', 1, 'Cisco', '48-Port PoE+ / 4x 10G SFP+ Uplink / Layer 3 스위치', '4.80kg', '080-008-8088 (시스코)'],
-      ['p-tab-ipad12', 'iPad Pro 12.9 6th Cellular', 13, 'Apple', 'Apple M2 / 256GB / Wi-Fi + 5G 셀룰러 / Liquid Retina XDR', '685g', '080-333-4000 (애플)']
+      // LAPTOP
+      ['p-nb-tp-t14', 'LAPTOP', 'Lenovo', 'ThinkPad T14 Gen 4', 'T14 G4', 'i7-1360P / 16G 온보드 + 1슬롯 / 512GB NVMe / 14인치 WUXGA IPS / Win11 Pro', 'Intel Core i7-1360P', 16, 1, 48, '16GB DDR5', 1, 'M.2 2280 PCIe 4.0', '512GB NVMe', 'INTEGRATED', 'Intel Iris Xe', 0, 14.0, 'WUXGA (1920x1200)', '1.36kg', 'Windows 11 Pro', 'Lenovo NBD (3년)', '65W GaN 어댑터'],
+      ['p-nb-mbp16', 'LAPTOP', 'Apple', 'MacBook Pro 16 M3 Pro', 'MBP 16 M3', 'M3 Pro 12C / 36GB 통합메모리 / 512GB SSD / Liquid Retina XDR', 'Apple M3 Pro', 36, 0, 36, '36GB Unified', 0, '온보드 SSD', '512GB SSD', 'INTEGRATED', 'Apple 18-Core GPU', 0, 16.2, 'Liquid Retina XDR (3456x2234)', '2.14kg', 'macOS Sonoma', 'AppleCare Enterprise (3년)', '140W 어댑터, MagSafe 케이블'],
+      ['p-nb-gb4', 'LAPTOP', 'Samsung', 'Galaxy Book4 Pro 16', 'GB4 Pro 16', 'Core Ultra 7 / 32GB LPDDR5X / 1TB NVMe / 16인치 3K AMOLED / Win11 Pro', 'Intel Core Ultra 7 155H', 32, 0, 32, '32GB LPDDR5X', 2, 'M.2 NVMe 2슬롯', '1TB NVMe', 'INTEGRATED', 'Intel Arc Graphics', 0, 16.0, '3K AMOLED (2880x1800)', '1.56kg', 'Windows 11 Pro', '삼성 B2B (1년)', '65W 어댑터'],
+      
+      // DESKTOP
+      ['p-dt-opt7010', 'DESKTOP', 'Dell', 'Dell OptiPlex 7010 Micro', 'OptiPlex 7010M', 'i7-13700T / 16GB DDR5 (2슬롯) / 512GB NVMe / 초소형 미니PC / Win11 Pro', 'Intel Core i7-13700T', 0, 2, 64, '16GB (16*1)', 1, 'M.2 NVMe', '512GB NVMe', 'INTEGRATED', 'Intel UHD 770', 0, null, null, '1.09kg', 'Windows 11 Pro', 'Dell ProSupport (3년)', '90W 어댑터, 무선 키마 세트'],
+      ['p-ws-hpz2', 'DESKTOP', 'HP', 'HP Z2 Mini G9 Workstation', 'Z2 Mini G9', 'i9-13900K / 64GB DDR5 / 1TB NVMe / NVIDIA RTX A2000 12GB / 워크스테이션', 'Intel Core i9-13900K', 0, 2, 64, '64GB (32*2)', 2, 'M.2 NVMe 2슬롯', '1TB NVMe', 'DEDICATED', 'NVIDIA RTX A2000 12GB', 1, null, null, '2.40kg', 'Windows 11 Pro Workstation', 'HP CarePack (3년)', '280W 어댑터, 무선 키마'],
+      
+      // MONITOR
+      ['p-mon-dell27', 'MONITOR', 'Dell', 'Dell UltraSharp U2723QE', 'U2723QE 4K', '27인치 4K UHD IPS Black / 90W PD USB-C Hub / RJ45 이더넷 / 피벗 스탠드', null, 0, 0, 0, null, 0, null, null, null, null, 0, 27.0, '4K UHD (3840x2160)', '6.64kg', null, 'Dell 패널교환보증 (3년)', 'Type-C to C 케이블, 전원코드, DP케이블'],
+      ['p-mon-lg34', 'MONITOR', 'LG', 'LG 34WN80C-B UltraWide', '34WN80C 21:9', '34인치 21:9 WQHD 커브드 / sRGB 99% / 60W USB-C 연결 / 높낮이/틸트', null, 0, 0, 0, null, 0, null, null, null, null, 0, 34.0, 'UltraWide QHD (3440x1440)', '8.50kg', null, 'LG 서비스센터 (1년)', '전원 어댑터, HDMI, Type-C'],
+      
+      // TV
+      ['p-tv-sam65', 'TV', 'Samsung', 'Samsung 65인치 4K UHD 사이니지 TV', '삼성 65인치 TV', '65인치 4K UHD / 상업용 16/7 연속운용 / 이동식 바퀴형 거치대 포함 / 스마트 기능', null, 0, 0, 0, null, 0, null, null, null, null, 0, 65.0, '4K UHD (3840x2160)', '21.3kg', 'Tizen OS', '삼성 B2B 출장 (2년)', '리모컨, 전원코드, 이동식 거치대, HDMI (5m)'],
+      
+      // SERVER
+      ['p-srv-r750', 'SERVER', 'Dell', 'Dell PowerEdge R750', 'R750 2U', '2U Rack / Dual Xeon 4314 (32C) / 128GB ECC (32슬롯) / 8x 2.5인치 베이 / 800W Dual', 'Dual Intel Xeon 4314', 0, 32, 2048, '128GB (32*4) ECC', 8, '8x 2.5인치 핫스왑 베이', '2x 480GB SSD (RAID 1)', 'INTEGRATED', 'Matrox G200', 6, null, null, '28.6kg', 'No OS (Linux/WinServer 지원)', 'Dell ProSupport Mission Critical (3년)', 'ReadyRails 랙 레일킷, 전원코드 2개'],
+      
+      // NETWORK
+      ['p-net-c9200', 'NETWORK', 'Cisco', 'Cisco Catalyst C9200L-48P-4X', 'C9200L 48P', '48-Port PoE+ (740W) / 4x 10G SFP+ Uplink / Layer 3 엔터프라이즈 스위치', null, 0, 0, 0, null, 0, null, null, null, null, 0, null, null, '4.80kg', null, 'Cisco SmartNet (1년)', '19인치 랙마운트 브라켓, 콘솔 케이블'],
+      
+      // TABLET
+      ['p-tab-ipad12', 'TABLET', 'Apple', 'iPad Pro 12.9 6th Cellular', 'iPad Pro 12.9 셀룰러', 'Apple M2 / 256GB / Wi-Fi + 5G 셀룰러 (IMEI) / Liquid Retina XDR', 'Apple M2', 8, 0, 8, '8GB 통합메모리', 0, '온보드 플래시', '256GB', 'INTEGRATED', 'Apple 10-Core GPU', 0, 12.9, 'Liquid Retina XDR (2732x2048)', '685g', 'iPadOS 17', 'AppleCare Enterprise (2년)', '20W USB-C 충전기, C to C 케이블'],
+      
+      // PRINTER
+      ['p-prt-c3060', 'PRINTER', 'FujiFilm', 'FujiFilm ApeosPort C3060 A3 복합기', '후지 C3060 복합기', 'A3 컬러 디지털 복합기 / 출력속도 30 PPM / 복사, 인쇄, 스캔, 팩스 / 양면 자동급지', null, 0, 0, 0, null, 0, null, null, null, null, 0, null, null, '75.0kg', null, '후지필름 정기점검 및 토너공급', '기본 토너 1세트, 전원코드, 랜선, 팩스선'],
+      
+      // SOFTWARE
+      ['p-sw-m365', 'SOFTWARE', 'Microsoft', 'Microsoft 365 Business Standard', 'M365 Business Std', '1인당 PC 5대 + 모바일 5대 / Word, Excel, PowerPoint, Outlook, Teams, 1TB Cloud', null, 0, 0, 0, null, 0, null, null, null, null, 0, null, null, null, 'Win/Mac/모바일', 'MS 공식 기술지원', '전자 라이선스 인증키'],
+      ['p-sw-win11', 'SOFTWARE', 'Microsoft', 'Windows 11 Pro 64-bit DSP 라이선스', 'Win11 Pro DSP', '기업용 Windows 11 Pro COA 스티커 및 제품키 1디바이스 영구귀속 라이선스', null, 0, 0, 0, null, 0, null, null, null, null, 0, null, null, null, 'Windows 11 Pro', '영구 라이선스', '정품 COA 스티커 및 제품키 카드'],
+      
+      // OTHER
+      ['p-oth-ts4', 'OTHER', 'CalDigit', 'CalDigit TS4 썬더볼트4 18-in-1 도킹스테이션', 'CalDigit TS4', 'Thunderbolt 4 / 최대 98W 호스트 충전 / 2.5GbE LAN / 18개 확장 포트', null, 0, 0, 0, null, 0, null, null, null, null, 0, null, null, '640g', null, '공식 수입원 보증 (2년)', '230W 어댑터, 썬더볼트4 케이블']
     ];
-    for (const [pId, mName, feet, mfr, spec, wt, asTel] of products) {
+
+    for (const p of products) {
+      const [
+        pId, cat, mfr, mName, sName, spec, cpu, obRam, ramSlots, maxRam, baseRam,
+        stSlots, stForms, baseSt, gpuType, defGpu, gpuSlots, dispSize, resol, wt, defOs,
+        wType, bItems
+      ] = p;
+
       await client.query(`
-        INSERT INTO products (id, "modelName", feet, manufacturer, spec, weight, "asContact", "isActive", "createdAt", "updatedAt", tenant_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $8, $9)
-        ON CONFLICT (id) DO UPDATE SET
+        INSERT INTO products (
+          id, category, manufacturer, "modelName", "shortName", spec,
+          cpu, "onboardRam", "ramSlots", "maxRam", "baseRam",
+          "storageSlots", "storageFormFactors", "baseStorage", "gpuType", "defaultGpu", "gpuSlots",
+          "displaySize", resolution, weight, "defaultOs", "warrantyType", "bundledAccessories",
+          "isActive", "createdAt", "updatedAt", tenant_id
+        ) VALUES (
+          $1, $2, $3, $4, $5, $6,
+          $7, $8, $9, $10, $11,
+          $12, $13, $14, $15, $16, $17,
+          $18, $19, $20, $21, $22, $23,
+          true, $24, $24, $25
+        ) ON CONFLICT (id) DO UPDATE SET
+          category = EXCLUDED.category,
           "modelName" = EXCLUDED."modelName",
           spec = EXCLUDED.spec,
-          weight = EXCLUDED.weight;
-      `, [pId, mName, feet, mfr, spec, wt, asTel, NOW, TENANT_ID]);
+          cpu = EXCLUDED.cpu,
+          "onboardRam" = EXCLUDED."onboardRam",
+          "ramSlots" = EXCLUDED."ramSlots",
+          "maxRam" = EXCLUDED."maxRam",
+          "storageSlots" = EXCLUDED."storageSlots",
+          "baseStorage" = EXCLUDED."baseStorage",
+          "defaultGpu" = EXCLUDED."defaultGpu",
+          "displaySize" = EXCLUDED."displaySize",
+          weight = EXCLUDED.weight,
+          "defaultOs" = EXCLUDED."defaultOs",
+          "bundledAccessories" = EXCLUDED."bundledAccessories";
+      `, [
+        pId, cat, mfr, mName, sName, spec,
+        cpu, obRam, ramSlots, maxRam, baseRam,
+        stSlots, stForms, baseSt, gpuType, defGpu, gpuSlots,
+        dispSize, resol, wt, defOs, wType, bItems,
+        NOW, TENANT_ID
+      ]);
     }
 
     // 5. IT 표준 옵션 / 악세서리 등록
@@ -194,41 +252,99 @@ async function seed() {
       `, [cId, cName, bNo, rep, phone, email, addr, bDay, NOW, TENANT_ID]);
     }
 
-    // 10. IT 실물 자산(Assets) 등록 (초기 15대 AVAILABLE 상태)
-    console.log('💻 10. IT 실물 자산 등록 (15대)...');
+    // 10. IT 실물 자산(Assets) 등록 (MAC주소, IMEI, RAM/Storage 커스텀 스펙, 라이선스키 포함 15대)
+    console.log('💻 10. IT 실물 자산 등록 (15대: MAC, 커스텀 스펙, 라이선스 완비)...');
     const assets = [
-      ['ast-01', 'IT-NB-2026-001', 'ThinkPad T14 Gen 4', 'PF4X0001', 'Lenovo', '2024', 'AVAILABLE', 75000, 3500],
-      ['ast-02', 'IT-NB-2026-002', 'ThinkPad T14 Gen 4', 'PF4X0002', 'Lenovo', '2024', 'AVAILABLE', 75000, 3500],
-      ['ast-03', 'IT-NB-2026-003', 'ThinkPad T14 Gen 4', 'PF4X0003', 'Lenovo', '2024', 'AVAILABLE', 75000, 3500],
-      ['ast-04', 'IT-MB-2026-001', 'MacBook Pro 16 M3 Pro', 'C02G0001', 'Apple', '2024', 'AVAILABLE', 150000, 6500],
-      ['ast-05', 'IT-MB-2026-002', 'MacBook Pro 16 M3 Pro', 'C02G0002', 'Apple', '2024', 'AVAILABLE', 150000, 6500],
-      ['ast-06', 'IT-GB-2026-001', 'Galaxy Book4 Pro 16', 'NX010001', 'Samsung', '2024', 'AVAILABLE', 85000, 4000],
-      ['ast-07', 'IT-GB-2026-002', 'Galaxy Book4 Pro 16', 'NX010002', 'Samsung', '2024', 'AVAILABLE', 85000, 4000],
-      ['ast-08', 'IT-DT-2026-001', 'Dell OptiPlex 7010 Micro', 'DL010001', 'Dell', '2023', 'AVAILABLE', 55000, 2500],
-      ['ast-09', 'IT-DT-2026-002', 'Dell OptiPlex 7010 Micro', 'DL010002', 'Dell', '2023', 'AVAILABLE', 55000, 2500],
-      ['ast-10', 'IT-WS-2026-001', 'HP Z2 Mini G9 Workstation', 'HP010001', 'HP', '2024', 'AVAILABLE', 180000, 8000],
-      ['ast-11', 'IT-MN-2026-001', 'Dell UltraSharp U2723QE', 'MN010001', 'Dell', '2024', 'AVAILABLE', 35000, 1500],
-      ['ast-12', 'IT-MN-2026-002', 'Dell UltraSharp U2723QE', 'MN010002', 'Dell', '2024', 'AVAILABLE', 35000, 1500],
-      ['ast-13', 'IT-MN-2026-003', 'LG 34WN80C-B UltraWide', 'MN020001', 'LG', '2023', 'AVAILABLE', 40000, 1800],
-      ['ast-14', 'IT-SV-2026-001', 'Dell PowerEdge R750', 'SV010001', 'Dell', '2023', 'AVAILABLE', 450000, 20000],
-      ['ast-15', 'IT-NT-2026-001', 'Cisco Catalyst C9200L-48P-4X', 'CS010001', 'Cisco', '2023', 'AVAILABLE', 120000, 5000]
+      // 1~3: ThinkPad T14 (기본사양 vs RAM 증설 자산)
+      ['ast-01', 'IT-NB-2026-001', 'ThinkPad T14 Gen 4', 'PF4X0001', '00:1A:2B:3C:4D:01', '00:1A:2B:3C:4D:02', null, 'Lenovo', '2024', '16GB (온보드 16GB)', 16, JSON.stringify([{ slot: 1, type: 'NVMe SSD', size: '512GB', model: 'Samsung PM9A1' }]), '512GB NVMe', 'Intel Iris Xe', 'Windows 11 Pro', '기본 표준 사양', null, null, null, 'AVAILABLE', 75000, 3500],
+      ['ast-02', 'IT-NB-2026-002', 'ThinkPad T14 Gen 4', 'PF4X0002', '00:1A:2B:3C:4D:03', '00:1A:2B:3C:4D:04', null, 'Lenovo', '2024', '32GB (온보드 16GB + 슬롯1 16GB)', 32, JSON.stringify([{ slot: 1, type: 'NVMe SSD', size: '1TB', model: 'Samsung 990 PRO' }]), '1TB NVMe', 'Intel Iris Xe', 'Windows 11 Pro', 'RAM 16G 증설 + 1TB SSD 업그레이드', null, null, null, 'AVAILABLE', 90000, 4200],
+      ['ast-03', 'IT-NB-2026-003', 'ThinkPad T14 Gen 4', 'PF4X0003', '00:1A:2B:3C:4D:05', '00:1A:2B:3C:4D:06', null, 'Lenovo', '2024', '16GB (온보드 16GB)', 16, JSON.stringify([{ slot: 1, type: 'NVMe SSD', size: '512GB', model: 'Samsung PM9A1' }]), '512GB NVMe', 'Intel Iris Xe', 'Windows 11 Pro', '기본 표준 사양', null, null, null, 'AVAILABLE', 75000, 3500],
+      
+      // 4~5: MacBook Pro 16 M3 Pro
+      ['ast-04', 'IT-MB-2026-001', 'MacBook Pro 16 M3 Pro', 'C02G0001', null, 'F0:18:98:AA:BB:01', null, 'Apple', '2024', '36GB 통합메모리', 36, JSON.stringify([{ slot: 'Onboard', type: 'Apple SSD', size: '512GB' }]), '512GB 초고속 SSD', 'Apple 18-Core GPU', 'macOS Sonoma', '표준 36G 사양', null, null, null, 'AVAILABLE', 150000, 6500],
+      ['ast-05', 'IT-MB-2026-002', 'MacBook Pro 16 M3 Pro', 'C02G0002', null, 'F0:18:98:AA:BB:02', null, 'Apple', '2024', '36GB 통합메모리', 36, JSON.stringify([{ slot: 'Onboard', type: 'Apple SSD', size: '512GB' }]), '512GB 초고속 SSD', 'Apple 18-Core GPU', 'macOS Sonoma', '표준 36G 사양', null, null, null, 'AVAILABLE', 150000, 6500],
+      
+      // 6~7: Galaxy Book4 Pro 16
+      ['ast-06', 'IT-GB-2026-001', 'Galaxy Book4 Pro 16', 'NX010001', null, '9C:28:B3:11:22:01', null, 'Samsung', '2024', '32GB LPDDR5X', 32, JSON.stringify([{ slot: 1, type: 'NVMe SSD', size: '1TB' }]), '1TB NVMe', 'Intel Arc Graphics', 'Windows 11 Pro', '기본 1TB 사양', null, null, null, 'AVAILABLE', 85000, 4000],
+      ['ast-07', 'IT-GB-2026-002', 'Galaxy Book4 Pro 16', 'NX010002', null, '9C:28:B3:11:22:02', null, 'Samsung', '2024', '32GB LPDDR5X', 32, JSON.stringify([{ slot: 1, type: 'NVMe SSD', size: '1TB' }, { slot: 2, type: 'NVMe SSD', size: '1TB' }]), '1TB + 1TB = 총 2TB NVMe', 'Intel Arc Graphics', 'Windows 11 Pro', 'SSD 1TB 추가 장착 (듀얼 2TB)', null, null, null, 'AVAILABLE', 95000, 4500],
+      
+      // 8~9: Dell OptiPlex 7010 Micro
+      ['ast-08', 'IT-DT-2026-001', 'Dell OptiPlex 7010 Micro', 'DL010001', '18:66:DA:33:44:01', '18:66:DA:33:44:02', null, 'Dell', '2023', '16GB (16*1)', 16, JSON.stringify([{ slot: 1, type: 'NVMe SSD', size: '512GB' }]), '512GB NVMe', 'Intel UHD 770', 'Windows 11 Pro', '표준 사무용 세팅', null, null, null, 'AVAILABLE', 55000, 2500],
+      ['ast-09', 'IT-DT-2026-002', 'Dell OptiPlex 7010 Micro', 'DL010002', '18:66:DA:33:44:03', '18:66:DA:33:44:04', null, 'Dell', '2023', '32GB (16GB*2 듀얼채널)', 32, JSON.stringify([{ slot: 1, type: 'NVMe SSD', size: '1TB' }]), '1TB NVMe', 'Intel UHD 770', 'Windows 11 Pro', 'RAM 16G 증설 (32G 듀얼)', null, null, null, 'AVAILABLE', 65000, 3000],
+      
+      // 10: HP Z2 Mini G9 Workstation
+      ['ast-10', 'IT-WS-2026-001', 'HP Z2 Mini G9 Workstation', 'HP010001', '3C:52:82:55:66:01', '3C:52:82:55:66:02', null, 'HP', '2024', '64GB (32GB*2)', 64, JSON.stringify([{ slot: 1, type: 'NVMe SSD', size: '1TB' }, { slot: 2, type: 'NVMe SSD', size: '2TB' }]), '1TB OS + 2TB DATA = 3TB', 'NVIDIA RTX A2000 12GB', 'Windows 11 Pro Workstation', '3TB 듀얼 드라이브 그래픽 워크스테이션', null, null, null, 'AVAILABLE', 180000, 8000],
+      
+      // 11~12: Dell 4K 모니터
+      ['ast-11', 'IT-MN-2026-001', 'Dell UltraSharp U2723QE', 'MN010001', '24:4B:FE:77:88:01', null, null, 'Dell', '2024', null, 0, null, null, null, null, '피벗 모니터 완품', null, null, null, 'AVAILABLE', 35000, 1500],
+      ['ast-12', 'IT-MN-2026-002', 'Dell UltraSharp U2723QE', 'MN010002', '24:4B:FE:77:88:02', null, null, 'Dell', '2024', null, 0, null, null, null, null, '피벗 모니터 완품', null, null, null, 'AVAILABLE', 35000, 1500],
+      
+      // 13: TV 사이니지
+      ['ast-13', 'IT-TV-2026-001', 'Samsung 65인치 4K UHD 사이니지 TV', 'TV650001', '80:5E:4F:99:00:01', '80:5E:4F:99:00:02', null, 'Samsung', '2023', null, 0, null, null, null, 'Tizen OS', '이동식 바퀴 스탠드 장착 완제품', null, null, null, 'AVAILABLE', 120000, 6000],
+      
+      // 14: 서버 (Dell R750 다중 드라이브)
+      ['ast-14', 'IT-SV-2026-001', 'Dell PowerEdge R750', 'SV010001', 'D0:94:66:AA:01:01', null, null, 'Dell', '2023', '128GB (32GB*4 ECC RDIMM)', 128, JSON.stringify([
+        { slot: 1, type: 'SATA SSD', size: '480GB', model: 'Dell BOSS RAID 1' },
+        { slot: 2, type: 'SATA SSD', size: '480GB', model: 'Dell BOSS RAID 1' },
+        { slot: 3, type: 'SAS SSD', size: '1.92TB', model: 'Kioxia Enterprise' },
+        { slot: 4, type: 'SAS SSD', size: '1.92TB', model: 'Kioxia Enterprise' },
+        { slot: 5, type: 'SAS SSD', size: '1.92TB', model: 'Kioxia Enterprise' },
+        { slot: 6, type: 'SAS SSD', size: '1.92TB', model: 'Kioxia Enterprise' }
+      ]), 'OS 480G 미러 + 4x 1.92TB SAS SSD RAID 5', 'Matrox G200', 'Ubuntu Server 22.04 LTS', '엔터프라이즈 DB 서버 구성', null, null, null, 'AVAILABLE', 450000, 20000],
+      
+      // 15: 소프트웨어 라이선스 자산 (Windows 11 Pro DSP)
+      ['ast-15', 'IT-SW-2026-001', 'Windows 11 Pro 64-bit DSP 라이선스', 'COA-99881122', null, null, null, 'Microsoft', '2024', null, 0, null, null, null, 'Windows 11 Pro', '영구 귀속형 COA 라이선스', 'VK7JG-NPHTM-C97JM-9MPGT-3V66T', 'PERPETUAL', 'DSP', 'AVAILABLE', 25000, 1000]
     ];
-    for (const [aId, aNo, mName, sNo, mfr, mYear, status, mFee, dFee] of assets) {
+
+    for (const a of assets) {
+      const [
+        aId, aNo, mName, sNo, wMac, wfMac, imei, mfr, mYear,
+        ramCfg, tRamGb, stDrives, tStText, instGpu, instOs, custSpec,
+        licKey, licExp, licType, status, mFee, dFee
+      ] = a;
+
       await client.query(`
         INSERT INTO assets (
-          id, "assetNo", "modelName", "serialNo", manufacturer, "manufactureYear",
-          "ownerType", status, "monthlyRentalFee", "dailyRentalFee", "maintenanceScore",
+          id, "assetNo", "modelName", "serialNo", "wiredMac", "wifiMac", imei,
+          manufacturer, "manufactureYear", "ownerType",
+          "ramConfig", "totalRamGb", "storageDrives", "totalStorageText",
+          "installedGpu", "installedOs", "customSpec",
+          "licenseKey", "licenseExpiryDate", "licenseType",
+          status, "monthlyRentalFee", "dailyRentalFee", "maintenanceScore",
           "createdAt", "updatedAt", tenant_id
         ) VALUES (
-          $1, $2, $3, $4, $5, $6,
-          'OWNED', $7, $8, $9, 0,
-          $10, $10, $11
-        )
-        ON CONFLICT (id) DO UPDATE SET
+          $1, $2, $3, $4, $5, $6, $7,
+          $8, $9, 'OWNED',
+          $10, $11, $12::jsonb, $13,
+          $14, $15, $16,
+          $17, $18, $19,
+          $20, $21, $22, 0,
+          $23, $23, $24
+        ) ON CONFLICT (id) DO UPDATE SET
           "assetNo" = EXCLUDED."assetNo",
           "modelName" = EXCLUDED."modelName",
+          "serialNo" = EXCLUDED."serialNo",
+          "wiredMac" = EXCLUDED."wiredMac",
+          "wifiMac" = EXCLUDED."wifiMac",
+          imei = EXCLUDED.imei,
+          "ramConfig" = EXCLUDED."ramConfig",
+          "totalRamGb" = EXCLUDED."totalRamGb",
+          "storageDrives" = EXCLUDED."storageDrives",
+          "totalStorageText" = EXCLUDED."totalStorageText",
+          "installedGpu" = EXCLUDED."installedGpu",
+          "installedOs" = EXCLUDED."installedOs",
+          "customSpec" = EXCLUDED."customSpec",
+          "licenseKey" = EXCLUDED."licenseKey",
           status = EXCLUDED.status;
-      `, [aId, aNo, mName, sNo, mfr, mYear, status, mFee, dFee, NOW, TENANT_ID]);
+      `, [
+        aId, aNo, mName, sNo, wMac, wfMac, imei,
+        mfr, mYear,
+        ramCfg, tRamGb, stDrives || '[]', tStText,
+        instGpu, instOs, custSpec,
+        licKey, licExp, licType,
+        status, mFee, dFee,
+        NOW, TENANT_ID
+      ]);
     }
 
     console.log('🎉 ebro_it IT ERP 전체 시드 데이터 적재 완료!');

@@ -93,7 +93,7 @@ export function buildStatementItemFromDetail(
       rawModel.replace(/\s+/g, '').toUpperCase().includes(p.modelName.replace(/\s+/g, '').toUpperCase())
     )
   );
-  const workingHeight = d?.workingHeight || prod?.workingHeight || '';
+  const workingHeight = d?.workingHeight || (prod as any)?.workingHeight || '';
   const assetNo = d?.assetNo || asset?.assetNo || '';
   const siteEntryDate = d?.siteEntryDate || ca?.startDate || contract?.startDate || '';
 

@@ -379,62 +379,101 @@ CREATE TABLE customer_sites (
 
 
 
--- 2-6. 제품 카탈로그 및 표준 제원 (products)
+-- 2-6. IT 제품 카탈로그 및 표준 제원 (products)
 CREATE TABLE products (
     id                    TEXT PRIMARY KEY,
+    category              TEXT NOT NULL CHECK (category IN ('LAPTOP', 'DESKTOP', 'MONITOR', 'TV', 'SERVER', 'NETWORK', 'TABLET', 'PRINTER', 'SOFTWARE', 'OTHER')),
+    manufacturer          TEXT NOT NULL,
     "modelName"           TEXT NOT NULL UNIQUE,
-    feet                  DOUBLE PRECISION NOT NULL,
-    manufacturer          TEXT,
+    "shortName"           TEXT,
     spec                  TEXT,
+    "releaseYear"         TEXT,
+    "warrantyType"        TEXT,
+    "bundledAccessories"  TEXT,
+
+    -- 하드웨어 스펙 및 확장 슬롯
+    cpu                   TEXT,
+    "onboardRam"          INTEGER DEFAULT 0,
+    "ramSlots"            INTEGER DEFAULT 0,
+    "maxRam"              INTEGER DEFAULT 0,
+    "baseRam"             TEXT,
+    "storageSlots"        INTEGER DEFAULT 1,
+    "storageFormFactors"  TEXT,
+    "baseStorage"         TEXT,
+    "gpuType"             TEXT DEFAULT 'INTEGRATED',
+    "defaultGpu"          TEXT,
+    "gpuSlots"            INTEGER DEFAULT 0,
+
+    -- 카테고리별 특화 제원
+    "displaySize"         DOUBLE PRECISION,
+    resolution            TEXT,
+    "panelType"           TEXT,
+    "refreshRate"         TEXT,
+    "aspectRatio"         TEXT,
     weight                TEXT,
-    speed                 TEXT,
-    "maxHeightCapacity"   TEXT,
-    "powerSource"         TEXT,
-    "workingHeight"       TEXT,
-    "platformHeight"      TEXT,
-    "machineDimensions"   TEXT,
-    "platformDimensions"  TEXT,
-    "gradeability"        TEXT,
-    "capacityPreExt"      TEXT,
-    "capacityPostExtMain" TEXT,
-    "capacityPostExtDeck" TEXT,
-    "maxWindSpeed"        TEXT DEFAULT '12.5 m/s 이내',
-    "asContact"           TEXT DEFAULT '031-334-5296',
-    "safetyCertDate"      TEXT,
-    "safetyCertUrl"       TEXT,
+    "formFactor"          TEXT,
+    "rackUnit"            INTEGER,
+    "cpuSockets"          INTEGER,
+    "networkPorts"        TEXT,
+    "powerRedundancy"     BOOLEAN DEFAULT FALSE,
+    "printType"           TEXT,
+    "printSpeed"          TEXT,
+    "paperSize"           TEXT,
+    "defaultOs"           TEXT,
+    "tvStandType"         TEXT,
+
+    -- 문서 및 메타
     "specSheetUrl"        TEXT,
-    "emergencyGuideUrl"   TEXT,
+    "manualUrl"           TEXT,
+    "driverDownloadUrl"   TEXT,
     "isActive"            BOOLEAN NOT NULL DEFAULT TRUE,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL,
-    "tenant_id"           TEXT NOT NULL DEFAULT 'giyeonlift'
+    "tenant_id"           TEXT NOT NULL DEFAULT 'ebro_it'
 );
 
--- 2-7. 자산 마스터 (assets) - 논리적 6단계 완전 정돈
+-- 2-7. IT 자산 마스터 (assets)
 CREATE TABLE assets (
     -- ① 식별자
     id                    TEXT PRIMARY KEY,
     "assetNo"             TEXT NOT NULL UNIQUE,
-    "vendorAssetNo"       TEXT, -- 원사(타사) 실물 원래 관리번호
+    "vendorAssetNo"       TEXT, -- 원사(타사) 실물 관리번호
     "serialNo"            TEXT,
+    "wiredMac"            TEXT, -- 유선 MAC 주소
+    "wifiMac"             TEXT, -- 무선 MAC 주소
+    imei                  TEXT, -- 태블릿/셀룰러 IMEI
 
-    -- ② 장비 제원 및 소유 속성
+    -- ② 장비 모델 및 기본 소유 속성
     "modelName"           TEXT NOT NULL REFERENCES products("modelName") ON UPDATE CASCADE,
     manufacturer          TEXT,
     "manufactureYear"     TEXT,
     "ownerType"           TEXT CHECK ("ownerType" IN ('OWNED', 'RENTED')) NOT NULL,
 
-    -- ③ 임차 및 매입처 연동
+    -- ③ 실물 자산 실장 하드웨어 커스텀 스펙 (확장/업그레이드 장착)
+    "ramConfig"           TEXT, -- 예: "16GB (8GB*2)", "32GB (온보드 16GB + 슬롯1 16GB)"
+    "totalRamGb"          INTEGER DEFAULT 0, -- 실제 장착된 총 RAM 용량 (숫자)
+    "storageDrives"       JSONB DEFAULT '[]'::jsonb, -- 슬롯/베이별 실장 드라이브 목록
+    "totalStorageText"    TEXT, -- 예: "512GB NVMe + 1TB NVMe = 1.5TB"
+    "installedGpu"        TEXT, -- 실제 장착/사용 GPU
+    "installedOs"         TEXT, -- 실제 설치된 OS
+    "customSpec"          TEXT, -- 자산별 커스텀 사양 종합 요약
+
+    -- ④ 소프트웨어 라이선스 관리
+    "licenseKey"          TEXT, -- 소프트웨어 라이선스/제품키
+    "licenseExpiryDate"   TEXT, -- 라이선스 만료일
+    "licenseType"         TEXT, -- PERPETUAL, SUBSCRIPTION, DSP, FPP, VOLUME
+
+    -- ⑤ 임차 및 매입처 연동
     "vendorId"            TEXT REFERENCES vendors(id) ON DELETE SET NULL,
     supplier              TEXT,
 
-    -- ④ 임차 기간 및 원가 단가
+    -- ⑥ 임차 기간 및 원가 단가
     "rentStart"           TEXT,
     "rentEnd"             TEXT,
     "actualRentReturnDate" TEXT,
     "monthlyRentFee"      DOUBLE PRECISION DEFAULT 0,
     "dailyRentFee"        DOUBLE PRECISION DEFAULT 0,
-    "maintenanceScore"    INTEGER NOT NULL DEFAULT 0, -- 정비점수 (0~10)
+    "maintenanceScore"    INTEGER NOT NULL DEFAULT 0, -- 정비/점검 점수 (0~10)
     "billingDay"          INTEGER, -- 청구 마감일
     "monthlyRentalFee"    DOUBLE PRECISION, -- 약정 월 대여료
     "dailyRentalFee"      DOUBLE PRECISION, -- 약정 일 대여료
@@ -444,17 +483,15 @@ CREATE TABLE assets (
     buyer                 TEXT, -- 매각처
     memo1                 TEXT, -- 상세 비고 1
     memo2                 TEXT, -- 상세 비고 2
-    "safetyInspectionUrl" TEXT, -- 안전검사증 URL
-    "preDeliveryChecklistUrl" TEXT, -- 출고전점검표 URL
     "fullDefectSummary"   TEXT, -- 전수 결함 요약
 
-    -- ⑤ 현재 가동 현장 및 계약 속성 (실시간 라이프사이클)
+    -- ⑦ 현재 가동 현장 및 계약 속성 (실시간 라이프사이클)
     "currentCustomerId"   TEXT REFERENCES customers(id) ON DELETE SET NULL,
     "currentSiteId"       TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
     "contractStart"       TEXT,
     "contractEnd"         TEXT,
 
-    -- ⑥ 자산 회계 및 손익 원장
+    -- ⑧ 자산 회계 및 손익 원장
     "acquisitionDate"     TEXT,
     "acquisitionPrice"    DOUBLE PRECISION DEFAULT 0,
     "depreciationMonths"  INTEGER DEFAULT 60,
@@ -464,8 +501,8 @@ CREATE TABLE assets (
     "cumRentalFee"        DOUBLE PRECISION DEFAULT 0,
     "cumRepairCost"       DOUBLE PRECISION DEFAULT 0,
 
-    -- ⑦ 업무 상태 및 감사
-    status                TEXT CHECK (status IN ('AVAILABLE', 'ASSIGNED', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD')) NOT NULL DEFAULT 'AVAILABLE',
+    -- ⑨ 업무 상태 및 감사
+    status                TEXT CHECK (status IN ('AVAILABLE', 'ASSIGNED', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD', 'LOST', 'DISPOSED')) NOT NULL DEFAULT 'AVAILABLE',
     memo                  TEXT,
     note                  TEXT,
     "createdAt"           TEXT NOT NULL,

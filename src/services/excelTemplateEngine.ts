@@ -549,8 +549,8 @@ export function resolveStatementRowColumns(item: TransactionStatementItem, fallb
         cleanModel.includes(p.modelName.replace(/\s+/g, '').toUpperCase())
       )
     );
-    if (matchedProd?.workingHeight) {
-      height = matchedProd.workingHeight;
+    if ((matchedProd as any)?.workingHeight) {
+      height = (matchedProd as any).workingHeight;
     }
   }
 
