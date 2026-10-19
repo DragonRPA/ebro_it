@@ -29,7 +29,6 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
     fieldAsTickets,
     completeFieldAsTicket,
     updateFieldAsTicketStatus,
-    mechanicConsumableStocks,
     consumables,
     currentUser,
     showErrorModal,
@@ -109,22 +108,21 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
   // 부품 추가
   const handleAddPart = () => {
     if (!selectedStockId) return;
-    const stock = mechanicConsumableStocks.find((s) => s.id === selectedStockId);
-    if (!stock) return;
-    const consumable = consumables.find((c) => c.id === stock.consumableId);
+    const consumable = consumables.find((c) => c.id === selectedStockId);
+    if (!consumable) return;
 
     const safeQty = Math.max(1, Math.floor(selectedQty || 1));
-    if (safeQty > (stock.stockQty || 0)) {
-      showErrorModal(`차량 적재 수량(${stock.stockQty || 0}개)을 초과할 수 없습니다.`);
+    if (safeQty > (consumable.stockQty || 0)) {
+      showErrorModal(`소모품 재고 수량(${consumable.stockQty || 0}개)을 초과할 수 없습니다.`);
       return;
     }
 
     const newPart: RepairPartUsed = {
-      consumableId: stock.consumableId,
+      consumableId: consumable.id,
       modelName: consumable?.modelName || '소모부품',
       quantity: safeQty,
       unitPrice: consumable?.unitPrice || 0,
-      stockSource: 'VEHICLE_VAN',
+      stockSource: 'YARD_STOCK',
     };
 
     setPartsUsed([...partsUsed, newPart]);
@@ -500,21 +498,14 @@ export const MobileAsDetail: React.FC<MobileAsDetailProps> = ({ ticketId, onBack
             onChange={(e) => setSelectedStockId(e.target.value)}
             className="flex-1 bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-blue-500"
           >
-            <option value="">탑차 부품 선택...</option>
-            {(() => {
-              const targetMechanicId = currentUser?.id || ticket?.mechanicId;
-              const displayList = mechanicConsumableStocks.filter(
-                (s) => (!targetMechanicId || s.mechanicId === targetMechanicId) && s.stockQty > 0
-              );
-              return displayList.map((stock) => {
-                const consumable = consumables.find((c) => c.id === stock.consumableId);
-                return (
-                  <option key={stock.id} value={stock.id}>
-                    {consumable?.modelName || '부품'} (보유: {stock.stockQty}개)
-                  </option>
-                );
-              });
-            })()}
+            <option value="">소모품 부품 선택...</option>
+            {consumables
+              .filter((c) => (c.stockQty || 0) > 0)
+              .map((consumable) => (
+                <option key={consumable.id} value={consumable.id}>
+                  {consumable.modelName || '부품'} (재고: {consumable.stockQty}개)
+                </option>
+              ))}
           </select>
           <input
             type="number"

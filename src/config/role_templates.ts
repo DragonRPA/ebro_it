@@ -110,7 +110,6 @@ export const MECHANIC_TEMPLATE: PermissionRuleMap = {
   consumable_inout: { canView: true, canSave: true },
   consumable_stock: { canView: true, canSave: true },
   consumable: { canView: true, canSave: true },
-  field_as: { canView: true, canSave: true },
   repair: { canView: true, canSave: true },
   inspection_checklist_manage: { canView: true, canSave: true },
   smart_as_request: { canView: true, canSave: true },

@@ -15,7 +15,6 @@ import { MobileAssetAssignment } from './pages/MobileAssetAssignment';
 import { MobileAssetSearch } from './pages/MobileAssetSearch';
 import { MobileDispatchOrderCreate } from './pages/MobileDispatchOrderCreate';
 import { MobileMyContracts } from './pages/MobileMyContracts';
-import { MobileVehicleStock } from './pages/MobileVehicleStock';
 import { MobileInboundRegister } from './pages/MobileInboundRegister';
 import { MobileSubleaseManage } from './pages/MobileSubleaseManage';
 import { MobileCustomerManage } from './pages/MobileCustomerManage';
@@ -385,8 +384,6 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc: _onSwitchToP
           <MobileVehicleLog onBack={() => handleTabChange('home')} />
         ) : activeTab === 'manual_viewer' ? (
           <MobileManualViewer onBack={() => handleTabChange('home')} />
-        ) : activeTab === 'vehicle_stock' ? (
-          <MobileVehicleStock />
         ) : activeTab === 'consumable_stock' ? (
           <MobileYardConsumableStock onBack={() => handleTabChange('home')} />
         ) : (

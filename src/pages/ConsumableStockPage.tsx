@@ -2,44 +2,30 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
-  Boxes, Truck, Archive, CheckSquare, Plus, Search, Download, 
-  CheckCircle2, XCircle, ArrowRightLeft, ArrowUpRight, ArrowDownLeft, 
-  Edit, Trash2, X, AlertTriangle, ShieldCheck, FileCheck
+  Boxes, CheckSquare, Plus, Download, 
+  CheckCircle2, Edit, Trash2, X, AlertTriangle, FileCheck
 } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { SortableTh } from '../components/SortableTh';
 import { useSortableData } from '../hooks/useSortableData';
 import { 
-  Consumable, MechanicConsumableStock, StocktakingAudit, 
-  StocktakingAuditItem, CollectedPart, User, db 
+  Consumable, StocktakingAudit, StocktakingAuditItem, db 
 } from '../services/db';
-import { normalizeMenuId } from '../config/menu_config';
-import { getRoleTemplatePermission } from '../config/role_templates';
 import { createHangulMatcher } from '../utils/hangulSearch';
 
 export const ConsumableStockPage: React.FC = () => {
   const {
     consumables,
-    consumableLots,
-    consumableLogs,
-    mechanicConsumableStocks,
     stocktakingAudits,
     stocktakingAuditItems,
-    collectedParts,
-    users,
-    permissions,
     currentUser,
     addConsumable,
     updateConsumable,
     deleteConsumable,
-    transferConsumableToMechanic,
-    returnConsumableToHq,
-    transferConsumableBetweenMechanics,
     createStocktakingAudit,
     updateStocktakingItem,
     confirmStocktakingAudit,
     cancelStocktakingAudit,
-    processCollectedPart,
     hasPermission,
     showErrorModal
   } = useApp();
@@ -52,33 +38,6 @@ export const ConsumableStockPage: React.FC = () => {
     for (const c of consumables) map.set(c.id, c);
     return map;
   }, [consumables]);
-
-  const userMap = useMemo(() => {
-    const map = new Map<string, User>();
-    for (const u of (users || [])) map.set(u.id, u);
-    return map;
-  }, [users]);
-
-  const permissionsByUserMap = useMemo(() => {
-    const map = new Map<string, any[]>();
-    for (const p of (permissions || [])) {
-      const uid = p.userId || (p as any).user_id;
-      if (!uid) continue;
-      const arr = map.get(uid);
-      if (arr) arr.push(p);
-      else map.set(uid, [p]);
-    }
-    return map;
-  }, [permissions]);
-
-  const vehicleQtyByConsumableMap = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const ms of (mechanicConsumableStocks || [])) {
-      if (!ms.stockQty) continue;
-      map.set(ms.consumableId, (map.get(ms.consumableId) || 0) + ms.stockQty);
-    }
-    return map;
-  }, [mechanicConsumableStocks]);
 
   const auditMap = useMemo(() => {
     const map = new Map<string, StocktakingAudit>();
@@ -96,8 +55,8 @@ export const ConsumableStockPage: React.FC = () => {
     return map;
   }, [stocktakingAuditItems]);
 
-  // 활성 탭: STOCK (주기장재고) | VEHICLE_STOCK (차량재고) | COLLECTED_PARTS (고품관리) | STOCKTAKING (재고실사)
-  const [activeTab, setActiveTab] = useState<'STOCK' | 'VEHICLE_STOCK' | 'COLLECTED_PARTS' | 'STOCKTAKING'>('STOCK');
+  // 활성 탭: STOCK (소모품 재고) | STOCKTAKING (재고실사)
+  const [activeTab, setActiveTab] = useState<'STOCK' | 'STOCKTAKING'>('STOCK');
 
   // 토스트 알림 상태
   const [toastMessage, setToastMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -106,7 +65,7 @@ export const ConsumableStockPage: React.FC = () => {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // --- [1] 주기장 재고 상태 ---
+  // --- [1] 소모품 재고 상태 ---
   const [stockSearch, setStockSearch] = useState('');
   const [showMasterModal, setShowMasterModal] = useState(false);
   const [masterEditingId, setMasterEditingId] = useState<string | null>(null);
@@ -115,176 +74,30 @@ export const ConsumableStockPage: React.FC = () => {
   const [masterUnitPrice, setMasterUnitPrice] = useState(0);
   const [masterSupplier, setMasterSupplier] = useState('');
   const [masterInitialStockQty, setMasterInitialStockQty] = useState(0);
-  const [expandedMasterIds, setExpandedMasterIds] = useState<Set<string>>(new Set());
 
-  const toggleMasterExpand = (id: string) => {
-    setExpandedMasterIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  // --- [2] 차량 재고 상태 및 이동 모달 ---
-  const [vehicleStockSearch, setVehicleStockSearch] = useState('');
-  const [selectedMechanicFilter, setSelectedMechanicFilter] = useState('ALL');
-
-  // 주기장 ➔ 차량 불출 모달
-  const [showTransferModal, setShowTransferModal] = useState(false);
-  const [transferMechanicId, setTransferMechanicId] = useState('');
-  const [transferConsumableId, setTransferConsumableId] = useState('');
-  const [transferQty, setTransferQty] = useState(1);
-  const [transferMemo, setTransferMemo] = useState('');
-
-  // 차량 ➔ 주기장 반납 모달
-  const [showReturnModal, setShowReturnModal] = useState(false);
-  const [returnMechanicId, setReturnMechanicId] = useState('');
-  const [returnConsumableId, setReturnConsumableId] = useState('');
-  const [returnQty, setReturnQty] = useState(1);
-  const [returnMemo, setReturnMemo] = useState('');
-  const [isReturnDefective, setIsReturnDefective] = useState(false);
-  const [returnDisposition, setReturnDisposition] = useState<'REBUILD' | 'SCRAP' | 'VENDOR_WARRANTY'>('REBUILD');
-
-  // 차량 간 이동 모달
-  const [showP2PModal, setShowP2PModal] = useState(false);
-  const [p2pFromMechanicId, setP2pFromMechanicId] = useState('');
-  const [p2pToMechanicId, setP2pToMechanicId] = useState('');
-  const [p2pConsumableId, setP2pConsumableId] = useState('');
-  const [p2pQty, setP2pQty] = useState(1);
-  const [p2pMemo, setP2pMemo] = useState('');
-
-  // --- [3] 고품 관리 상태 ---
-  const [partDispositionFilter, setPartDispositionFilter] = useState<'ALL' | 'REBUILD' | 'SCRAP' | 'VENDOR_WARRANTY'>('ALL');
-  const [partStatusFilter, setPartStatusFilter] = useState<'ALL' | 'RECEIVED' | 'IN_PROCESS' | 'COMPLETED'>('ALL');
-  const [partSearch, setPartSearch] = useState('');
-
-  // --- [4] 재고 실사 상태 ---
+  // --- [2] 재고 실사 상태 ---
   const [selectedAuditId, setSelectedAuditId] = useState('');
-  const [auditTargetFilter, setAuditTargetFilter] = useState<'ALL' | 'HQ' | 'VEHICLE'>('ALL');
   const [auditStatusFilter, setAuditStatusFilter] = useState<'ALL' | 'DRAFT' | 'CONFIRMED' | 'CANCELLED'>('ALL');
   const [showCreateAuditModal, setShowCreateAuditModal] = useState(false);
-  const [newAuditTargetType, setNewAuditTargetType] = useState<'HQ' | 'VEHICLE'>('HQ');
-  const [newAuditMechanicId, setNewAuditMechanicId] = useState('');
   const [newAuditMemo, setNewAuditMemo] = useState('');
   const [auditItemSearch, setAuditItemSearch] = useState('');
 
-  // 소모품 적재/차량 불출 대상 정비사 (AS팀 실무자 및 소모품/정비/현장AS 권한 보유자)
-  const mechanics = useMemo(() => {
-    const asDeptIds = new Set(
-      (db.departments || [])
-        .filter(d => d.name?.includes('AS') || d.name?.includes('정비'))
-        .map(d => d.id)
-    );
-    asDeptIds.add('DEPT-0000005');
-
-    // 현재 이미 차량 재고를 보유하고 있는 정비사 ID 목록
-    const existingHolders = new Set(
-      (mechanicConsumableStocks || [])
-        .filter(ms => ms.stockQty > 0)
-        .map(ms => ms.mechanicId)
-    );
-
-    const vehicleTargetMenuIds = ['consumable_stock', 'consumable', 'field_as', 'repair'];
-
-    const filtered = (users || []).filter(u => {
-      // 0. 퇴사자 전면 배제
-      if (!u || u.status === 'RETIRED') return false;
-
-      // 이미 재고를 보유 중인 경우 관리 및 반납을 위해 무조건 표시
-      if (existingHolders.has(u.id)) return true;
-
-      // 1. 최고관리자/대표이사 등 정비 비실무 임원진 기본 배제
-      if (u.id === 'sys-admin' || u.id === 'u-1' || u.loginId === 'admin') return false;
-      if (u.position === '대표이사' || u.position === '대표' || u.position?.includes('대표')) return false;
-      const dName = (u.department || '').trim();
-      if (dName.includes('대표') || dName.includes('임원') || dName.includes('시스템')) return false;
-
-      // 2. 소모품재고/현장AS/정비 관련 개별 권한 부여 여부 확인
-      const userPerms = permissionsByUserMap.get(u.id) || [];
-      const hasExplicitPerm = userPerms.some(p => 
-        vehicleTargetMenuIds.includes(normalizeMenuId(p.menuId)) && (p.canView || p.canSave)
-      );
-      if (hasExplicitPerm) return true;
-
-      // 3. 직무 템플릿(RBAC) 기준 권한 확인
-      const dept = u.departmentId || u.department;
-      const canViewStock = getRoleTemplatePermission(u.role, dept, 'consumable_stock', 'view');
-      const canSaveStock = getRoleTemplatePermission(u.role, dept, 'consumable_stock', 'save');
-      const canViewAs = getRoleTemplatePermission(u.role, dept, 'field_as', 'view');
-      if (canViewStock || canSaveStock || canViewAs) return true;
-
-      // 4. 실무 정비 역할이나 AS팀 소속인 경우
-      const isAsDept = (u.departmentId && asDeptIds.has(u.departmentId)) || dName.includes('AS') || dName.includes('정비');
-      const isMechanicRole = u.role === 'MECHANIC';
-      if (isAsDept || isMechanicRole) return true;
-
-      return false;
-    });
-
-    // 정렬: AS팀원 우선 배치, 팀장 우선 및 이름순 정렬
-    return filtered.sort((a, b) => {
-      const aIsAs = (a.departmentId && asDeptIds.has(a.departmentId)) || (a.department || '').includes('AS');
-      const bIsAs = (b.departmentId && asDeptIds.has(b.departmentId)) || (b.department || '').includes('AS');
-      if (aIsAs && !bIsAs) return -1;
-      if (!aIsAs && bIsAs) return 1;
-      if (a.role === 'MANAGER' && b.role !== 'MANAGER') return -1;
-      if (b.role === 'MANAGER' && a.role !== 'MANAGER') return 1;
-      return a.name.localeCompare(b.name, 'ko');
-    });
-  }, [users, permissionsByUserMap, mechanicConsumableStocks]);
-
-  const mechanicMap = useMemo(() => {
-    const map = new Map<string, User>();
-    for (const m of mechanics) map.set(m.id, m);
-    return map;
-  }, [mechanics]);
-
-  // 재고 통계 요약 (Single-pass)
+  // 재고 통계 요약
   const stockSummary = useMemo(() => {
-    let hqTotalQty = 0;
-    let hqTotalValue = 0;
+    let totalQty = 0;
+    let totalValue = 0;
     for (const c of consumables) {
       const qty = c.stockQty || 0;
-      hqTotalQty += qty;
-      hqTotalValue += qty * (c.unitPrice || 0);
-    }
-
-    let vehicleTotalQty = 0;
-    let vehicleTotalValue = 0;
-    for (const s of (mechanicConsumableStocks || [])) {
-      const qty = s.stockQty || 0;
-      vehicleTotalQty += qty;
-      const c = consumableMap.get(s.consumableId);
-      vehicleTotalValue += qty * (c?.unitPrice || 0);
+      totalQty += qty;
+      totalValue += qty * (c.unitPrice || 0);
     }
 
     return {
-      hqTotalKinds: consumables.length,
-      hqTotalQty,
-      hqTotalValue,
-      vehicleTotalQty,
-      vehicleTotalValue,
-      grandTotalQty: hqTotalQty + vehicleTotalQty,
-      grandTotalValue: hqTotalValue + vehicleTotalValue
+      totalKinds: consumables.length,
+      totalQty,
+      totalValue
     };
-  }, [consumables, mechanicConsumableStocks, consumableMap]);
-
-  // 고품 관리 요약 및 배지 카운트 (Single-pass)
-  const collectedPartsSummary = useMemo(() => {
-    const totalCount = collectedParts.length;
-    let uncompletedCount = 0;
-    let rebuildCount = 0;
-    let scrapCount = 0;
-    let warrantyCount = 0;
-    for (const p of collectedParts) {
-      if (p.status !== 'COMPLETED') uncompletedCount++;
-      if (p.disposition === 'REBUILD') rebuildCount++;
-      else if (p.disposition === 'SCRAP') scrapCount++;
-      else if (p.disposition === 'VENDOR_WARRANTY') warrantyCount++;
-    }
-    return { totalCount, uncompletedCount, rebuildCount, scrapCount, warrantyCount };
-  }, [collectedParts]);
+  }, [consumables]);
 
   const draftAuditsCount = useMemo(() => {
     let count = 0;
@@ -296,11 +109,10 @@ export const ConsumableStockPage: React.FC = () => {
 
   const filteredAudits = useMemo(() => {
     return stocktakingAudits.filter(a => {
-      const matchTarget = auditTargetFilter === 'ALL' || a.targetType === auditTargetFilter;
       const matchStatus = auditStatusFilter === 'ALL' || a.status === auditStatusFilter;
-      return matchTarget && matchStatus;
+      return matchStatus;
     });
-  }, [stocktakingAudits, auditTargetFilter, auditStatusFilter]);
+  }, [stocktakingAudits, auditStatusFilter]);
 
   const currentAudit = useMemo(() => {
     return selectedAuditId ? auditMap.get(selectedAuditId) : undefined;
@@ -314,93 +126,34 @@ export const ConsumableStockPage: React.FC = () => {
     return items.filter(item => matcher.test(item.modelName));
   }, [currentAudit, auditItemsByAuditIdMap, auditItemSearch]);
 
-  // --- 정렬용 Enriched Data ---
+  // 정렬용 Enriched Data
   const enrichedStock = useMemo(() => {
     const matcher = stockSearch ? createHangulMatcher(stockSearch) : null;
     return consumables.filter(c => {
       return !matcher || matcher.testAny([c.modelName, c.supplier]);
     }).map(c => {
-      const totalVehicleQty = vehicleQtyByConsumableMap.get(c.id) || 0;
-      const grandQty = (c.stockQty || 0) + totalVehicleQty;
       const hqValue = (c.stockQty || 0) * (c.unitPrice || 0);
-      return { ...c, totalVehicleQty, grandQty, hqValue };
+      return { ...c, hqValue };
     });
-  }, [consumables, stockSearch, vehicleQtyByConsumableMap]);
+  }, [consumables, stockSearch]);
 
   const { items: sortedStock, requestSort: requestSortStock, sortConfig: sortConfigStock } = useSortableData(enrichedStock);
-
-  const enrichedVehicleStock = useMemo(() => {
-    const matcher = vehicleStockSearch ? createHangulMatcher(vehicleStockSearch) : null;
-    return (mechanicConsumableStocks || []).filter(ms => {
-      if (ms.stockQty <= 0) return false;
-      const matchMech = selectedMechanicFilter === 'ALL' || ms.mechanicId === selectedMechanicFilter;
-      const item = consumableMap.get(ms.consumableId);
-      const matchSearch = !matcher || (item && matcher.test(item.modelName));
-      return matchMech && matchSearch;
-    }).map(ms => {
-      const item = consumableMap.get(ms.consumableId);
-      const mechanic = mechanicMap.get(ms.mechanicId) || userMap.get(ms.mechanicId);
-      const msValue = (ms.stockQty || 0) * (item?.unitPrice || 0);
-      return { ...ms, item, mechanic, msValue };
-    });
-  }, [mechanicConsumableStocks, selectedMechanicFilter, vehicleStockSearch, consumableMap, mechanicMap, userMap]);
-
-  const { items: sortedVehicleStock, requestSort: requestSortVehicle, sortConfig: sortConfigVehicle } = useSortableData(enrichedVehicleStock);
-
-  const enrichedCollectedParts = useMemo(() => {
-    const matcher = partSearch ? createHangulMatcher(partSearch) : null;
-    return collectedParts.filter(p => {
-      const matchDisp = partDispositionFilter === 'ALL' || p.disposition === partDispositionFilter;
-      const matchStatus = partStatusFilter === 'ALL' || p.status === partStatusFilter;
-      const matchSearch = !matcher || matcher.testAny([p.modelName, p.partNo]);
-      return matchDisp && matchStatus && matchSearch;
-    }).map(p => {
-      return { ...p, quantity: p.quantity }; // Ensure quantity maps for sorting
-    });
-  }, [collectedParts, partDispositionFilter, partStatusFilter, partSearch]);
-
-  const { items: sortedCollectedParts, requestSort: requestSortParts, sortConfig: sortConfigParts } = useSortableData(enrichedCollectedParts);
 
   // --- 엑셀 다운로드 핸들러 ---
   const handleExportStock = () => {
     const excelData = consumables.map((c, idx) => {
-      const totalVehicleQty = vehicleQtyByConsumableMap.get(c.id) || 0;
-
       return {
         'No': idx + 1,
         '소모품 품목명': c.modelName,
-        '주기장 재고': c.stockQty,
-        '차량 이동 재고': totalVehicleQty,
-        '전사 총 재고': c.stockQty + totalVehicleQty,
+        '재고 수량': c.stockQty,
         '단위': c.unit || '개',
         '단가': `${(c.unitPrice || 0).toLocaleString()}원`,
-        '주기장 재고평가액': `${((c.stockQty || 0) * (c.unitPrice || 0)).toLocaleString()}원`,
-        '차량 재고평가액': `${(totalVehicleQty * (c.unitPrice || 0)).toLocaleString()}원`,
-        '총 재고평가액': `${(((c.stockQty || 0) + totalVehicleQty) * (c.unitPrice || 0)).toLocaleString()}원`,
+        '재고 평가액': `${((c.stockQty || 0) * (c.unitPrice || 0)).toLocaleString()}원`,
         '최근 구입처': c.supplier || '-'
       };
     });
 
-    exportToExcel(excelData, `소모품_주기장재고대장_${new Date().toISOString().split('T')[0]}`, '주기장재고');
-  };
-
-  const handleExportVehicleStock = () => {
-    const excelData = (mechanicConsumableStocks || []).map((ms, idx) => {
-      const item = consumableMap.get(ms.consumableId);
-      const mechanic = userMap.get(ms.mechanicId);
-      return {
-        'No': idx + 1,
-        '담당 정비사': mechanic?.name || '정비사',
-        '자재 품목명': item?.modelName || '-',
-        '차량 적재 수량': ms.stockQty,
-        '단위': item?.unit || '개',
-        '단가': `${(item?.unitPrice || 0).toLocaleString()}원`,
-        '평가액': `${(ms.stockQty * (item?.unitPrice || 0)).toLocaleString()}원`,
-        '최종 변경일': ms.updatedAt
-      };
-    });
-
-    exportToExcel(excelData, `소모품_차량재고대장_${new Date().toISOString().split('T')[0]}`, '차량재고');
+    exportToExcel(excelData, `소모품_재고대장_${new Date().toISOString().split('T')[0]}`, '소모품재고');
   };
 
   // --- 품목 마스터 CUD 핸들러 ---
@@ -465,111 +218,13 @@ export const ConsumableStockPage: React.FC = () => {
     }
   };
 
-  // --- 주기장 ➔ 차량 불출 핸들러 ---
-  const handleTransferSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!transferMechanicId || !transferConsumableId || transferQty <= 0) {
-      showToast('정비사와 소모품 품목, 불출 수량을 선택해 주세요.', 'error');
-      return;
-    }
-    const targetItem = consumables.find(c => c.id === transferConsumableId);
-    if (!targetItem) return;
-    if (transferQty > targetItem.stockQty) {
-      showErrorModal(`불출 요청 수량(${transferQty}개)이 주기장 가용 재고(${targetItem.stockQty}개)를 초과할 수 없습니다.`);
-      return;
-    }
-
-    try {
-      await transferConsumableToMechanic(transferMechanicId, transferConsumableId, transferQty, transferMemo);
-      await db.awaitPendingWrites();
-      showToast('주기장에서 정비사 차량으로 소모품 불출 이동이 완료되었습니다.');
-      setShowTransferModal(false);
-      setTransferQty(1);
-      setTransferMemo('');
-    } catch (err: any) {
-      showErrorModal(err?.message || '소모품 불출 이동 중 오류가 발생했습니다.');
-    }
-  };
-
-  // --- 차량 ➔ 주기장 반납 핸들러 ---
-  const handleReturnSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!returnMechanicId || !returnConsumableId || returnQty <= 0) {
-      showToast('정비사와 반납 소모품 품목, 반납 수량을 선택해 주세요.', 'error');
-      return;
-    }
-    const currentVehicleStock = (mechanicConsumableStocks || []).find(
-      ms => ms.mechanicId === returnMechanicId && ms.consumableId === returnConsumableId
-    )?.stockQty || 0;
-
-    if (returnQty > currentVehicleStock) {
-      showErrorModal(`반납 요청 수량(${returnQty}개)이 정비사 차량 보유 재고(${currentVehicleStock}개)를 초과할 수 없습니다.`);
-      return;
-    }
-
-    try {
-      await returnConsumableToHq(returnMechanicId, returnConsumableId, returnQty, returnMemo, isReturnDefective, returnDisposition);
-      await db.awaitPendingWrites();
-      showToast(isReturnDefective 
-        ? `수거 고품(${returnDisposition === 'REBUILD' ? '재생' : returnDisposition === 'SCRAP' ? '폐기' : '무상보증'}) 반납 격리 처리가 완료되었습니다.`
-        : '정비사 차량에서 주기장으로 정상 소모품 반납이 완료되었습니다.');
-      setShowReturnModal(false);
-      setReturnQty(1);
-      setReturnMemo('');
-      setIsReturnDefective(false);
-      setReturnDisposition('REBUILD');
-    } catch (err: any) {
-      showErrorModal(err?.message || '소모품 반납 중 오류가 발생했습니다.');
-    }
-  };
-
-  // --- 차량 간 이동 핸들러 ---
-  const handleP2PSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!p2pFromMechanicId || !p2pToMechanicId || !p2pConsumableId || p2pQty <= 0) {
-      showToast('양도/양수 정비사 및 소모품, 수량을 올바르게 지정해 주세요.', 'error');
-      return;
-    }
-    if (p2pFromMechanicId === p2pToMechanicId) {
-      showToast('동일한 정비사 간에는 이동할 수 없습니다.', 'error');
-      return;
-    }
-    const fromStock = (mechanicConsumableStocks || []).find(
-      ms => ms.mechanicId === p2pFromMechanicId && ms.consumableId === p2pConsumableId
-    )?.stockQty || 0;
-
-    if (p2pQty > fromStock) {
-      showErrorModal(`양도 정비사 차량의 보유 재고(${fromStock}개)를 초과할 수 없습니다.`);
-      return;
-    }
-
-    try {
-      await transferConsumableBetweenMechanics(p2pFromMechanicId, p2pToMechanicId, p2pConsumableId, p2pQty, p2pMemo);
-      await db.awaitPendingWrites();
-      showToast('정비사 차량 간 소모품 이동이 완료되었습니다.');
-      setShowP2PModal(false);
-      setP2pQty(1);
-      setP2pMemo('');
-    } catch (err: any) {
-      showErrorModal(err?.message || '차량 간 소모품 이동 중 오류가 발생했습니다.');
-    }
-  };
-
   // --- 신규 실사 전표 생성 핸들러 ---
   const handleCreateAuditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSave) return;
-    if (newAuditTargetType === 'VEHICLE' && !newAuditMechanicId) {
-      showToast('차량 실사의 경우 담당 정비사를 선택해 주세요.', 'error');
-      return;
-    }
 
     try {
-      const newAudit = await createStocktakingAudit(
-        newAuditTargetType, 
-        newAuditTargetType === 'VEHICLE' ? newAuditMechanicId : undefined, 
-        newAuditMemo
-      );
+      const newAudit = await createStocktakingAudit('HQ', undefined, newAuditMemo);
       await db.awaitPendingWrites();
       showToast(`재고실사 전표(${newAudit.auditNo})가 성공적으로 생성되었습니다.`);
       setSelectedAuditId(newAudit.id);
@@ -614,18 +269,6 @@ export const ConsumableStockPage: React.FC = () => {
     }
   };
 
-  // --- 수거 고품 처리 상태 변경 핸들러 ---
-  const handleProcessCollectedPart = async (partId: string, actionStatus: 'IN_PROCESS' | 'COMPLETED', actionMemo?: string) => {
-    if (!canSave) return;
-    try {
-      await processCollectedPart(partId, actionStatus, actionMemo);
-      await db.awaitPendingWrites();
-      showToast(`고품 상태가 '${actionStatus === 'COMPLETED' ? '완료' : '처리중'}'으로 갱신되었습니다.`);
-    } catch (err: any) {
-      showErrorModal(`고품 상태 갱신 실패:\n${err?.message || err}`);
-    }
-  };
-
   return (
     <div data-hs-observe="consumablestockpage" data-subview="consumable_stock" data-subview-title="Generated" style={{ display: 'flex', flexDirection: 'column', gap: '14px', height: '100%' }}>
       {/* ─── 토스트 알림 ─── */}
@@ -652,7 +295,7 @@ export const ConsumableStockPage: React.FC = () => {
           </h2>
         </div>
 
-        {/* 탭 버튼군 (무수식어 건조 표준) */}
+        {/* 탭 버튼군 (무수식어 건조 표준: 주기장재고 / 재고실사 2개) */}
         <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
           <button
             type="button"
@@ -660,31 +303,7 @@ export const ConsumableStockPage: React.FC = () => {
             onClick={() => setActiveTab('STOCK')}
             style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
           >
-            <Boxes size={14} /> 주기장 재고
-          </button>
-          <button
-            type="button"
-            className={activeTab === 'VEHICLE_STOCK' ? 'btn-primary' : 'btn-secondary'}
-            onClick={() => setActiveTab('VEHICLE_STOCK')}
-            style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
-          >
-            <Truck size={14} /> 차량 재고
-          </button>
-          <button
-            type="button"
-            className={activeTab === 'COLLECTED_PARTS' ? 'btn-primary' : 'btn-secondary'}
-            onClick={() => setActiveTab('COLLECTED_PARTS')}
-            style={{ padding: '8px 14px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
-          >
-            <Archive size={14} /> 고품 관리
-            {collectedPartsSummary.uncompletedCount > 0 && (
-              <span style={{
-                backgroundColor: '#7c3aed', color: '#fff', fontSize: '11px',
-                padding: '1px 6px', borderRadius: '10px', fontWeight: 700
-              }}>
-                {collectedPartsSummary.uncompletedCount}
-              </span>
-            )}
+            <Boxes size={14} /> 소모품 재고
           </button>
           <button
             type="button"
@@ -706,7 +325,7 @@ export const ConsumableStockPage: React.FC = () => {
       </div>
 
       {/* ──────────────────────────────────────────────────────────────────────── */}
-      {/* [TAB 1] 주기장 재고 */}
+      {/* [TAB 1] 소모품 재고 */}
       {/* ──────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'STOCK' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -715,25 +334,19 @@ export const ConsumableStockPage: React.FC = () => {
             <div className="card" style={{ margin: 0, padding: '16px' }}>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>총 관리 품목 수</div>
               <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '4px', color: 'var(--primary)' }}>
-                {stockSummary.hqTotalKinds}종
+                {stockSummary.totalKinds}종
               </div>
             </div>
             <div className="card" style={{ margin: 0, padding: '16px' }}>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>주기장 보유 수량</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>보유 재고 수량</div>
               <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '4px', color: 'var(--success)' }}>
-                {stockSummary.hqTotalQty.toLocaleString()}개
+                {stockSummary.totalQty.toLocaleString()}개
               </div>
             </div>
             <div className="card" style={{ margin: 0, padding: '16px' }}>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>주기장 재고 평가액</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>재고 평가액</div>
               <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '4px', color: 'var(--text-primary)' }}>
-                ₩{stockSummary.hqTotalValue.toLocaleString()}
-              </div>
-            </div>
-            <div className="card" style={{ margin: 0, padding: '16px' }}>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', fontWeight: 600 }}>전사 총 재고 (주기장+차량)</div>
-              <div style={{ fontSize: '22px', fontWeight: 800, marginTop: '4px', color: '#7c3aed' }}>
-                ₩{stockSummary.grandTotalValue.toLocaleString()}
+                ₩{stockSummary.totalValue.toLocaleString()}
               </div>
             </div>
           </div>
@@ -766,7 +379,7 @@ export const ConsumableStockPage: React.FC = () => {
                   className="btn-excel-download"
                   onClick={handleExportStock}
                 >
-                  <Download size={13} /> 주기장 재고 엑셀
+                  <Download size={13} /> 재고 엑셀 내보내기
                 </button>
               </div>
             </div>
@@ -780,12 +393,10 @@ export const ConsumableStockPage: React.FC = () => {
                   <tr>
                     <th>No</th>
                     <SortableTh label="품목명" sortKey="modelName" currentSort={sortConfigStock} onSort={requestSortStock} />
-                    <SortableTh label="주기장 재고" sortKey="stockQty" currentSort={sortConfigStock} onSort={requestSortStock} align="center" />
-                    <SortableTh label="차량 재고" sortKey="totalVehicleQty" currentSort={sortConfigStock} onSort={requestSortStock} align="center" />
-                    <SortableTh label="전사 총수량" sortKey="grandQty" currentSort={sortConfigStock} onSort={requestSortStock} align="center" />
+                    <SortableTh label="재고 수량" sortKey="stockQty" currentSort={sortConfigStock} onSort={requestSortStock} align="center" />
                     <SortableTh label="단위" sortKey="unit" currentSort={sortConfigStock} onSort={requestSortStock} />
                     <SortableTh label="단가" sortKey="unitPrice" currentSort={sortConfigStock} onSort={requestSortStock} />
-                    <SortableTh label="주기장 평가액" sortKey="hqValue" currentSort={sortConfigStock} onSort={requestSortStock} />
+                    <SortableTh label="재고 평가액" sortKey="hqValue" currentSort={sortConfigStock} onSort={requestSortStock} />
                     <SortableTh label="공급처" sortKey="supplier" currentSort={sortConfigStock} onSort={requestSortStock} />
                     <th style={{ textAlign: 'center' }}>관리</th>
                   </tr>
@@ -797,7 +408,7 @@ export const ConsumableStockPage: React.FC = () => {
                     if (filtered.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={10} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
                             등록된 소모품 품목이 없습니다.
                           </td>
                         </tr>
@@ -805,8 +416,6 @@ export const ConsumableStockPage: React.FC = () => {
                     }
 
                     return filtered.map((c, idx) => {
-                      const totalVehicleQty = c.totalVehicleQty;
-                      const grandQty = c.grandQty;
                       const hqValue = c.hqValue;
 
                       return (
@@ -816,8 +425,6 @@ export const ConsumableStockPage: React.FC = () => {
                           <td style={{ textAlign: 'center', fontWeight: 700, color: c.stockQty > 0 ? '#059669' : '#dc2626' }}>
                             {c.stockQty}
                           </td>
-                          <td style={{ textAlign: 'center', fontWeight: 600 }}>{totalVehicleQty}</td>
-                          <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--primary)' }}>{grandQty}</td>
                           <td style={{ fontSize: '12px' }}>{c.unit || '개'}</td>
                           <td style={{ fontSize: '12px' }}>{(c.unitPrice || 0).toLocaleString()}원</td>
                           <td style={{ fontWeight: 600 }}>{hqValue.toLocaleString()}원</td>
@@ -856,346 +463,7 @@ export const ConsumableStockPage: React.FC = () => {
       )}
 
       {/* ──────────────────────────────────────────────────────────────────────── */}
-      {/* [TAB 2] 차량 재고 (AS 정비사 차량 적재 이동재고) */}
-      {/* ──────────────────────────────────────────────────────────────────────── */}
-      {activeTab === 'VEHICLE_STOCK' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* 상단 액션 바: 3대 이동 모달 호출 버튼군 */}
-          <div className="card" style={{ margin: 0, padding: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <select
-                  value={selectedMechanicFilter}
-                  onChange={e => setSelectedMechanicFilter(e.target.value)}
-                  style={{ padding: '6px 10px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                >
-                  <option value="ALL">전체 정비사 차량</option>
-                  {mechanics.map(m => (
-                    <option key={m.id} value={m.id}>{m.name} 차량</option>
-                  ))}
-                </select>
-
-                <input
-                  type="text"
-                  value={vehicleStockSearch}
-                  onChange={e => setVehicleStockSearch(e.target.value)}
-                  placeholder="품목명 검색..."
-                  style={{ padding: '6px 10px', fontSize: '12px', width: '160px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-                {canSave && (
-                  <>
-                    <button
-                      type="button"
-                      className="btn-primary"
-                      onClick={() => {
-                        setTransferMechanicId(mechanics[0]?.id || '');
-                        setTransferConsumableId(consumables[0]?.id || '');
-                        setTransferQty(1);
-                        setShowTransferModal(true);
-                      }}
-                      style={{ padding: '7px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <ArrowUpRight size={14} /> 주기장 ➔ 차량 불출
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => {
-                        setReturnMechanicId(mechanics[0]?.id || '');
-                        setReturnConsumableId(consumables[0]?.id || '');
-                        setReturnQty(1);
-                        setShowReturnModal(true);
-                      }}
-                      style={{ padding: '7px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <ArrowDownLeft size={14} /> 차량 ➔ 주기장 반납
-                    </button>
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => {
-                        setP2pFromMechanicId(mechanics[0]?.id || '');
-                        setP2pToMechanicId(mechanics[1]?.id || mechanics[0]?.id || '');
-                        setP2pConsumableId(consumables[0]?.id || '');
-                        setP2pQty(1);
-                        setShowP2PModal(true);
-                      }}
-                      style={{ padding: '7px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}
-                    >
-                      <ArrowRightLeft size={14} /> 차량 간 이동
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  className="btn-excel-download"
-                  onClick={handleExportVehicleStock}
-                >
-                  <Download size={13} /> 차량 재고 엑셀
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* 차량 이동재고 테이블 */}
-          <div className="card" style={{ margin: 0 }}>
-            <div className="table-container" style={{ border: 'none', boxShadow: 'none', maxHeight: 'calc(100vh - 340px)', overflowY: 'auto', overflowX: 'auto' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <SortableTh label="담당 정비사" sortKey="mechanic.name" currentSort={sortConfigVehicle} onSort={requestSortVehicle} />
-                    <SortableTh label="품목명" sortKey="item.modelName" currentSort={sortConfigVehicle} onSort={requestSortVehicle} />
-                    <SortableTh label="차량 적재수량" sortKey="stockQty" currentSort={sortConfigVehicle} onSort={requestSortVehicle} align="center" />
-                    <SortableTh label="단위" sortKey="item.unit" currentSort={sortConfigVehicle} onSort={requestSortVehicle} />
-                    <SortableTh label="단가" sortKey="item.unitPrice" currentSort={sortConfigVehicle} onSort={requestSortVehicle} />
-                    <SortableTh label="평가 금액" sortKey="msValue" currentSort={sortConfigVehicle} onSort={requestSortVehicle} />
-                    <SortableTh label="최종 갱신일" sortKey="updatedAt" currentSort={sortConfigVehicle} onSort={requestSortVehicle} />
-                    <th style={{ textAlign: 'center' }}>인라인 조치</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const filteredList = sortedVehicleStock;
-
-                    if (filteredList.length === 0) {
-                      return (
-                        <tr>
-                          <td colSpan={8} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
-                            차량에 적재된 이동 재고 내역이 없습니다.
-                          </td>
-                        </tr>
-                      );
-                    }
-
-                    return filteredList.map(ms => {
-                      const item = ms.item;
-                      const mech = ms.mechanic;
-                      const unitPrice = item?.unitPrice || 0;
-
-                      return (
-                        <tr key={ms.id}>
-                          <td>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 700 }}>
-                              <Truck size={13} style={{ color: 'var(--primary)' }} /> {mech?.name || '정비사'}
-                            </div>
-                          </td>
-                          <td><strong style={{ color: 'var(--primary)' }}>{item?.modelName || '-'}</strong></td>
-                          <td style={{ textAlign: 'center', fontWeight: 800, color: 'var(--success)' }}>
-                            {ms.stockQty}
-                          </td>
-                          <td style={{ fontSize: '12px' }}>{item?.unit || '개'}</td>
-                          <td style={{ fontSize: '12px' }}>{unitPrice.toLocaleString()}원</td>
-                          <td style={{ fontWeight: 600 }}>{(ms.stockQty * unitPrice).toLocaleString()}원</td>
-                          <td style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{ms.updatedAt}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            {canSave && (
-                              <div style={{ display: 'inline-flex', gap: '4px' }}>
-                                <button
-                                  type="button"
-                                  className="btn-secondary"
-                                  onClick={() => {
-                                    setTransferMechanicId(ms.mechanicId);
-                                    setTransferConsumableId(ms.consumableId);
-                                    setShowTransferModal(true);
-                                  }}
-                                  style={{ padding: '2px 6px', fontSize: '11px' }}
-                                >
-                                  추가불출
-                                </button>
-                                <button
-                                  type="button"
-                                  className="btn-secondary"
-                                  onClick={() => {
-                                    setReturnMechanicId(ms.mechanicId);
-                                    setReturnConsumableId(ms.consumableId);
-                                    setReturnQty(Math.min(ms.stockQty, 1));
-                                    setShowReturnModal(true);
-                                  }}
-                                  style={{ padding: '2px 6px', fontSize: '11px' }}
-                                >
-                                  주기장반납
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ──────────────────────────────────────────────────────────────────────── */}
-      {/* [TAB 3] 고품 관리 (폐부품/교체부품 격리 및 사후처리) */}
-      {/* ──────────────────────────────────────────────────────────────────────── */}
-      {activeTab === 'COLLECTED_PARTS' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* 상단 요약 카드 */}
-          {(() => {
-            const { totalCount, rebuildCount, scrapCount, warrantyCount } = collectedPartsSummary;
-
-            return (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-                <div className="card" style={{ margin: 0, padding: '14px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>총 수거 고품</div>
-                  <div style={{ fontSize: '20px', fontWeight: 800, marginTop: '2px' }}>{totalCount}건</div>
-                </div>
-                <div className="card" style={{ margin: 0, padding: '14px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>재생 대상</div>
-                  <div style={{ fontSize: '20px', fontWeight: 800, marginTop: '2px', color: '#7c3aed' }}>{rebuildCount}건</div>
-                </div>
-                <div className="card" style={{ margin: 0, padding: '14px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>폐기/고철</div>
-                  <div style={{ fontSize: '20px', fontWeight: 800, marginTop: '2px', color: '#ea580c' }}>{scrapCount}건</div>
-                </div>
-                <div className="card" style={{ margin: 0, padding: '14px' }}>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600 }}>제조사 무상보증 클레임</div>
-                  <div style={{ fontSize: '20px', fontWeight: 800, marginTop: '2px', color: 'var(--primary)' }}>{warrantyCount}건</div>
-                </div>
-              </div>
-            );
-          })()}
-
-          {/* 필터 바 */}
-          <div className="card" style={{ margin: 0, padding: '14px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <select
-                  value={partDispositionFilter}
-                  onChange={e => setPartDispositionFilter(e.target.value as any)}
-                  style={{ padding: '6px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                >
-                  <option value="ALL">전체 처분구분</option>
-                  <option value="REBUILD">재생 대상</option>
-                  <option value="SCRAP">폐기/고철</option>
-                  <option value="VENDOR_WARRANTY">제조사 무상보증</option>
-                </select>
-
-                <select
-                  value={partStatusFilter}
-                  onChange={e => setPartStatusFilter(e.target.value as any)}
-                  style={{ padding: '6px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                >
-                  <option value="ALL">전체 처리상태</option>
-                  <option value="RECEIVED">수거 접수</option>
-                  <option value="IN_PROCESS">처리 진행중</option>
-                  <option value="COMPLETED">조치 완료</option>
-                </select>
-
-                <input
-                  type="text"
-                  value={partSearch}
-                  onChange={e => setPartSearch(e.target.value)}
-                  placeholder="부품명, 관리번호 검색..."
-                  style={{ padding: '6px 10px', fontSize: '12px', width: '160px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 고품 목록 테이블 */}
-          <div className="card" style={{ margin: 0 }}>
-            <div className="table-container" style={{ border: 'none', boxShadow: 'none', maxHeight: 'calc(100vh - 340px)', overflowY: 'auto', overflowX: 'auto' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <SortableTh label="고품 번호" sortKey="partNo" currentSort={sortConfigParts} onSort={requestSortParts} />
-                    <SortableTh label="부품 품목명" sortKey="modelName" currentSort={sortConfigParts} onSort={requestSortParts} />
-                    <SortableTh label="수량" sortKey="quantity" currentSort={sortConfigParts} onSort={requestSortParts} align="center" />
-                    <SortableTh label="수거 정비사" sortKey="mechanicName" currentSort={sortConfigParts} onSort={requestSortParts} />
-                    <SortableTh label="처분 구분" sortKey="disposition" currentSort={sortConfigParts} onSort={requestSortParts} align="center" />
-                    <SortableTh label="처리 상태" sortKey="status" currentSort={sortConfigParts} onSort={requestSortParts} align="center" />
-                    <SortableTh label="수거 일자" sortKey="receivedDate" currentSort={sortConfigParts} onSort={requestSortParts} />
-                    <SortableTh label="조치 일자" sortKey="actionDate" currentSort={sortConfigParts} onSort={requestSortParts} />
-                    <SortableTh label="조치 메모" sortKey="actionMemo" currentSort={sortConfigParts} onSort={requestSortParts} />
-                    <th style={{ textAlign: 'center' }}>조치 액션</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(() => {
-                    const filtered = sortedCollectedParts;
-
-                    if (filtered.length === 0) {
-                      return (
-                        <tr>
-                          <td colSpan={10} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)' }}>
-                            수거된 고품 내역이 없습니다. (차량 반납 시 '고품' 체크 시 자동 등록됩니다)
-                          </td>
-                        </tr>
-                      );
-                    }
-
-                    return filtered.map(p => {
-                      const dispLabel = p.disposition === 'REBUILD' ? '재생 대상' : (p.disposition === 'SCRAP' ? '폐기/고철' : '제조사 보증');
-                      const dispColor = p.disposition === 'REBUILD' ? '#7c3aed' : (p.disposition === 'SCRAP' ? '#ea580c' : '#2563eb');
-                      const dispBg = p.disposition === 'REBUILD' ? 'rgba(124, 58, 237, 0.1)' : (p.disposition === 'SCRAP' ? 'rgba(234, 88, 12, 0.1)' : 'rgba(37, 99, 235, 0.1)');
-
-                      const statusLabel = p.status === 'COMPLETED' ? '조치 완료' : (p.status === 'IN_PROCESS' ? '처리중' : '수거 접수');
-                      const statusColor = p.status === 'COMPLETED' ? '#059669' : (p.status === 'IN_PROCESS' ? '#2563eb' : '#d97706');
-
-                      return (
-                        <tr key={p.id}>
-                          <td><strong>{p.partNo}</strong></td>
-                          <td><strong style={{ color: 'var(--primary)' }}>{p.modelName}</strong></td>
-                          <td style={{ textAlign: 'center', fontWeight: 800 }}>{p.quantity}개</td>
-                          <td>{p.mechanicName}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            <span style={{ fontSize: '11px', fontWeight: 700, padding: '2px 8px', borderRadius: '4px', color: dispColor, backgroundColor: dispBg }}>
-                              {dispLabel}
-                            </span>
-                          </td>
-                          <td style={{ textAlign: 'center' }}>
-                            <span style={{ fontSize: '11.5px', fontWeight: 700, color: statusColor }}>
-                              {statusLabel}
-                            </span>
-                          </td>
-                          <td style={{ fontSize: '12px' }}>{p.receivedDate}</td>
-                          <td style={{ fontSize: '12px' }}>{p.actionDate || '-'}</td>
-                          <td style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>{p.actionMemo || p.memo || '-'}</td>
-                          <td style={{ textAlign: 'center' }}>
-                            {canSave && p.status !== 'COMPLETED' && (
-                              <div style={{ display: 'inline-flex', gap: '4px' }}>
-                                {p.status === 'RECEIVED' && (
-                                  <button
-                                    type="button"
-                                    className="btn-secondary"
-                                    onClick={() => handleProcessCollectedPart(p.id, 'IN_PROCESS', '재생/외주 정비 또는 폐기 착수')}
-                                    style={{ padding: '2px 6px', fontSize: '11px' }}
-                                  >
-                                    착수
-                                  </button>
-                                )}
-                                <button
-                                  type="button"
-                                  className="btn-primary"
-                                  onClick={() => handleProcessCollectedPart(p.id, 'COMPLETED', `${dispLabel} 최종 조치 완료`)}
-                                  style={{ padding: '2px 8px', fontSize: '11px' }}
-                                >
-                                  조치완료
-                                </button>
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    });
-                  })()}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ──────────────────────────────────────────────────────────────────────── */}
-      {/* [TAB 4] 재고 실사 (Stocktaking Audit Studio) */}
+      {/* [TAB 2] 재고 실사 (Stocktaking Audit Studio) */}
       {/* ──────────────────────────────────────────────────────────────────────── */}
       {activeTab === 'STOCKTAKING' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
@@ -1203,19 +471,6 @@ export const ConsumableStockPage: React.FC = () => {
           <div className="card" style={{ margin: 0, padding: '14px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>실사 대상 구분</label>
-                  <select
-                    value={auditTargetFilter}
-                    onChange={e => setAuditTargetFilter(e.target.value as any)}
-                    style={{ padding: '6px 8px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
-                  >
-                    <option value="ALL">전체 대상</option>
-                    <option value="HQ">주기장 창고</option>
-                    <option value="VEHICLE">정비 차량</option>
-                  </select>
-                </div>
-
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>실사 상태</label>
                   <select
@@ -1236,8 +491,6 @@ export const ConsumableStockPage: React.FC = () => {
                   type="button"
                   className="btn-primary"
                   onClick={() => {
-                    setNewAuditTargetType('HQ');
-                    setNewAuditMechanicId(mechanics[0]?.id || '');
                     setNewAuditMemo('');
                     setShowCreateAuditModal(true);
                   }}
@@ -1285,7 +538,7 @@ export const ConsumableStockPage: React.FC = () => {
                           </span>
                         </div>
                         <div style={{ fontSize: '12px', fontWeight: 600, marginTop: '4px' }}>
-                          {a.targetType === 'HQ' ? '주기장 재고' : `차량: ${a.mechanicName || '정비사'}`}
+                          소모품 실사
                         </div>
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
                           {a.auditDate} | {(auditItemsByAuditIdMap.get(a.id) || []).length}개 품목
@@ -1357,7 +610,7 @@ export const ConsumableStockPage: React.FC = () => {
                         <th style={{ textAlign: 'center' }}>실사 수량</th>
                         <th style={{ textAlign: 'center' }}>차이 수량</th>
                         <th style={{ textAlign: 'right' }}>차이 금액</th>
-                        <th>차이 사유 (횡령/감모 원인)</th>
+                        <th>차이 사유 (망실/감모 원인)</th>
                         <th>메모</th>
                       </tr>
                     </thead>
@@ -1425,15 +678,15 @@ export const ConsumableStockPage: React.FC = () => {
                                   >
                                     <option value="LOST">망실/도난</option>
                                     <option value="DAMAGED">파손/부식/폐기</option>
-                                    <option value="UNRECORDED_USAGE">미기록 현장소모</option>
-                                    <option value="SURPLUS">미등록 잉여수거</option>
+                                    <option value="UNRECORDED_USAGE">미기록 소모</option>
+                                    <option value="SURPLUS">미등록 잉여</option>
                                     <option value="OTHER">기타 사유</option>
                                   </select>
                                 ) : (
                                   <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>
                                     {item.diffReason === 'LOST' ? '망실/도난' :
                                      item.diffReason === 'DAMAGED' ? '파손/부식' :
-                                     item.diffReason === 'UNRECORDED_USAGE' ? '미기록 현장소모' :
+                                     item.diffReason === 'UNRECORDED_USAGE' ? '미기록 소모' :
                                      item.diffReason === 'SURPLUS' ? '미등록 잉여' : (item.diffQty !== 0 ? '기타' : '-')}
                                   </span>
                                 )}
@@ -1490,271 +743,6 @@ export const ConsumableStockPage: React.FC = () => {
       )}
 
       {/* ──────────────────────────────────────────────────────────────────────── */}
-      {/* 주기장 ➔ 차량 불출 모달 */}
-      {/* ──────────────────────────────────────────────────────────────────────── */}
-      {showTransferModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }}>
-          <form onSubmit={handleTransferSubmit} className="card" style={{ width: '90%', maxWidth: '450px', backgroundColor: 'var(--bg-card)', margin: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <ArrowUpRight size={16} style={{ color: 'var(--primary)' }} /> 주기장 ➔ 차량 소모품 불출
-              </h3>
-              <button type="button" onClick={() => setShowTransferModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>수령 정비사 (차량) *</label>
-                <select value={transferMechanicId} onChange={e => setTransferMechanicId(e.target.value)} required style={{ padding: '8px', fontSize: '13px' }}>
-                  <option value="">-- 정비사 선택 --</option>
-                  {mechanics.map(m => (
-                    <option key={m.id} value={m.id}>{m.name} 차량</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>불출 소모품 품목 *</label>
-                <select value={transferConsumableId} onChange={e => setTransferConsumableId(e.target.value)} required style={{ padding: '8px', fontSize: '13px' }}>
-                  <option value="">-- 품목 선택 --</option>
-                  {consumables.map(c => (
-                    <option key={c.id} value={c.id}>
-                      {c.modelName} (주기장재고: {c.stockQty}개 | ₩{c.unitPrice.toLocaleString()})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>불출 수량 *</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={transferQty}
-                  onChange={e => setTransferQty(Math.max(1, parseInt(e.target.value) || 1))}
-                  required
-                  style={{ padding: '8px', fontSize: '13px' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>불출 목적 및 메모</label>
-                <input
-                  type="text"
-                  value={transferMemo}
-                  onChange={e => setTransferMemo(e.target.value)}
-                  placeholder="예: 월간 정기 현장 AS 비상 비축용"
-                  style={{ padding: '8px', fontSize: '13px' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowTransferModal(false)} style={{ flex: 1, padding: '10px' }}>
-                  취소
-                </button>
-                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '10px' }}>
-                  불출 완료
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* ──────────────────────────────────────────────────────────────────────── */}
-      {/* 차량 ➔ 주기장 반납 모달 (고품 격리 토글 포함) */}
-      {/* ──────────────────────────────────────────────────────────────────────── */}
-      {showReturnModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }}>
-          <form onSubmit={handleReturnSubmit} className="card" style={{ width: '90%', maxWidth: '450px', backgroundColor: 'var(--bg-card)', margin: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <ArrowDownLeft size={16} style={{ color: 'var(--warning)' }} /> 차량 소모품 ➔ 주기장 반납
-              </h3>
-              <button type="button" onClick={() => setShowReturnModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>반납 정비사 (차량) *</label>
-                <select value={returnMechanicId} onChange={e => setReturnMechanicId(e.target.value)} required style={{ padding: '8px', fontSize: '13px' }}>
-                  <option value="">-- 정비사 선택 --</option>
-                  {mechanics.map(m => (
-                    <option key={m.id} value={m.id}>{m.name} 차량</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>반납 소모품 품목 *</label>
-                <select value={returnConsumableId} onChange={e => setReturnConsumableId(e.target.value)} required style={{ padding: '8px', fontSize: '13px' }}>
-                  <option value="">-- 품목 선택 --</option>
-                  {consumables.map(c => (
-                    <option key={c.id} value={c.id}>{c.modelName}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>반납 수량 *</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={returnQty}
-                  onChange={e => setReturnQty(Math.max(1, parseInt(e.target.value) || 1))}
-                  required
-                  style={{ padding: '8px', fontSize: '13px' }}
-                />
-              </div>
-
-              {/* 고품 격리 체크 */}
-              <div style={{ padding: '12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={isReturnDefective}
-                    onChange={e => setIsReturnDefective(e.target.checked)}
-                  />
-                  <span>수거 고품(교체 폐부품/불량품) 반납 격리</span>
-                </label>
-
-                {isReturnDefective && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
-                    <label style={{ fontSize: '11px', color: 'var(--text-muted)' }}>사후 처분 구분 *</label>
-                    <select
-                      value={returnDisposition}
-                      onChange={e => setReturnDisposition(e.target.value as any)}
-                      style={{ padding: '6px', fontSize: '12px' }}
-                    >
-                      <option value="REBUILD">재생 대상 (공장 외주 수리/오버홀)</option>
-                      <option value="SCRAP">폐기/고철 매각</option>
-                      <option value="VENDOR_WARRANTY">제조사 무상보증 클레임 교환</option>
-                    </select>
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>반납 사유 및 메모</label>
-                <input
-                  type="text"
-                  value={returnMemo}
-                  onChange={e => setReturnMemo(e.target.value)}
-                  placeholder="예: 잉여 부품 반납 또는 현장 교체 고품 회수"
-                  style={{ padding: '8px', fontSize: '13px' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowReturnModal(false)} style={{ flex: 1, padding: '10px' }}>
-                  취소
-                </button>
-                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '10px' }}>
-                  반납 완료
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* ──────────────────────────────────────────────────────────────────────── */}
-      {/* 차량 간 이동 모달 */}
-      {/* ──────────────────────────────────────────────────────────────────────── */}
-      {showP2PModal && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000
-        }}>
-          <form onSubmit={handleP2PSubmit} className="card" style={{ width: '90%', maxWidth: '450px', backgroundColor: 'var(--bg-card)', margin: 0 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <ArrowRightLeft size={16} style={{ color: 'var(--primary)' }} /> 정비 차량 간 소모품 이동
-              </h3>
-              <button type="button" onClick={() => setShowP2PModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}>
-                <X size={18} />
-              </button>
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600 }}>양도 정비사 (출고) *</label>
-                  <select value={p2pFromMechanicId} onChange={e => setP2pFromMechanicId(e.target.value)} required style={{ padding: '8px', fontSize: '12px' }}>
-                    <option value="">-- 정비사 선택 --</option>
-                    {mechanics.map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600 }}>양수 정비사 (입고) *</label>
-                  <select value={p2pToMechanicId} onChange={e => setP2pToMechanicId(e.target.value)} required style={{ padding: '8px', fontSize: '12px' }}>
-                    <option value="">-- 정비사 선택 --</option>
-                    {mechanics.map(m => (
-                      <option key={m.id} value={m.id}>{m.name}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>이동 품목 *</label>
-                <select value={p2pConsumableId} onChange={e => setP2pConsumableId(e.target.value)} required style={{ padding: '8px', fontSize: '13px' }}>
-                  <option value="">-- 품목 선택 --</option>
-                  {consumables.map(c => (
-                    <option key={c.id} value={c.id}>{c.modelName}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>이동 수량 *</label>
-                <input
-                  type="number"
-                  min={1}
-                  value={p2pQty}
-                  onChange={e => setP2pQty(Math.max(1, parseInt(e.target.value) || 1))}
-                  required
-                  style={{ padding: '8px', fontSize: '13px' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>이동 메모</label>
-                <input
-                  type="text"
-                  value={p2pMemo}
-                  onChange={e => setP2pMemo(e.target.value)}
-                  placeholder="예: 현장 긴급 AS 부품 지원 융통"
-                  style={{ padding: '8px', fontSize: '13px' }}
-                />
-              </div>
-
-              <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-                <button type="button" className="btn-secondary" onClick={() => setShowP2PModal(false)} style={{ flex: 1, padding: '10px' }}>
-                  취소
-                </button>
-                <button type="submit" className="btn-primary" style={{ flex: 1, padding: '10px' }}>
-                  이동 완료
-                </button>
-              </div>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* ──────────────────────────────────────────────────────────────────────── */}
       {/* 품목 마스터 CUD 모달 */}
       {/* ──────────────────────────────────────────────────────────────────────── */}
       {showMasterModal && (
@@ -1779,7 +767,7 @@ export const ConsumableStockPage: React.FC = () => {
                   type="text"
                   value={masterModelName}
                   onChange={e => setMasterModelName(e.target.value)}
-                  placeholder="예: 엔진오일 15W-40, 유압호스 1/2"
+                  placeholder="예: DDR5 RAM 32GB, NVMe SSD 1TB, 전원 케이블"
                   required
                   style={{ padding: '8px', fontSize: '13px' }}
                 />
@@ -1792,7 +780,7 @@ export const ConsumableStockPage: React.FC = () => {
                     type="text"
                     value={masterUnit}
                     onChange={e => setMasterUnit(e.target.value)}
-                    placeholder="개, L, 세트 등"
+                    placeholder="개, 세트 등"
                     style={{ padding: '8px', fontSize: '13px' }}
                   />
                 </div>
@@ -1814,14 +802,14 @@ export const ConsumableStockPage: React.FC = () => {
                   type="text"
                   value={masterSupplier}
                   onChange={e => setMasterSupplier(e.target.value)}
-                  placeholder="예: 대한오일상사, 현대부품"
+                  placeholder="예: 삼성전자, SK하이닉스, 컴퓨존"
                   style={{ padding: '8px', fontSize: '13px' }}
                 />
               </div>
 
               {!masterEditingId && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600 }}>초기 주기장 보유 수량</label>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>초기 보유 수량</label>
                   <input
                     type="number"
                     min={0}
@@ -1863,33 +851,14 @@ export const ConsumableStockPage: React.FC = () => {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>실사 대상 구분 *</label>
-                <select
-                  value={newAuditTargetType}
-                  onChange={e => setNewAuditTargetType(e.target.value as any)}
-                  style={{ padding: '8px', fontSize: '13px' }}
-                >
-                  <option value="HQ">주기장 재고</option>
-                  <option value="VEHICLE">AS 기사 정비차량</option>
-                </select>
+                <label style={{ fontSize: '12px', fontWeight: 600 }}>실사 대상 *</label>
+                <input
+                  type="text"
+                  value="소모품 창고 재고"
+                  disabled
+                  style={{ padding: '8px', fontSize: '13px', backgroundColor: 'var(--bg-app)', color: 'var(--text-muted)' }}
+                />
               </div>
-
-              {newAuditTargetType === 'VEHICLE' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 600 }}>담당 정비사 *</label>
-                  <select
-                    value={newAuditMechanicId}
-                    onChange={e => setNewAuditMechanicId(e.target.value)}
-                    required
-                    style={{ padding: '8px', fontSize: '13px' }}
-                  >
-                    <option value="">-- 정비사 선택 --</option>
-                    {mechanics.map(m => (
-                      <option key={m.id} value={m.id}>{m.name} 차량</option>
-                    ))}
-                  </select>
-                </div>
-              )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 600 }}>실사 목적 및 메모</label>

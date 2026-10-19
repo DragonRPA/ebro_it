@@ -12,7 +12,6 @@ export type MobileTabType =
   | 'as' 
   | 'dispatch' 
   | 'inspection'
-  | 'vehicle_stock'
   | 'inbound_register'
   | 'sublease'
   | 'customers'
@@ -57,9 +56,8 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     assets: 'asset',
     sales_order: 'smart_dispatch4',
     my_contracts: 'contract',
-    as: 'field_as',
+    as: 'repair',
     as_create: 'smart_as_request',
-    vehicle_stock: 'consumable_stock',
     assignment: 'dispatch_assign',
     inspection: 'outbound_inspections',
     inbound_register: 'daily_inout',
@@ -86,9 +84,9 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     // 🔧 AS팀 모바일 탭
     rawNavItems = [
       { id: 'home', label: '홈', icon: Home, badge: 0 },
-      { id: 'as', label: '출동티켓', icon: Wrench, badge: pendingAsCount },
+      { id: 'as', label: '정비목록', icon: Wrench, badge: pendingAsCount },
       { id: 'as_create', label: 'AS신규', icon: PlusCircle, badge: 0 },
-      { id: 'vehicle_stock', label: '차량재고', icon: Boxes, badge: 0 },
+      { id: 'consumable_stock', label: '소모품재고', icon: Boxes, badge: 0 },
       { id: 'assets', label: '가용자산', icon: Search, badge: 0 },
     ];
   } else if (deptMode === 'OUTBOUND') {

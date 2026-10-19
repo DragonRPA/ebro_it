@@ -122,16 +122,6 @@ export function runRwttOptionAsBillingSuite(): RwttResult[] {
     } as any
   ];
 
-  db.mechanicConsumableStocks = [
-    {
-      id: 'STOCK-MECH-01',
-      mechanicId: TEST_MECHANIC_ID,
-      consumableId: TEST_CONSUMABLE_ID,
-      stockQty: 5,
-      updatedAt: '2026-10-01T00:00:00Z'
-    } as any
-  ];
-
   // 초기화
   db.repairs = [];
   db.billings = [];
@@ -207,18 +197,18 @@ export function runRwttOptionAsBillingSuite(): RwttResult[] {
       }
     ];
 
-    // 차량 재고 차감 시뮬레이션
-    const stock = db.mechanicConsumableStocks.find(s => s.mechanicId === TEST_MECHANIC_ID && s.consumableId === TEST_CONSUMABLE_ID);
-    if (!stock || stock.stockQty !== 5) {
-      issues.push(`초기 차량 재고 이상: ${stock?.stockQty}`);
+    // 창고 소모품 재고 차감 시뮬레이션
+    const stock = db.consumables.find(s => s.id === TEST_CONSUMABLE_ID);
+    if (!stock || stock.stockQty !== 50) {
+      issues.push(`초기 소모품 재고 이상: ${stock?.stockQty}`);
     } else {
       stock.stockQty -= 1;
-      db.mechanicConsumableStocks = [...db.mechanicConsumableStocks];
+      db.consumables = [...db.consumables];
     }
 
-    const afterStock = db.mechanicConsumableStocks.find(s => s.mechanicId === TEST_MECHANIC_ID && s.consumableId === TEST_CONSUMABLE_ID);
-    if (afterStock?.stockQty !== 4) {
-      issues.push(`소모품 차감 후 차량 재고 불일치: ${afterStock?.stockQty} (기대값: 4)`);
+    const afterStock = db.consumables.find(s => s.id === TEST_CONSUMABLE_ID);
+    if (afterStock?.stockQty !== 49) {
+      issues.push(`소모품 차감 후 재고 불일치: ${afterStock?.stockQty} (기대값: 49)`);
     }
 
     // 티켓 상태 완료 및 유상 청구 전환

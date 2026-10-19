@@ -42,7 +42,6 @@ export const MENU_TO_APP_TAB_MAP: Record<string, MenuNavTarget> = {
   print_queue_monitor: { tabId: 'print_queue_monitor' },
   consumable_purchase: { tabId: 'consumable_purchase' },
   consumable_inout: { tabId: 'consumable_inout' },
-  field_as: { tabId: 'field_as' },
   repair: { tabId: 'repair' },
   inspection_checklist_manage: { tabId: 'inspection_checklist_manage' },
   leave_application: { tabId: 'leave_application' },

@@ -33,7 +33,6 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
     assets, 
     contracts, 
     contractAssets, 
-    mechanicConsumableStocks, 
     customers, 
     currentTenant, 
     repairs, 
@@ -869,9 +868,9 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
         )}
       </div>
 
-      {/* 본인 차량 소모품 재고 조회 */}
+      {/* 소모품 재고 조회 */}
       <div
-        onClick={() => onNavigate('vehicle_stock')}
+        onClick={() => onNavigate('consumable_stock')}
         className="p-4 rounded-2xl bg-slate-900 border border-slate-800 hover:border-amber-500/40 flex items-center justify-between active:scale-98 transition-all cursor-pointer shadow-md"
       >
         <div className="flex items-center gap-3">
@@ -880,14 +879,14 @@ export const MobileHome: React.FC<MobileHomeProps> = ({
           </div>
           <div>
             <div className="text-sm font-bold text-white flex items-center gap-1.5">
-              <span>내 차량 소모품 재고</span>
+              <span>소모품 재고</span>
               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 font-mono font-bold">
-                {(mechanicConsumableStocks || [])
-                  .filter(s => s.mechanicId === currentUser?.id && s.stockQty > 0)
-                  .reduce((sum, s) => sum + s.stockQty, 0)}개 적재
+                {(consumables || [])
+                  .filter(s => (s.stockQty || 0) > 0)
+                  .reduce((sum, s) => sum + (s.stockQty || 0), 0)}개 보유
               </span>
             </div>
-            <div className="text-xs text-slate-400">보충 수령, 주기장 반납 및 실사 관리</div>
+            <div className="text-xs text-slate-400">부품 및 소모품 재고 현황 조회</div>
           </div>
         </div>
         <ArrowRight className="w-5 h-5 text-slate-500" />

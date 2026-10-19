@@ -87,7 +87,6 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
       { id: 'consumable_purchase', name: '소모품 구매' },
       { id: 'consumable_inout', name: '소모품 입출고' },
       { id: 'consumable_stock', name: '소모품 재고' },
-      { id: 'field_as', name: '현장 AS 관리' },
       { id: 'repair', name: '주기장 정비 관리' },
       { id: 'inspection_checklist_manage', name: '정비 항목 관리' }
     ]

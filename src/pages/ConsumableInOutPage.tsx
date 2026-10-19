@@ -96,7 +96,7 @@ export const ConsumableInOutPage: React.FC = () => {
   const thisMonthEnd   = (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(new Date(d.getFullYear(), d.getMonth()+1, 0).getDate()).padStart(2,'0')}`; })();
   const [logSearch, setLogSearch] = useState('');
   const [logConsumableId, setLogConsumableId] = useState('ALL');
-  const [logTypeFilter, setLogTypeFilter] = useState<'ALL' | 'INBOUND' | 'OUTBOUND' | 'TRANSFER_TO_VEHICLE' | 'RETURN_TO_HQ' | 'ADJUST'>('ALL');
+  const [logTypeFilter, setLogTypeFilter] = useState<'ALL' | 'INBOUND' | 'OUTBOUND' | 'ADJUST'>('ALL');
   const [logStartDate, setLogStartDate] = useState(thisMonthStart);
   const [logEndDate, setLogEndDate] = useState(thisMonthEnd);
   const [logUserFilter, setLogUserFilter] = useState('ALL');
@@ -131,7 +131,7 @@ export const ConsumableInOutPage: React.FC = () => {
     );
     asDeptIds.add('DEPT-0000005');
 
-    const vehicleTargetMenuIds = ['consumable_stock', 'consumable_inout', 'consumable', 'field_as', 'repair'];
+    const vehicleTargetMenuIds = ['consumable_stock', 'consumable_inout', 'consumable', 'repair'];
 
     const filtered = (users || []).filter(u => {
       // 0. 퇴사자 전면 배제
@@ -143,7 +143,7 @@ export const ConsumableInOutPage: React.FC = () => {
       const dName = (u.department || '').trim();
       if (dName.includes('대표') || dName.includes('임원') || dName.includes('시스템')) return false;
 
-      // 2. 소모품/현장AS/정비 관련 개별 권한 부여 여부 확인
+      // 2. 소모품/정비 관련 개별 권한 부여 여부 확인
       const userPerms = permissionsByUserMap.get(u.id) || [];
       const hasExplicitPerm = userPerms.some(p => 
         vehicleTargetMenuIds.includes(normalizeMenuId(p.menuId)) && (p.canView || p.canSave)
@@ -154,8 +154,7 @@ export const ConsumableInOutPage: React.FC = () => {
       const dept = u.departmentId || u.department;
       const canViewStock = getRoleTemplatePermission(u.role, dept, 'consumable_stock', 'view');
       const canViewInout = getRoleTemplatePermission(u.role, dept, 'consumable_inout', 'view');
-      const canViewAs = getRoleTemplatePermission(u.role, dept, 'field_as', 'view');
-      if (canViewStock || canViewInout || canViewAs) return true;
+      if (canViewStock || canViewInout) return true;
 
       // 4. 실무 정비 역할이나 AS팀 소속인 경우
       const isAsDept = (u.departmentId && asDeptIds.has(u.departmentId)) || dName.includes('AS') || dName.includes('정비');
@@ -293,8 +292,6 @@ export const ConsumableInOutPage: React.FC = () => {
   const auditBalance = useMemo(() => {
     let inboundSum = 0;
     let outboundSum = 0;
-    let transferSum = 0;
-    let returnSum = 0;
     let inboundQty = 0;
     let outboundQty = 0;
 
@@ -308,13 +305,10 @@ export const ConsumableInOutPage: React.FC = () => {
         outboundSum += amount;
         outboundQty += (l.quantity || 0);
       }
-      else if (l.type === 'TRANSFER_TO_VEHICLE') transferSum += amount;
-      else if (l.type === 'RETURN_TO_HQ') returnSum += amount;
     });
 
-    // 순 출고/소진 및 이동 합계
-    const netOutSum = outboundSum + transferSum - returnSum;
-    return { inboundSum, outboundSum, transferSum, returnSum, netOutSum, inboundQty, outboundQty };
+    const netOutSum = outboundSum;
+    return { inboundSum, outboundSum, netOutSum, inboundQty, outboundQty };
   }, [filteredLogs]);
 
   // --- 입고 확정 처리 ---
@@ -436,9 +430,7 @@ export const ConsumableInOutPage: React.FC = () => {
       return {
         'No': idx + 1,
         '구분': l.type === 'INBOUND' ? '구매입고' :
-                l.type === 'OUTBOUND' ? '현장출고' :
-                l.type === 'TRANSFER_TO_VEHICLE' ? '차량불출' :
-                l.type === 'RETURN_TO_HQ' ? '주기장반납' : '재고조정',
+                l.type === 'OUTBOUND' ? '현장출고' : '재고조정',
         '품목명': item?.modelName || '삭제된 품목',
         '수량': l.quantity,
         '단가': `${(l.unitPrice || 0).toLocaleString()}원`,
@@ -1073,8 +1065,6 @@ export const ConsumableInOutPage: React.FC = () => {
                     <option value="ALL">전체 구분</option>
                     <option value="INBOUND">구매입고</option>
                     <option value="OUTBOUND">현장출고</option>
-                    <option value="TRANSFER_TO_VEHICLE">차량불출</option>
-                    <option value="RETURN_TO_HQ">주기장반납</option>
                     <option value="ADJUST">재고조정</option>
                   </select>
                 </div>
@@ -1168,14 +1158,10 @@ export const ConsumableInOutPage: React.FC = () => {
                           <td>
                             <span className={`badge ${
                               l.type === 'INBOUND' ? 'badge-success' :
-                              l.type === 'OUTBOUND' ? 'badge-danger' :
-                              l.type === 'TRANSFER_TO_VEHICLE' ? 'badge-primary' :
-                              l.type === 'RETURN_TO_HQ' ? 'badge-warning' : 'badge-secondary'
+                              l.type === 'OUTBOUND' ? 'badge-danger' : 'badge-secondary'
                             }`} style={{ whiteSpace: 'nowrap' }}>
                               {l.type === 'INBOUND' ? '구매입고' :
-                               l.type === 'OUTBOUND' ? '현장출고' :
-                               l.type === 'TRANSFER_TO_VEHICLE' ? '차량불출' :
-                               l.type === 'RETURN_TO_HQ' ? '주기장반납' : '재고조정'}
+                               l.type === 'OUTBOUND' ? '현장출고' : '재고조정'}
                             </span>
                           </td>
                           <td><strong style={{ color: 'var(--primary)' }}>{item?.modelName || '품목'}</strong></td>
@@ -1222,14 +1208,6 @@ export const ConsumableInOutPage: React.FC = () => {
               <div style={{ fontSize: '12px' }}>
                 <span style={{ color: 'var(--text-muted)' }}>📤 출고 합계: </span>
                 <strong style={{ color: 'var(--danger)' }}>₩{auditBalance.outboundSum.toLocaleString()}</strong>
-              </div>
-              <div style={{ fontSize: '12px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>🚚 차량불출: </span>
-                <strong style={{ color: 'var(--primary)' }}>₩{auditBalance.transferSum.toLocaleString()}</strong>
-              </div>
-              <div style={{ fontSize: '12px' }}>
-                <span style={{ color: 'var(--text-muted)' }}>🔄 주기장반납: </span>
-                <strong style={{ color: 'var(--warning)' }}>₩{auditBalance.returnSum.toLocaleString()}</strong>
               </div>
             </div>
           </div>

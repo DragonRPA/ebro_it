@@ -7,7 +7,7 @@ import {
   Layers, Truck, Wrench, ShieldAlert, Sparkles, Building2
 } from 'lucide-react';
 import { matchHangul } from '../../utils/hangulSearch';
-import { Consumable, MechanicConsumableStock, ConsumableLog } from '../../services/db';
+import { Consumable, ConsumableLog } from '../../services/db';
 
 interface MobileYardConsumableStockProps {
   onBack: () => void;
@@ -16,7 +16,6 @@ interface MobileYardConsumableStockProps {
 export const MobileYardConsumableStock: React.FC<MobileYardConsumableStockProps> = ({ onBack }) => {
   const { 
     consumables, 
-    mechanicConsumableStocks, 
     consumableLogs, 
     users, 
     refreshAllData, 
@@ -75,25 +74,7 @@ export const MobileYardConsumableStock: React.FC<MobileYardConsumableStockProps>
     setTimeout(() => setIsSyncing(false), 400);
   };
 
-  // 기사별 소모품 차량 적재 현황 매핑
-  const vehicleStocksByConsumable = useMemo(() => {
-    const map = new Map<string, { totalVehicleQty: number; mechanics: { mechanicId: string; name: string; qty: number }[] }>();
 
-    (mechanicConsumableStocks || []).forEach(ms => {
-      if (ms.stockQty <= 0) return;
-      const current = map.get(ms.consumableId) || { totalVehicleQty: 0, mechanics: [] };
-      const mechUser = (users || []).find(u => u.id === ms.mechanicId);
-      current.totalVehicleQty += ms.stockQty;
-      current.mechanics.push({
-        mechanicId: ms.mechanicId,
-        name: mechUser?.name || '정비사',
-        qty: ms.stockQty
-      });
-      map.set(ms.consumableId, current);
-    });
-
-    return map;
-  }, [mechanicConsumableStocks, users]);
 
   // 카테고리 목록 동적 추출
   const categories = useMemo(() => {
@@ -146,16 +127,12 @@ export const MobileYardConsumableStock: React.FC<MobileYardConsumableStockProps>
     let inStockKinds = 0;
     let outOfStockKinds = 0;
     let totalYardQty = 0;
-    let totalVehicleQty = 0;
 
     (consumables || []).forEach(c => {
       const q = c.stockQty || 0;
       if (q > 0) inStockKinds += 1;
       else outOfStockKinds += 1;
       totalYardQty += q;
-
-      const vInfo = vehicleStocksByConsumable.get(c.id);
-      if (vInfo) totalVehicleQty += vInfo.totalVehicleQty;
     });
 
     return {
@@ -163,9 +140,8 @@ export const MobileYardConsumableStock: React.FC<MobileYardConsumableStockProps>
       inStockKinds,
       outOfStockKinds,
       totalYardQty,
-      totalVehicleQty
     };
-  }, [consumables, vehicleStocksByConsumable]);
+  }, [consumables]);
 
   // 선택된 소모품의 최근 수불 이력 (최근 5건)
   const selectedLogs = useMemo(() => {
@@ -354,8 +330,6 @@ export const MobileYardConsumableStock: React.FC<MobileYardConsumableStockProps>
             filteredConsumables.map(c => {
               const yardQty = c.stockQty || 0;
               const isOutOfStock = yardQty <= 0;
-              const vInfo = vehicleStocksByConsumable.get(c.id);
-              const vehicleQty = vInfo?.totalVehicleQty || 0;
               const unit = c.unit || '개';
 
               return (
@@ -390,7 +364,7 @@ export const MobileYardConsumableStock: React.FC<MobileYardConsumableStockProps>
 
                     {/* 주기장 보유 수량 배지 */}
                     <div className="text-right flex-shrink-0">
-                      <div className="text-[10px] font-semibold text-slate-400">주기장 재고</div>
+                      <div className="text-[10px] font-semibold text-slate-400">보유 재고</div>
                       <div className={`text-base font-black font-mono leading-tight ${
                         isOutOfStock ? 'text-red-400' : 'text-emerald-400'
                       }`}>
@@ -405,18 +379,9 @@ export const MobileYardConsumableStock: React.FC<MobileYardConsumableStockProps>
                     </div>
                   </div>
 
-                  {/* 하단: 보조 지표 바 (차량 적재, 수리중, 단가) */}
+                  {/* 하단: 보조 지표 바 (수리중, 단가) */}
                   <div className="flex items-center justify-between pt-2 border-t border-slate-800/80 text-[11px] text-slate-400">
                     <div className="flex items-center gap-2">
-                      {vehicleQty > 0 ? (
-                        <span className="flex items-center gap-1 text-blue-400 font-medium">
-                          <Truck className="w-3 h-3" />
-                          차량분산 {vehicleQty}{unit}
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">차량적재 없음</span>
-                      )}
-
                       {(c.repairingQty || 0) > 0 && (
                         <span className="flex items-center gap-1 text-amber-400 font-medium">
                           <Wrench className="w-3 h-3" />
@@ -478,22 +443,14 @@ export const MobileYardConsumableStock: React.FC<MobileYardConsumableStockProps>
               </button>
             </div>
 
-            {/* 재고 현황 카드 3단 */}
-            <div className="grid grid-cols-3 gap-2">
+            {/* 재고 현황 카드 2단 */}
+            <div className="grid grid-cols-2 gap-2">
               <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-center">
-                <div className="text-[11px] font-bold text-slate-400">주기장 재고</div>
+                <div className="text-[11px] font-bold text-slate-400">보유 재고</div>
                 <div className={`text-xl font-black font-mono mt-1 ${
                   (selectedConsumable.stockQty || 0) > 0 ? 'text-emerald-400' : 'text-red-400'
                 }`}>
                   {selectedConsumable.stockQty || 0}
-                  <span className="text-xs font-normal text-slate-400 ml-0.5">{selectedConsumable.unit || '개'}</span>
-                </div>
-              </div>
-
-              <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-center">
-                <div className="text-[11px] font-bold text-slate-400">차량 적재 합계</div>
-                <div className="text-xl font-black text-blue-400 font-mono mt-1">
-                  {vehicleStocksByConsumable.get(selectedConsumable.id)?.totalVehicleQty || 0}
                   <span className="text-xs font-normal text-slate-400 ml-0.5">{selectedConsumable.unit || '개'}</span>
                 </div>
               </div>
@@ -515,34 +472,6 @@ export const MobileYardConsumableStock: React.FC<MobileYardConsumableStockProps>
               </div>
             )}
 
-            {/* 기사 차량별 적재 현황 */}
-            <div className="flex flex-col gap-2">
-              <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                <Truck className="w-3.5 h-3.5 text-blue-400" />
-                기사 차량별 분산 적재 현황
-              </h4>
-              {(() => {
-                const vInfo = vehicleStocksByConsumable.get(selectedConsumable.id);
-                if (!vInfo || vInfo.mechanics.length === 0) {
-                  return (
-                    <div className="p-3 rounded-xl bg-slate-800/40 text-center text-xs text-slate-500">
-                      정비 차량에 적재된 수량이 없습니다.
-                    </div>
-                  );
-                }
-                return (
-                  <div className="flex flex-col gap-1.5">
-                    {vInfo.mechanics.map(m => (
-                      <div key={m.mechanicId} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50 text-xs">
-                        <span className="font-medium text-white">{m.name} 차량</span>
-                        <span className="font-mono font-bold text-blue-400">{m.qty}{selectedConsumable.unit || '개'} 적재</span>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </div>
-
             {/* 최근 입출고 수불 내역 */}
             <div className="flex flex-col gap-2">
               <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
@@ -556,7 +485,7 @@ export const MobileYardConsumableStock: React.FC<MobileYardConsumableStockProps>
               ) : (
                 <div className="flex flex-col gap-1.5">
                   {selectedLogs.map(l => {
-                    const isPlus = l.type === 'INBOUND' || l.type === 'RETURN_TO_HQ';
+                    const isPlus = l.type === 'INBOUND';
                     return (
                       <div key={l.id} className="p-2.5 rounded-xl bg-slate-800/60 border border-slate-700/50 flex items-center justify-between text-xs">
                         <div className="flex flex-col">

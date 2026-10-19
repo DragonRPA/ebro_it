@@ -172,7 +172,6 @@ const itTenantRecord = {
     'consumable_purchase',
     'consumable_inout',
     'consumable_stock',
-    'field_as',
     'repair',
     'inspection_checklist_manage',
     'organization',

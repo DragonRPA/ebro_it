@@ -444,56 +444,6 @@ export const MODAL_MANUAL_REGISTRY: Record<string, {
     ],
   },
 
-  // ── 10. 현장 AS 접수 및 출동 지시 모달 ──
-  modal_field_as_dispatch: {
-    modalId: 'modal_field_as_dispatch',
-    modalName: '현장 AS 긴급 접수 및 출동 지시',
-    category: '정비/현장AS',
-    keywords: ['현장 AS', 'AS 접수', '출동 지시', '긴급 출동'],
-    annotations: [
-      {
-        seq: 1,
-        selector: 'select[name*="asset"], [data-mid*="asset"], .card h3',
-        type: 'callout',
-        label: '고장 현장 및 계약 장비 식별',
-        description: '고장이 접수된 고객사 현장과 가동 중인 자산번호를 매핑합니다.',
-        badgeColor: '#1D4ED8',
-        positionHint: 'bottom',
-        spotlight: true,
-      },
-      {
-        seq: 2,
-        selector: 'textarea, input[placeholder*="증상"], input[placeholder*="고장"]',
-        type: 'stamp',
-        label: '고장 증상 및 안전 조치',
-        description: '상승 불가, 주행 불량, 누유 등 현장 증상과 작업자 안전 대피 여부를 기록합니다.',
-        badgeColor: '#047857',
-        positionHint: 'bottom',
-        spotlight: false,
-      },
-      {
-        seq: 3,
-        selector: 'select[name*="tech"], select[name*="priority"]',
-        type: 'stamp',
-        label: '출동 서비스 기사 및 우선순위 지정',
-        description: '인근 AS 서비스 차량 및 긴급(1시간 이내 도착) 여부를 지정합니다.',
-        badgeColor: '#B45309',
-        positionHint: 'bottom',
-        spotlight: false,
-      },
-      {
-        seq: 4,
-        selector: 'button.btn-primary:contains("출동"), button.btn-primary:contains("지시"), button[type="submit"]',
-        type: 'click_ripple',
-        label: '현장 AS 출동 지령 발령',
-        description: 'AS 기사에게 실시간 위치 알림이 전송되고 대시보드 긴급 ToDo에 등록됩니다.',
-        badgeColor: '#DC2626',
-        positionHint: 'top',
-        spotlight: true,
-      },
-    ],
-  },
-
   // ── 11. 청구 면제 / 감면 신청 모달 ──
   modal_billing_waiver: {
     modalId: 'modal_billing_waiver',

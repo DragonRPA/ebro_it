@@ -454,3 +454,20 @@ CREATE TABLE IF NOT EXISTS public.company_vehicles (
 3. **무누락 DB 저장 및 대장 연동 (헌장 1.2, 5.2 준수)**:
    - 계약(`contracts`), 계약 품목(`contractAssets`), 배차 지시(`deliveries`) 테이블에 하드웨어 스펙 및 SW 요구사항이 무누락 저장(`cargoItems` 및 `memo`).
    - 저장 즉시 하단 '최근 출고 요청 대장'에 반영되어 상태(`출고대기`) 및 상세 스펙을 360도 즉각 조회 가능.
+
+---
+
+## 13. 외근 정비직 업무 및 차량 소모품 관리 스키마 전면 배제 원칙
+
+### 13.1 배제 배경 및 도메인 정합성
+1. **건설장비 외근 정비 vs IT 렌탈 서비스 구조의 차이**:
+   - 건설 중장비(AWP)는 장비 고장 시 정비 기사가 수리 부품과 전용 공구를 실은 탑차를 운전하여 건설현장으로 출동하고, 현장에서 장비를 분해·용접·유압 부품을 교체하는 프로세스가 핵심이었습니다.
+   - 따라서 정비사별 탑차 차량재고(`mechanic_consumable_stocks`), 본사 주기장 불출/회수/차량간이동, 교체된 고품관리(`collected_parts`) 및 현장 AS 출동 티켓(`field_as`)이 광범위하게 사용되었습니다.
+   - 그러나 **IT 하드웨어 렌탈 비즈니스는 현장에서 복잡한 분해 수리를 하지 않으며, 장애 발생 시 완제품 1:1 맞교환(`EXCHANGE`) 또는 본사 주기장 입고 정비(`REPAIR`)로 해결**합니다.
+2. **외근 정비 및 차량재고 스키마 전면 배제**:
+   - `FieldAsManagement.tsx` (`field_as`) 화면 및 권한/라우트/네비게이션 100% 완전 제거.
+   - `ConsumableStockPage.tsx`에서 '차량재고' 및 '고품관리' 탭, 차량 불출/반납/차량간이동 모달 제거 ➔ 오직 **'소모품 재고' 및 '재고 실사' 2개 탭**으로 슬림화.
+   - `ConsumableInOutPage.tsx`에서 `TRANSFER_TO_VEHICLE`, `RETURN_TO_HQ` 유형 전면 제거.
+   - DB 스키마 및 컨텍스트에서 `mechanicConsumableStocks`, `collectedParts` 및 차량 이동 함수(`transferConsumableToMechanic`, `returnConsumableToHq`, `transferConsumableBetweenMechanics`, `processCollectedPart`) 전면 삭제.
+   - 모바일 앱에서도 `MobileVehicleStock.tsx`를 영구 제거하고, AS 정비팀의 소모품 관리를 본사 주기장(창고) 재고(`consumable_stock`)와 주기장 입고 정비(`repair`)로 단일화.
+

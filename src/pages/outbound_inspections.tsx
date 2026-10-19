@@ -152,7 +152,6 @@ export const OutboundInspections: React.FC = () => {
     exchangeOutboundAsset,
     inspectionChecklistItems,
     consumables,
-    mechanicConsumableStocks,
     products,
     currentTenant
   } = useApp();
@@ -273,16 +272,6 @@ export const OutboundInspections: React.FC = () => {
     return map;
   }, [deliveries]);
 
-  const mechanicStockQtyByConsumableIdMap = useMemo(() => {
-    const map = new Map<string, number>();
-    const list = mechanicConsumableStocks || [];
-    for (let i = 0; i < list.length; i++) {
-      const ms = list[i];
-      if (!ms.consumableId) continue;
-      map.set(ms.consumableId, (map.get(ms.consumableId) || 0) + (ms.stockQty || 0));
-    }
-    return map;
-  }, [mechanicConsumableStocks]);
 
   const consumableCounts = useMemo(() => {
     const list = consumables || [];
@@ -2311,8 +2300,7 @@ export const OutboundInspections: React.FC = () => {
                   <tr style={{ borderBottom: '2px solid var(--border-color)', color: 'var(--text-secondary)', fontSize: '12px' }}>
                     <th style={{ padding: '10px 8px', whiteSpace: 'nowrap' }}>분류</th>
                     <th style={{ padding: '10px 8px', whiteSpace: 'nowrap' }}>품목명 (모델명)</th>
-                    <th style={{ padding: '10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>주기장 재고</th>
-                    <th style={{ padding: '10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>차량 분산적재</th>
+                    <th style={{ padding: '10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>보유 재고</th>
                     <th style={{ padding: '10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>수리중</th>
                     <th style={{ padding: '10px 8px', whiteSpace: 'nowrap' }}>공급처</th>
                     <th style={{ padding: '10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>단가</th>
@@ -2334,7 +2322,7 @@ export const OutboundInspections: React.FC = () => {
                     if (filtered.length === 0) {
                       return (
                         <tr>
-                          <td colSpan={7} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                          <td colSpan={6} style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
                             일치하는 소모품이 없습니다.
                           </td>
                         </tr>
@@ -2343,7 +2331,6 @@ export const OutboundInspections: React.FC = () => {
 
                     return filtered.map(c => {
                       const yardQty = c.stockQty || 0;
-                      const vQty = mechanicStockQtyByConsumableIdMap.get(c.id) || 0;
                       const isOut = yardQty <= 0;
 
                       return (
@@ -2367,9 +2354,6 @@ export const OutboundInspections: React.FC = () => {
                             }}>
                               {isOut ? `품절 (0${c.unit || '개'})` : `${yardQty} ${c.unit || '개'}`}
                             </span>
-                          </td>
-                          <td style={{ padding: '10px 8px', textAlign: 'right', fontFamily: 'monospace', color: vQty > 0 ? '#2563eb' : 'var(--text-muted)' }}>
-                            {vQty > 0 ? `${vQty} ${c.unit || '개'}` : '-'}
                           </td>
                           <td style={{ padding: '10px 8px', textAlign: 'right', fontFamily: 'monospace', color: (c.repairingQty || 0) > 0 ? '#d97706' : 'var(--text-muted)' }}>
                             {(c.repairingQty || 0) > 0 ? `${c.repairingQty} ${c.unit || '개'}` : '-'}

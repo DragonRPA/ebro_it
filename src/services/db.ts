@@ -1573,7 +1573,7 @@ export interface ConsumableLog {
   id: string;
   consumableId: string;
   lotId?: string; // 연결된 로트 ID
-  type: 'INBOUND' | 'OUTBOUND' | 'ADJUST' | 'TRANSFER_TO_VEHICLE' | 'RETURN_TO_HQ';
+  type: 'INBOUND' | 'OUTBOUND' | 'ADJUST';
   quantity: number;
   unitPrice: number;
   supplier?: string;
@@ -5654,10 +5654,10 @@ export const ALL_DB_KEYS = [
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
   'purchaseSettlements', 'purchaseSettlementItems', 'settlementPaymentLogs', 'externalLeases',
   'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings', 'inspectionChecklistItems',
-  'prepaidTransactions', 'delinquencyActionLogs', 'mechanicConsumableStocks', 'receivables', 'legalNoticeLogs', 'legalNoticeTemplates',
+  'prepaidTransactions', 'delinquencyActionLogs', 'receivables', 'legalNoticeLogs', 'legalNoticeTemplates',
   'corporateVehicles', 'vehicleOperationLogs', 'vehicleFuelLogs',
   'approvalRules', 'ruleConsensus', 'approvalRequests', 'approvalSteps', 'delegationRecords',
-  'stocktakingAudits', 'stocktakingAuditItems', 'collectedParts', 'equipmentManuals', 'standardOptions',
+  'stocktakingAudits', 'stocktakingAuditItems', 'equipmentManuals', 'standardOptions',
   'printStations', 'printQueue', 'customRoles', 'rolePermissions', 'privacyAccessLogs', 'errorReports',
   'monthlyIncomeStatements', 'developerAuthorizedDevices'
 ];
@@ -6331,17 +6331,11 @@ class LocalDB {
   get consumablePurchases() { return this.get<ConsumablePurchaseRequest>('consumablePurchases', SEED_CONSUMABLE_PURCHASES); }
   set consumablePurchases(val: ConsumablePurchaseRequest[]) { this.set('consumablePurchases', val); }
 
-  get mechanicConsumableStocks() { return this.get<MechanicConsumableStock>('mechanicConsumableStocks', []); }
-  set mechanicConsumableStocks(val: MechanicConsumableStock[]) { this.set('mechanicConsumableStocks', val); }
-
   get stocktakingAudits() { return this.get<StocktakingAudit>('stocktakingAudits', []); }
   set stocktakingAudits(val: StocktakingAudit[]) { this.set('stocktakingAudits', val); }
 
   get stocktakingAuditItems() { return this.get<StocktakingAuditItem>('stocktakingAuditItems', []); }
   set stocktakingAuditItems(val: StocktakingAuditItem[]) { this.set('stocktakingAuditItems', val); }
-
-  get collectedParts() { return this.get<CollectedPart>('collectedParts', []); }
-  set collectedParts(val: CollectedPart[]) { this.set('collectedParts', val); }
 
   get contracts() { 
     const raw = this.get<Contract>('contracts', SEED_CONTRACTS);
@@ -6633,7 +6627,6 @@ class LocalDB {
       settlementPaymentLogs: 'settlement_payment_logs',
       externalLeases: 'external_leases',
       inspectionChecklistItems: 'inspection_checklist_items',
-      mechanicConsumableStocks: 'mechanic_consumable_stocks',
       receivables: 'receivables',
       annualLeaveQuotas: 'annual_leave_quotas',
       leaveUsages: 'leave_usages',
@@ -6644,7 +6637,6 @@ class LocalDB {
       vehicleFuelLogs: 'vehicle_fuel_logs',
       stocktakingAudits: 'stocktaking_audits',
       stocktakingAuditItems: 'stocktaking_audit_items',
-      collectedParts: 'collected_parts',
       equipmentManuals: 'equipment_manuals',
       standardOptions: 'standard_options',
       approvalRules: 'approval_rules',
@@ -7588,7 +7580,6 @@ class LocalDB {
       legal_notice_logs: 'legalNoticeLogs',
       legal_notice_templates: 'legalNoticeTemplates',
       inspection_checklist_items: 'inspectionChecklistItems',
-      mechanic_consumable_stocks: 'mechanicConsumableStocks',
       depreciation_logs: 'depreciationLogs',
       annual_leave_quotas: 'annualLeaveQuotas',
       leave_usages: 'leaveUsages',
@@ -7596,7 +7587,6 @@ class LocalDB {
       payroll_closings: 'payrollClosings',
       stocktaking_audits: 'stocktakingAudits',
       stocktaking_audit_items: 'stocktakingAuditItems',
-      collected_parts: 'collectedParts',
       equipment_manuals: 'equipmentManuals',
       standard_options: 'standardOptions',
       standardOptions: 'standardOptions',
