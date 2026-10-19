@@ -8,6 +8,7 @@ import { canViewFinancials } from '../utils/privacyMasking';
 import { SortableTh } from '../components/SortableTh';
 import { useSortableData } from '../hooks/useSortableData';
 import { createHangulMatcher } from '../utils/hangulSearch';
+import { ProductPhotoManager } from '../components/ProductPhotoManager';
 
 export const Assets: React.FC = () => {
   const { 
@@ -1273,6 +1274,23 @@ export const Assets: React.FC = () => {
                   </div>
                 )}
               </div>
+
+              {/* 매핑 IT 제품 표준 사진 자료 (전면, 후면, 내부, 기타) */}
+              {(() => {
+                const matchedProd = products.find(p => p.modelName === selectedAsset.modelName);
+                if (!matchedProd || !matchedProd.photos || matchedProd.photos.length === 0) return null;
+                return (
+                  <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                    <ProductPhotoManager
+                      photos={matchedProd.photos}
+                      readOnly={true}
+                      modelName={matchedProd.modelName}
+                      category={matchedProd.category}
+                      maxPhotos={4}
+                    />
+                  </div>
+                );
+              })()}
 
               {/* 3. 현재 운용 / 임대 현황 */}
               <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>

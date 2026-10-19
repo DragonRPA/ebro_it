@@ -4,15 +4,17 @@ import { useApp } from '../context/AppContext';
 import { 
   Plus, Download, Search, RefreshCw, FileText, X, Folder, Trash2, 
   ExternalLink, Upload, CheckCircle2, AlertCircle, Eye, Edit2, Save, 
-  Package, Layers, Cpu, HardDrive, Monitor, Server, Wifi, Printer, Tv, Tablet, Laptop, Box, FileCode 
+  Package, Layers, Cpu, HardDrive, Monitor, Server, Wifi, Printer, Tv, Tablet, Laptop, Box, FileCode, Camera 
 } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
-import { Product, ProductCategory, PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS } from '../services/db';
+import { Product, ProductCategory, PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS, ProductPhoto, ProductPhotoTag, PRODUCT_PHOTO_TAG_LABELS } from '../services/db';
 import { SortableTh } from '../components/SortableTh';
 import { useSortableData } from '../hooks/useSortableData';
 import { decryptSecret } from '../utils/cryptoVault';
 import { createHangulMatcher } from '../utils/hangulSearch';
 import { getCanonicalModelKey } from '../utils/modelUtils';
+import { ProductPhotoManager } from '../components/ProductPhotoManager';
+import { ProductPhotoViewerModal } from '../components/ProductPhotoViewerModal';
 
 interface R2DocFile {
   key: string;
@@ -52,6 +54,12 @@ export const Products: React.FC = () => {
   const [editForm, setEditForm] = useState<Partial<Product>>({});
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSpecPreviewModal, setShowSpecPreviewModal] = useState(false);
+
+  // 📷 사진 라이트박스 뷰어 모달 상태
+  const [previewPhotos, setPreviewPhotos] = useState<ProductPhoto[]>([]);
+  const [previewModelName, setPreviewModelName] = useState<string>('');
+  const [previewPhotoIndex, setPreviewPhotoIndex] = useState<number>(0);
+  const [showPhotoViewer, setShowPhotoViewer] = useState<boolean>(false);
 
   // Cloudflare R2 제품별 문서함 상태
   const [r2Files, setR2Files] = useState<R2DocFile[]>([]);
@@ -360,6 +368,7 @@ export const Products: React.FC = () => {
       displaySize: 15.6,
       resolution: '1920x1080 (FHD)',
       defaultOs: 'Windows 11 Pro 64-bit',
+      photos: [],
       spec: ''
     });
     setShowAddModal(true);
@@ -740,6 +749,7 @@ export const Products: React.FC = () => {
             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '2px solid var(--table-border-color)', color: 'var(--text-secondary)', fontWeight: 700 }}>
                 <th style={{ padding: '7px 8px', width: '50px', textAlign: 'center', whiteSpace: 'nowrap' }}>상세</th>
+                <th style={{ padding: '7px 8px', width: '60px', textAlign: 'center', whiteSpace: 'nowrap' }}>사진</th>
                 <SortableTh sortKey="category" currentSort={sortConfig} onSort={requestSort} align="center" style={{ padding: '7px 8px' }}>분류</SortableTh>
                 <SortableTh sortKey="modelName" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px' }}>모델명</SortableTh>
                 <SortableTh sortKey="manufacturer" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px' }}>제조사</SortableTh>
@@ -756,7 +766,7 @@ export const Products: React.FC = () => {
             <tbody>
               {sortedProducts.length === 0 ? (
                 <tr>
-                  <td colSpan={12} style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+                  <td colSpan={13} style={{ padding: '36px 0', textAlign: 'center', color: 'var(--text-muted)' }}>
                     조회 조건에 해당하는 IT 제품 모델이 없습니다.
                   </td>
                 </tr>
@@ -799,6 +809,32 @@ export const Products: React.FC = () => {
                         >
                           보기
                         </button>
+                      </td>
+
+                      {/* 사진 */}
+                      <td style={{ padding: '4px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                        {p.photos && p.photos.length > 0 ? (
+                          <div
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPreviewPhotos(p.photos || []);
+                              setPreviewModelName(p.modelName);
+                              setPreviewPhotoIndex(0);
+                              setShowPhotoViewer(true);
+                            }}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                            title="클릭하여 사진 확대 보기"
+                          >
+                            <div style={{ width: '28px', height: '22px', borderRadius: '3px', overflow: 'hidden', border: '1px solid var(--border-color)', backgroundColor: '#000000', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <img src={p.photos[0].url} alt={p.photos[0].tagLabel || '사진'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            </div>
+                            <span style={{ fontSize: '10.5px', color: 'var(--primary)', fontWeight: 600 }}>
+                              📷 {p.photos.length}
+                            </span>
+                          </div>
+                        ) : (
+                          <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>-</span>
+                        )}
                       </td>
 
                       {/* 분류 */}
@@ -1007,11 +1043,23 @@ export const Products: React.FC = () => {
                 </div>
               </div>
 
-              {/* 2. R2 클라우드 문서함 스튜디오 (drcf) */}
+              {/* 2. 제품 사진 자료 (최대 4장: 전면, 후면, 내부, 기타) */}
+              <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <ProductPhotoManager
+                  photos={isEditing ? (editForm.photos || []) : (selectedProduct.photos || [])}
+                  onChange={isEditing ? (newPhotos => setEditForm(prev => ({ ...prev, photos: newPhotos }))) : undefined}
+                  readOnly={!isEditing}
+                  modelName={selectedProduct.modelName}
+                  category={selectedProduct.category}
+                  maxPhotos={4}
+                />
+              </div>
+
+              {/* 3. R2 클라우드 문서함 스튜디오 (drcf) */}
               <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <div style={{ fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Folder size={14} style={{ color: '#0070C0' }} /> R2 클라우드 문서함
+                    <Folder size={14} style={{ color: '#0070C0' }} /> 3. R2 클라우드 문서함
                   </div>
                   
                   {/* 파일 업로드 버튼 */}
@@ -1084,11 +1132,11 @@ export const Products: React.FC = () => {
                 </div>
               </div>
 
-              {/* 3. IT 하드웨어 상세 제원 및 슬롯 확장성 */}
+              {/* 4. IT 하드웨어 상세 제원 및 슬롯 확장성 */}
               <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <div style={{ fontWeight: 600, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Cpu size={14} className="text-primary" /> 3. IT 하드웨어 상세 제원 & 확장성
+                    <Cpu size={14} className="text-primary" /> 4. IT 하드웨어 상세 제원 & 확장성
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                     {!isEditing && (
@@ -1477,6 +1525,23 @@ export const Products: React.FC = () => {
                   </div>
                 </div>
               </div>
+
+              {/* 4. 사진 자료 (최대 4장: 전면, 후면, 내부, 기타) */}
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--primary)', marginBottom: '6px', borderBottom: '1px solid var(--border-color)', paddingBottom: '3px' }}>
+                  4. 사진 자료 (최대 4장: 전면, 후면, 내부, 기타)
+                </div>
+                <div style={{ backgroundColor: 'var(--bg-app)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                  <ProductPhotoManager
+                    photos={editForm.photos || []}
+                    onChange={newPhotos => setEditForm(prev => ({ ...prev, photos: newPhotos }))}
+                    readOnly={false}
+                    modelName={editForm.modelName}
+                    category={editForm.category}
+                    maxPhotos={4}
+                  />
+                </div>
+              </div>
             </div>
 
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '16px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
@@ -1587,6 +1652,19 @@ export const Products: React.FC = () => {
               </div>
             </div>
 
+            {/* 제품 사진 자료 (전면, 후면, 내부, 기타) */}
+            {selectedProduct.photos && selectedProduct.photos.length > 0 && (
+              <div style={{ backgroundColor: 'var(--bg-app)', padding: '12px', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
+                <ProductPhotoManager
+                  photos={selectedProduct.photos}
+                  readOnly={true}
+                  modelName={selectedProduct.modelName}
+                  category={selectedProduct.category}
+                  maxPhotos={4}
+                />
+              </div>
+            )}
+
             {/* IT 장비 제원 종합 요약 테이블 */}
             <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid var(--border-color)', fontSize: '11.5px', textAlign: 'center' }}>
               <tbody>
@@ -1634,6 +1712,15 @@ export const Products: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 📷 전역 사진 라이트박스 뷰어 모달 */}
+      <ProductPhotoViewerModal
+        isOpen={showPhotoViewer}
+        onClose={() => setShowPhotoViewer(false)}
+        photos={previewPhotos}
+        initialIndex={previewPhotoIndex}
+        modelName={previewModelName}
+      />
 
     </div>
   );

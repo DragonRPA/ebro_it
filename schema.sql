@@ -422,7 +422,8 @@ CREATE TABLE products (
     "defaultOs"           TEXT,
     "tvStandType"         TEXT,
 
-    -- 문서 및 메타
+    -- 문서 및 사진 자료 (최대 4장: 전면, 후면, 내부, 기타)
+    photos                JSONB DEFAULT '[]'::jsonb,
     "specSheetUrl"        TEXT,
     "manualUrl"           TEXT,
     "driverDownloadUrl"   TEXT,

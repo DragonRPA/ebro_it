@@ -1222,6 +1222,29 @@ export interface StorageDrive {
   model?: string;
 }
 
+/** 📷 IT 제품 사진 위치/구분 태그 (최대 4장: 전면, 후면, 내부, 기타) */
+export type ProductPhotoTag = 'FRONT' | 'REAR' | 'INSIDE' | 'OTHER';
+
+export const PRODUCT_PHOTO_TAGS: ProductPhotoTag[] = ['FRONT', 'REAR', 'INSIDE', 'OTHER'];
+
+export const PRODUCT_PHOTO_TAG_LABELS: Record<ProductPhotoTag, string> = {
+  FRONT: '전면',
+  REAR: '후면',
+  INSIDE: '내부',
+  OTHER: '기타'
+};
+
+/** 📷 IT 제품 사진 자료 엔티티 (제품당 최대 4장) */
+export interface ProductPhoto {
+  id: string;                          // 고유 ID
+  tag: ProductPhotoTag | string;       // 사진 구분 (FRONT: 전면, REAR: 후면, INSIDE: 내부, OTHER: 기타)
+  tagLabel?: string;                   // 표시 라벨
+  url: string;                         // 이미지 URL (DataURL 또는 R2/HTTP 스토리지 URL)
+  caption?: string;                    // 사진 설명/메모
+  sortOrder?: number;                  // 정렬 순서 (0~3)
+  createdAt?: string;                  // 등록 일시
+}
+
 export interface Product {
   id: string;
   category?: ProductCategory;
@@ -1265,6 +1288,9 @@ export interface Product {
   paperSize?: string;
   defaultOs?: string;
   tvStandType?: string;
+
+  // 사진 자료 (최대 4장: 전면, 후면, 내부, 기타)
+  photos?: ProductPhoto[];
 
   // 문서 및 다운로드 URL
   specSheetUrl?: string;
