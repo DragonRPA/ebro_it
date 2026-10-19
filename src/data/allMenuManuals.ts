@@ -2077,79 +2077,70 @@ export const ALL_MENU_MANUALS: MenuManualDetail[] = [
     "basicGuide": [
       {
         "seq": 1,
-        "selector": "[data-mid=\"dispatch4-block-customer\"]",
+        "selector": "[data-mid=\"btn-save-outbound-request\"]",
         "type": "highlight",
-        "label": "고객사 선택",
-        "description": "[고객사 선택] 화면 영역입니다. 출고를 진행할 대상 고객사를 선택하는 기본 기능을 제공합니다.",
-        "positionHint": "bottom"
-      },
-      {
-        "seq": 2,
-        "selector": "[data-mid=\"dispatch4-block-equipments\"]",
-        "type": "highlight",
-        "label": "장비 매핑",
-        "description": "[장비 매핑] 화면 영역입니다. 출고 요청된 모델 및 수량을 배차 주문에 매핑하는 기본 기능을 제공합니다.",
+        "label": "출고 요청 저장",
+        "description": "[출고 요청 저장] 완결 버튼입니다. 고객사, 설치처, 요청 모델(VGA/RAM/SSD), SW 설치요구, 배송일시를 검증하고 계약 및 배차 대기열에 영구 저장합니다.",
         "positionHint": "bottom"
       }
     ],
     "processes": [
       {
         "processId": "create_dispatch_order",
-        "title": "출고 의뢰 등록",
-        "description": "신규 배차 및 출고 운송 의뢰를 등록합니다.",
+        "title": "IT 출고 요청 등록 (Gutenberg Z-동선)",
+        "description": "고객사/설치처 지정, 하드웨어 스펙조정, SW설치 요구, 배송일시를 지정하여 출고를 요청합니다.",
         "steps": [
           {
             "seq": 1,
-            "selector": "[data-mid=\"dispatch4-customer-search\"]",
+            "selector": "input[placeholder*=\"고객사명\"]",
             "type": "callout",
-            "label": "고객사 검색 및 선택",
-            "description": "[고객사 검색 및 선택] UI 요소를 조작합니다. 출고 대상 고객사를 검색하여 선택하십시오.",
+            "label": "고객사 및 설치처 지정",
+            "description": "고객사를 검색하고 장비가 반입될 고객 설치장소(CustomerSite) 및 담당자를 지정합니다.",
             "positionHint": "bottom"
           },
           {
             "seq": 2,
-            "selector": "[data-mid=\"dispatch4-model-chips\"]",
+            "selector": "select, input[placeholder*=\"모델\"]",
             "type": "callout",
-            "label": "요청 장비 추가",
-            "description": "[요청 장비 추가] UI 요소를 조작합니다. 출고할 고소작업대 모델을 선택하십시오.",
+            "label": "요청 모델 및 스펙조정(VGA/RAM/SSD)",
+            "description": "출고할 IT 장비 모델, 수량, 월단가 및 그래픽/메모리/스토리지 증설 스펙을 지정합니다.",
             "positionHint": "bottom"
           },
           {
             "seq": 3,
-            "selector": "[data-mid=\"dispatch4-block-site\"]",
+            "selector": "input[type=\"date\"]",
             "type": "callout",
-            "label": "현장 정보 및 일정 입력",
-            "description": "[현장 정보 및 일정 입력] UI 요소를 조작합니다. 반입 현장 주소, 담당자 연락처 및 상하차 일정을 입력하십시오.",
+            "label": "SW설치 요구 및 배송일시 지정",
+            "description": "필수 OS 및 소프트웨어 체크리스트, 배송 희망일자 및 배송 수단을 설정합니다.",
             "positionHint": "bottom"
           },
           {
             "seq": 4,
-            "selector": "[data-mid=\"dispatch4-btn-submit\"]",
+            "selector": "[data-mid=\"btn-save-outbound-request\"]",
             "type": "click_ripple",
-            "label": "출고 의뢰 접수",
-            "description": "[출고 의뢰 접수] UI 요소를 조작합니다. 버튼을 클릭하여 출고 배차 의뢰를 최종 접수하십시오.",
+            "label": "출고 요청 저장 완결",
+            "description": "우하단 [출고 요청 저장] 버튼을 눌러 계약 및 배차 대장에 저장합니다.",
             "positionHint": "bottom"
           }
         ]
       }
     ],
-    "version": 16,
+    "version": 17,
     "groupId": "grp_sales",
     "groupName": "영업관리",
     "department": "영업부",
-    "archetype": "유형 A: 요청 처리형 (카드형 상세)",
-    "objective": "영업 계약 기반 출고 요구서 발행 및 현장 요구 사양 전달",
-    "scopeInfo": "고객사/현장 마스터, 자연어 카톡/문자 원문, 모델 규격별 수량, 상하차 희망 일시, 현장 인수자 연락처, 필수 안전옵션, 9대 방어차단 규칙",
+    "archetype": "유형 A: 요청 처리형 (Z-구텐버그)",
+    "objective": "IT 렌탈 계약 기반 하드웨어/SW 스펙 지정 출고 요구서 발행 및 직영 배송 연동",
+    "scopeInfo": "고객사, 설치처(CustomerSite), 수령담당자, 출고모델, 수량, 월단가, 스펙조정(VGA/RAM/SSD), SW설치(OS/오피스/백신), 배송일시/수단",
     "cognitiveSequence": [
-      "1. (선택) 카톡/문자 텍스트 붙여넣기 파싱으로 자연어 요청 원문 자동 변환",
-      "2. 업무 유형 선택 (신규고객 출고 / 기존현장 출고 / 교체(대차))",
-      "3. 1. 거래처 (고객사) 블록에서 거래처 검색 지정 또는 신규 거래처 등록",
-      "4. 2. 투입 현장 블록에서 현장 선택/신규등록 및 현장 인수자(성명/연락처) 지정",
-      "5. 3. 출고 장비 규격 블록에서 작업높이 및 모델별 요구 수량 선택 (헌장 2.1 모델 요구)",
-      "6. 4. 출고 및 하차 일정 블록에서 상차 희망일시(ASAP/지정시간) 및 현장 도착일정 지정",
-      "7. 5. 안전옵션 블록에서 필수 안전장치(난간대, 감지봉 등) 체크 및 진입로 특이 메모 기재",
-      "8. 우측 [필수 정보 검증 & 방어 차단] 9대 항목 충족 확인 (미충족 시 발행 자동 차단)",
-      "9. 우하단 [출고 요청 발행] 클릭  배차/출고 대기열(TruckDispatch)로 공식 전송"
+      "1. 좌상단: 고객사 검색 및 자동완성 선택 (사업자번호, 대표자 확인)",
+      "2. 고객 설치장소(CustomerSite) 선택 또는 신규 설치처 직접 입력 (도로명주소, 엘리베이터 여부)",
+      "3. 현장 수령 담당자(성명, 직급, 연락처, 이메일) 선택 및 확인",
+      "4. 요청 출고 모델, 수량(대), 월/일 렌탈료 단가 입력 (이전 계약 단가 자동 승계)",
+      "5. 하드웨어 스펙 조정: VGA(그래픽카드), RAM(메모리), SSD(스토리지) 증설 및 부속품 메모 입력",
+      "6. SW 설치 요구사항: OS 선택, 필수 소프트웨어(MS Office, 한글, 백신 등) 다중 체크, 계정/도메인 세팅",
+      "7. 출고 배송 요청 일시 지정: 배송 희망일자, 시간대(오전/오후/지정시간/긴급), 배송 수단(직영배송/퀵/택배 등)",
+      "8. 우하단: 총액 요약 검증 후 [출고 요청 저장] 버튼 클릭하여 계약 체결 및 배차 대기열 영구 저장 완결"
     ],
     "subTabs": [
       {

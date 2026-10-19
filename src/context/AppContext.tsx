@@ -3189,7 +3189,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await notify('🚚 [5/5 배차 생성] 배차/운송 관리 출고대기 지시건 생성 중...', 90);
 
     // 신규 배차(Delivery) - 출고 대기 건 자동 생성
-    const cargoItems = JSON.stringify(data.equipments.map(e => ({ modelName: e.modelName, count: Number(e.qty) || 1 })));
+    const cargoItems = JSON.stringify(data.equipments.map((e: any) => ({
+      modelName: e.modelName,
+      count: Number(e.qty) || 1,
+      qty: Number(e.qty) || 1,
+      monthlyRent: e.monthlyRate || e.monthlyRent || 0,
+      dailyRent: e.dailyRate || e.dailyRent || 0,
+      vga: e.vga || '',
+      ram: e.ram || '',
+      ssd: e.ssd || '',
+      os: e.os || '',
+      swList: e.swList || [],
+      customSpecNote: e.customSpecNote || ''
+    })));
     const dData = data as any;
     const loadingDateStr = extractDate(data.loadingTime) || contract.startDate;
     const getTimeSlot = (tStr: string | undefined) => {
@@ -3249,7 +3261,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       cargoItems,
       isCostSettled: false,
       rawText: (data as any).prompt || (data as any).rawText || data.note || '',
-      memo: `현장담당: ${data.siteContactName || '-'} (${data.siteContactPhone || '-'}) | 상차: ${data.loadingTime || '-'} / 하차: ${data.unloadingTime || '-'}${retrievalMemo}${paidByMemo} | 청구담당: ${data.billingContactName || '-'} (${data.billingContactPhone || '-'}) | 계산서: ${data.taxBillEmail || '-'} | [옵션] ${dData.paidOptions || '없음'}${dData.protection && dData.protection !== 'NONE' ? ` / 보양: ${dData.protection}` : ''} | 특이사항: ${data.note || '없음'}`,
+      memo: `담당: ${data.siteContactName || '-'} (${data.siteContactPhone || '-'}) | 배송일시: ${data.loadingTime || data.unloadingTime || '-'} | 품목: ${data.equipments.map((e: any) => `${e.modelName} ${e.qty}대${[e.vga && `VGA:${e.vga}`, e.ram && `RAM:${e.ram}`, e.ssd && `SSD:${e.ssd}`, e.os && `OS:${e.os}`].filter(Boolean).length ? ` [${[e.vga && `VGA:${e.vga}`, e.ram && `RAM:${e.ram}`, e.ssd && `SSD:${e.ssd}`, e.os && `OS:${e.os}`].filter(Boolean).join(', ')}]` : ''}`).join(' / ')} | 특이사항: ${data.note || '없음'}`,
       closingMemo: `[마감조건] 마감일: ${dData.closingDay || '-'} / 결제일: ${dData.paymentDay || '-'} | 유상옵션: ${dData.paidOptions || '없음'} | 보양: ${dData.protection || '없음'}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()

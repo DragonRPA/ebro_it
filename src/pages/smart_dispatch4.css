@@ -17,7 +17,15 @@
   box-sizing: border-box;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
   color: var(--text-main);
-  background-color: var(--bg-app);
+}
+
+.dispatch4-single-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px 16px;
+  box-sizing: border-box;
 }
 
 /* 상단 통합 슬림 툴바 (타이틀 + 탭 + 녹음 업로드) */
