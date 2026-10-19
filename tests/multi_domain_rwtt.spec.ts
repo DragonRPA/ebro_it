@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('RWTT: Multi-Domain Stress Test (10 Cycles each)', () => {
   test.setTimeout(480000); // 8 minutes
 
-  test('Perform 10 stress cycles across DailyInOut, Repairs, PurchaseSettlement, and SiteOptions', async ({ page }) => {
+  test('Perform 10 stress cycles across DailyInOut and PurchaseSettlement', async ({ page }) => {
     // 1. 로그인
     await page.goto('http://localhost:5174/');
     await page.waitForTimeout(2000);
@@ -90,46 +90,7 @@ test.describe('RWTT: Multi-Domain Stress Test (10 Cycles each)', () => {
         await page.waitForTimeout(800);
       }
     }
-
-    console.log('[RWTT] PurchaseSettlement 10 cycles finished! Moving to Domain 3: SiteOptionManage (현장별 옵션 관리)...');
-
-    // ─── Domain 3: SiteOptionManage ───
-    await page.evaluate(() => {
-      window.dispatchEvent(new CustomEvent('erp:navigate', { detail: { menuId: 'site_options' } }));
-    });
-    await page.waitForTimeout(1500);
-
-    for (let k = 1; k <= 10; k++) {
-      console.log(`[RWTT SiteOptions] Cycle ${k}/10`);
-
-      // 1) 상단 탭 전환: '현장별 옵션 관리' vs '옵션 품목 마스터'
-      const mainArea = page.locator('[data-subview="site_options"]');
-      if (k % 2 === 0) {
-        const masterTab = mainArea.locator('button:has-text("옵션 품목 마스터")').first();
-        if (await masterTab.isVisible()) await masterTab.click();
-      } else {
-        const siteTab = mainArea.locator('button:has-text("현장별 옵션 관리")').first();
-        if (await siteTab.isVisible()) await siteTab.click();
-      }
-      await page.waitForTimeout(300);
-
-      // 2) 현장 검색 필터 스트레스
-      const searchBox = page.locator('input[placeholder*="현장명"]').first();
-      if (await searchBox.isVisible()) {
-        await searchBox.fill(`현장${k}`);
-        await page.waitForTimeout(200);
-        await searchBox.fill('');
-      }
-
-      // 3) 현장 상태 필터 토글
-      const statusSelect = page.locator('select[data-mid="site-status-filter"]');
-      if (await statusSelect.isVisible()) {
-        const statuses = ['ACTIVE', 'COMPLETED', 'ALL'];
-        await statusSelect.selectOption(statuses[k % statuses.length]);
-        await page.waitForTimeout(300);
-      }
-    }
-
-    console.log('✅ All multi-domain RWTT stress cycles (10x each) completed with 100% precision!');
+    console.log('[RWTT] PurchaseSettlement 10 cycles finished!');
+    console.log('✅ All multi-domain RWTT stress cycles completed with 100% precision!');
   });
 });

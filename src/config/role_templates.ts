@@ -44,7 +44,6 @@ export const ACCOUNTING_TEMPLATE: PermissionRuleMap = {
   acquisition_disposal: { canView: true, canSave: true },
   // 열람만 허용 (영업/자산 상태 대사)
   customer: { canView: true, canSave: false },
-  site_options: { canView: true, canSave: false },
   contract: { canView: true, canSave: false },
   public_construction_permits: { canView: true, canSave: false },
   product: { canView: true, canSave: false },
@@ -63,7 +62,6 @@ export const ACCOUNTING_TEMPLATE: PermissionRuleMap = {
 export const SALES_TEMPLATE: PermissionRuleMap = {
   ...BASE_COMMON_PERMISSIONS,
   customer: { canView: true, canSave: true },
-  site_options: { canView: true, canSave: true },
   contract: { canView: true, canSave: true },
   smart_dispatch: { canView: true, canSave: true },
   smart_dispatch4: { canView: true, canSave: true },
@@ -92,7 +90,6 @@ export const LOGISTICS_TEMPLATE: PermissionRuleMap = {
   asset_inout_history: { canView: true, canSave: true },
   daily_inout: { canView: true, canSave: true },
   print_queue_monitor: { canView: true, canSave: true },
-  site_options: { canView: true, canSave: false },
   // 열람만 허용
   smart_dispatch4: { canView: true, canSave: false },
   product: { canView: true, canSave: false },
@@ -121,7 +118,6 @@ export const MECHANIC_TEMPLATE: PermissionRuleMap = {
   asset_inout_history: { canView: true, canSave: true },
   daily_inout: { canView: true, canSave: false },
   print_queue_monitor: { canView: true, canSave: true },
-  site_options: { canView: true, canSave: false },
   // 열람만 허용
   asset: { canView: true, canSave: false },
   product: { canView: true, canSave: false },

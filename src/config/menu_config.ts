@@ -39,7 +39,6 @@ export const SYSTEM_MENU_CONFIG: MenuGroupConfig[] = [
     name: '영업관리',
     items: [
       { id: 'customer', name: '고객 관리' },
-      { id: 'site_options', name: '현장별 옵션 관리' },
       { id: 'contract', name: '계약 관리' },
       { id: 'billing', name: '청구 수납 관리' },
       { id: 'receivable', name: '외상미수금 대장' },
@@ -236,9 +235,6 @@ export const CANONICAL_MENU_ALIASES: Record<string, string> = {
   'agentic-dispatch-studio': 'agentic_dispatch_studio',
   'agentic-settlement-autopilot': 'agentic_settlement_autopilot',
   'agentic-asset-lifecycle': 'agentic_asset_lifecycle',
-  'site_option': 'site_options',
-  'site-options': 'site_options',
-  'site-option': 'site_options',
   'custom_billing': 'custom_billing',
   'custom-billing': 'custom_billing',
   'custom_statement': 'custom_billing',

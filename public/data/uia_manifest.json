@@ -368,24 +368,6 @@
       ]
     },
     {
-      "id": "site_options",
-      "name": "현장별 옵션 관리",
-      "group": "grp_sales",
-      "archetype": "TYPE_B_HIGH_DENSITY_GRID",
-      "objective": "고객과 독립된 물리 현장 마스터(SiteMaster)의 유상옵션/보양작업/체결조건 N:M 관리 (헌장 1.5 준수)",
-      "terminalAction": "현장 옵션 프로필 저장 및 활성화 토글 완결",
-      "actionableElements": [
-        {
-          "id": "btn-save-site-option",
-          "role": "button",
-          "description": "현장 옵션 프로필 저장"
-        }
-      ],
-      "tools": [
-        "site_update_options"
-      ]
-    },
-    {
       "id": "contract",
       "name": "계약 관리",
       "group": "grp_sales",

@@ -1164,7 +1164,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'contract':             ['contracts', 'contractAssets', 'contractHistory', 'customers', 'sites', 'siteMasters', 'standardOptions', 'assets'],
     'billing':              ['billings', 'billingDetails', 'payments', 'paymentDepositLinks', 'bankTransactions', 'contracts', 'customers'],
     'customer':             ['customers', 'contacts', 'sites', 'siteMasters', 'standardOptions'],
-    'site_options':         ['siteMasters', 'sites', 'standardOptions', 'customers', 'contracts', 'assets'],
     'product':              ['products'],
     'asset':                ['assets', 'products', 'vendors'],
     'acquisition_disposal': ['assets', 'products', 'vendors'],

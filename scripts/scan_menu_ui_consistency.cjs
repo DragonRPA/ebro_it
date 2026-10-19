@@ -28,7 +28,6 @@ const MENU_REGISTRY = [
 
   // grp_sales
   { menuId: 'customer', file: 'Customers.tsx', group: '영업관리', name: '고객 관리' },
-  { menuId: 'site_options', file: 'SiteOptionManage.tsx', group: '영업관리', name: '현장별 옵션 관리' },
   { menuId: 'contract', file: 'Contracts.tsx', group: '영업관리', name: '계약 관리' },
   { menuId: 'billing', file: 'Billings.tsx', group: '영업관리', name: '청구 수납 관리' },
   { menuId: 'receivable', file: 'Receivables.tsx', group: '영업관리', name: '외상미수금 대장' },

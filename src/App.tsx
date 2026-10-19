@@ -99,7 +99,6 @@ const DelinquencyPage = React.lazy(() => import('./pages/DelinquencyPage').then(
 import { OutboundInspections } from './pages/outbound_inspections';
 import { DepreciationExecution } from './pages/depreciation_execution';
 const DailyInOutStatus = React.lazy(() => import('./pages/DailyInOutStatus').then(module => ({ default: module.DailyInOutStatus })));
-const SiteOptionManage = React.lazy(() => import('./pages/SiteOptionManage').then(module => ({ default: module.SiteOptionManage })));
 
 const RegularReportsPage = React.lazy(() => import('./pages/RegularReportsPage').then(module => ({ default: module.RegularReportsPage })));
 const InitialDbUploader = React.lazy(() => import('./pages/InitialDbUploader').then(module => ({ default: module.InitialDbUploader })));
@@ -678,7 +677,6 @@ const App: React.FC = () => {
       icon: <Briefcase size={17} />,
       items: [
         { id: 'customer', name: '고객 관리', icon: <Users size={16} />, component: <Customers /> },
-        { id: 'site_options', name: '현장별 옵션 관리', icon: <SlidersHorizontal size={16} />, component: <SiteOptionManage /> },
         { id: 'contract', name: '계약 관리', icon: <UserCheck size={16} />, component: <Contracts /> },
         { id: 'billing', name: '청구 수납 관리', icon: <CreditCard size={16} />, component: <Billings /> },
         { id: 'receivable', name: '외상미수금 대장', icon: <CreditCard size={16} />, component: <Receivables /> },

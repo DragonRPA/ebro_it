@@ -153,7 +153,6 @@ const itTenantRecord = {
   ],
   allowedPages: [
     'customer',
-    'site_options',
     'contract',
     'billing',
     'receivable',

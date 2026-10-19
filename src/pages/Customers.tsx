@@ -1278,15 +1278,6 @@ export const Customers: React.FC = () => {
     }
   };
 
-  // 🧭 현장별 옵션 관리 전용 메뉴 바로가기
-  const handleNavigateToSiteOptionManage = (siteId?: string) => {
-    setNavigationPayload({
-      siteId: siteId || editingSite?.id,
-      customerId: selectedCustomerId
-    });
-    setActiveTab('site_options');
-  };
-
   // 계좌 관리
   const handleOpenAddAccount = () => {
     if (!selectedCustomerId) return;
@@ -3036,29 +3027,6 @@ const handleDeleteAccount = async (accId: string) => {
                     <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
                       출고·입고 검수에 자동 연동
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowSiteModal(false);
-                        setActiveTab('site_options');
-                      }}
-                      style={{
-                        padding: '2px 8px',
-                        fontSize: '11px',
-                        borderRadius: '4px',
-                        border: '1px solid var(--primary)',
-                        backgroundColor: 'transparent',
-                        color: 'var(--primary)',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px',
-                        whiteSpace: 'nowrap'
-                      }}
-                    >
-                      <Plus size={11} /> 현장별 옵션관리 이동 ➔
-                    </button>
                   </div>
                 </div>
 
@@ -4021,31 +3989,6 @@ const handleDeleteAccount = async (accId: string) => {
                 </div>
               </div>
               <button type="button" onClick={() => setShowSiteOptionModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
-            </div>
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '6px', marginBottom: '8px', alignItems: 'center' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowSiteOptionModal(false);
-                  handleNavigateToSiteOptionManage(editingSiteOption.id);
-                }}
-                style={{
-                  padding: '3px 9px',
-                  fontSize: '11px',
-                  borderRadius: '4px',
-                  border: '1px solid #2563eb',
-                  backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                  color: '#1d4ed8',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px'
-                }}
-              >
-                <SlidersHorizontal size={12} /> 현장별 옵션 관리 ➔
-              </button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', fontSize: '12px' }}>

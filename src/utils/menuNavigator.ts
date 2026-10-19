@@ -23,7 +23,6 @@ export const MENU_TO_APP_TAB_MAP: Record<string, MenuNavTarget> = {
   approvalInbox: { tabId: 'approvalInbox' },
   approvalRules: { tabId: 'approvalRules' },
   customer: { tabId: 'customer' },
-  site_options: { tabId: 'site_options' },
   receivable: { tabId: 'receivable' },
   smart_dispatch4: { tabId: 'smart_dispatch4' },
   smart_return: { tabId: 'smart_return' },

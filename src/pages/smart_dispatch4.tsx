@@ -2946,14 +2946,6 @@ export const SmartDispatch4: React.FC = () => {
                           <Building2 className="w-3.5 h-3.5 text-purple-400" />
                           <span>옵션 그룹 상속 선택 (선택사항)</span>
                         </label>
-                        <button
-                          type="button"
-                          onClick={() => setGlobalActiveTab('site_options')}
-                          className="flex items-center gap-1 text-[11px] font-semibold text-purple-300 hover:text-white px-2 py-0.5 rounded bg-purple-900/60 hover:bg-purple-800/80 border border-purple-500/40 transition"
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>현장별 옵션관리 이동 ➔</span>
-                        </button>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -3141,14 +3133,6 @@ export const SmartDispatch4: React.FC = () => {
                           <Building2 className="w-3.5 h-3.5 text-purple-400" />
                           <span>옵션 그룹 상속 선택 (선택사항)</span>
                         </label>
-                        <button
-                          type="button"
-                          onClick={() => setGlobalActiveTab('site_options')}
-                          className="flex items-center gap-1 text-[11px] font-semibold text-purple-300 hover:text-white px-2 py-0.5 rounded bg-purple-900/60 hover:bg-purple-800/80 border border-purple-500/40 transition"
-                        >
-                          <Plus className="w-3 h-3" />
-                          <span>현장별 옵션관리 이동 ➔</span>
-                        </button>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
