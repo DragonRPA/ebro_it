@@ -618,7 +618,17 @@ CREATE TABLE contracts (
     "contractPeriodType"  TEXT CHECK ("contractPeriodType" IN ('SHORT_TERM', 'LONG_TERM')) NOT NULL DEFAULT 'LONG_TERM',
     "termMonths"          INTEGER DEFAULT 12, -- 약정 개월수 (12/24/36개월 등)
     "earlyTerminationFeeRate" DOUBLE PRECISION DEFAULT 10, -- 중도해지 위약금율 (%)
-    "depositAmount"       DOUBLE PRECISION DEFAULT 0, -- 보증금/선수금
+    "depositAmount"       DOUBLE PRECISION DEFAULT 0, -- 약정 보증금
+    "depositBalance"      DOUBLE PRECISION DEFAULT 0, -- 현재 잔여 보증금
+    "depositStatus"       TEXT DEFAULT 'UNPAID',      -- 보증금 상태 ('UNPAID', 'HELD', 'PARTIAL_OFFSET', 'FULLY_OFFSET', 'REFUNDED')
+    "depositPaidDate"     TEXT,                       -- 보증금 입금 확인 일자
+    "depositBankTransactionId" TEXT,                  -- 보증금 입금 매핑 통장 거래 ID
+    "depositRefundedDate" TEXT,                       -- 보증금 반환 일자
+    "depositRefundAmount" DOUBLE PRECISION DEFAULT 0, -- 반환 금액
+    "depositRefundBank"   TEXT,                       -- 반환 은행
+    "depositRefundAccount" TEXT,                      -- 반환 계좌
+    "depositRefundHolder" TEXT,                       -- 반환 예금주
+    "depositMemo"         TEXT,                       -- 보증금 관리 메모
     "startDate"           TEXT NOT NULL,
     "endDate"             TEXT NOT NULL,
     "pureRentalFee"       DOUBLE PRECISION DEFAULT 0, -- 순 렌탈료 합산
@@ -1134,6 +1144,7 @@ CREATE TABLE payments (
     amount                DOUBLE PRECISION NOT NULL,
     method                TEXT NOT NULL,
     memo                  TEXT,
+    "depositOffsetContractId" TEXT REFERENCES contracts(id) ON DELETE SET NULL,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL,
     "tenant_id"           TEXT NOT NULL DEFAULT 'giyeonlift'

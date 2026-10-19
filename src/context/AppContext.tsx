@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { db, supabase, isSystemDeveloperUser, PAYMENT_REVERSAL_ENABLED, isActivePayment, isActiveDepositLink, Tenant, TenantWorkplace, TenantYard, TenantBusinessType, TenantBankAccount, OFFICIAL_STAMP_BASE64, User, Department, MenuPermission, createMenuPermission, CustomRole, RolePermission, Customer, CustomerContact, CustomerSite, SiteMaster, Product, Asset, Consumable, ConsumableLog, ConsumableLot, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingType, BillingDetail, CustomStatementItem, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, OfficialMailConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, TransportNegotiation, SubleaseNegotiation, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, EquipmentManual, StandardOption, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart, SaleContractTerms, StocktakingAudit, StocktakingAuditItem, CollectedPart, PrintStation, PrintQueueItem, logPrivacyAccess, ErrorReport, ErrorReportAttachment, ErrorReportStatus, ErrorReportSeverity, ErrorReportCategory, ApprovalRule, RuleConsensus, ApprovalPayload, MonthlyIncomeStatement } from '../services/db';
+import { db, supabase, isSystemDeveloperUser, PAYMENT_REVERSAL_ENABLED, isActivePayment, isActiveDepositLink, Tenant, TenantWorkplace, TenantYard, TenantBusinessType, TenantBankAccount, OFFICIAL_STAMP_BASE64, User, Department, MenuPermission, createMenuPermission, CustomRole, RolePermission, Customer, CustomerContact, CustomerSite, SiteMaster, Product, Asset, Consumable, ConsumableLog, ConsumableLot, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingType, BillingDetail, CustomStatementItem, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, OfficialMailConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, TransportNegotiation, SubleaseNegotiation, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, EquipmentManual, StandardOption, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart, SaleContractTerms, StocktakingAudit, StocktakingAuditItem, CollectedPart, PrintStation, PrintQueueItem, logPrivacyAccess, ErrorReport, ErrorReportAttachment, ErrorReportStatus, ErrorReportSeverity, ErrorReportCategory, ApprovalRule, RuleConsensus, ApprovalPayload, MonthlyIncomeStatement, DepositStatus, DEPOSIT_STATUS_LABELS } from '../services/db';
 import { useApproval } from '../hooks/useApproval';
 import { enqueuePrintJob as serviceEnqueuePrintJob, registerPrintStation as serviceRegisterPrintStation, deletePrintStation as serviceDeletePrintStation, retryPrintJob as serviceRetryPrintJob, cancelPrintJob as serviceCancelPrintJob } from '../services/printQueueService';
 import { ErrorModal } from '../components/ErrorModal';
@@ -396,6 +396,15 @@ interface AppContextType {
   }) => Promise<void> | void;
   cancelPayment: (paymentId: string) => Promise<void>;  // 수납 취소 + PDL 연쇄 삭제 + Billing 롤백 + 선수금 환원
   cancelAllPaymentsForBilling: (billingId: string) => Promise<void>; // 청구서 전체 수납 일괄 취소 및 롤백
+  // 🛡️ IT 렌탈 보증금(가수금) 라이프사이클 및 상계/반환
+  confirmContractDepositPayment: (contractId: string, paidAmount: number, paidDate: string, bankTransactionId?: string, memo?: string) => Promise<void>;
+  offsetDepositForBilling: (billingId: string, contractId: string, offsetAmount: number, offsetDate: string, memo?: string) => Promise<void>;
+  settleContractDepositAndComplete: (
+    contractId: string,
+    settleDate: string,
+    refundAccountInfo?: { bank: string; account: string; holder: string },
+    memo?: string
+  ) => Promise<{ success: boolean; totalOffsetAmount: number; refundAmount: number; updatedBillingsCount: number }>;
   saveBankDeposit: (data: Omit<BankTransaction, 'id' | 'createdAt' | 'withdrawAmount'>) => void;  // 통장입금 등록/수정
   deleteBankDeposit: (txId: string) => void;  // 통장입금 삭제 (연결 수납 없을 때만)
   uploadBankTransactions: (txs: Omit<BankTransaction, 'id' | 'createdAt'>[]) => void;
@@ -8644,6 +8653,28 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       }
     }
 
+    // 2-1. 보증금 상계 수납 건인 경우 해당 계약의 보증금 잔액 자동 원상 복원
+    if (payment.method === 'DEPOSIT_OFFSET' && payment.depositOffsetContractId) {
+      const c = db.contracts.find(cntr => cntr.id === payment.depositOffsetContractId);
+      if (c) {
+        const restoredDepositBal = (c.depositBalance || 0) + payment.amount;
+        const targetAmt = c.depositAmount || 0;
+        const newDepStatus: DepositStatus = restoredDepositBal >= targetAmt ? 'HELD' : (restoredDepositBal > 0 ? 'PARTIAL_OFFSET' : 'FULLY_OFFSET');
+        db.updateRow<Contract>('contracts', c.id, {
+          depositBalance: restoredDepositBal,
+          depositStatus: newDepStatus,
+          updatedAt: new Date().toISOString()
+        });
+        db.insertRow<ContractHistory>('contractHistory', {
+          contractId: c.id,
+          changeType: 'DEPOSIT_OFFSET',
+          changeDate: new Date().toISOString().split('T')[0],
+          description: `보증금 상계 수납 취소 환원: ₩${payment.amount.toLocaleString()}원 복구 (가용 보증금: ₩${restoredDepositBal.toLocaleString()}원, 상태: ${newDepStatus})`,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+
     // 3. Payment 및 연결 행 상계(또는 기존 방식 삭제)
     reversePaymentRecord(payment, linkedLinks, '수납 취소');
 
@@ -8686,6 +8717,219 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     for (const p of targetPayments) {
       await cancelPayment(p.id);
     }
+  };
+
+  // 🛡️ [보증금 라이프사이클 1단계]: 보증금 입금 확인 (통장 매핑 또는 직접 입금 확인)
+  const confirmContractDepositPayment = async (
+    contractId: string,
+    paidAmount: number,
+    paidDate: string,
+    bankTransactionId?: string,
+    memo?: string
+  ) => {
+    const contract = db.contracts.find(c => c.id === contractId);
+    if (!contract) throw new Error('계약을 찾을 수 없습니다.');
+    if (paidAmount <= 0) throw new Error('입금된 보증금은 1원 이상이어야 합니다.');
+
+    const currentBal = contract.depositBalance || 0;
+    const newDepositBalance = currentBal + paidAmount;
+    const nowIso = new Date().toISOString();
+
+    db.updateRow<Contract>('contracts', contract.id, {
+      depositBalance: newDepositBalance,
+      depositStatus: 'HELD',
+      depositPaidDate: paidDate,
+      depositBankTransactionId: bankTransactionId || contract.depositBankTransactionId,
+      depositMemo: memo || contract.depositMemo,
+      updatedAt: nowIso
+    });
+
+    db.insertRow<ContractHistory>('contractHistory', {
+      contractId: contract.id,
+      changeType: 'DEPOSIT_RECEIVED',
+      changeDate: paidDate,
+      description: `보증금 입금 확인: ₩${paidAmount.toLocaleString()}원 입금 (총 가용 보증금 잔액: ₩${newDepositBalance.toLocaleString()}원, 약정액: ₩${(contract.depositAmount || 0).toLocaleString()}원)${memo ? ` [비고: ${memo}]` : ''}`,
+      createdAt: nowIso
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  // 🛡️ [보증금 라이프사이클 2단계]: 수납 단계 단일 청구서 보증금 상계 처리
+  const offsetDepositForBilling = async (
+    billingId: string,
+    contractId: string,
+    offsetAmount: number,
+    offsetDate: string,
+    memo?: string
+  ) => {
+    const billing = db.billings.find(b => b.id === billingId);
+    const contract = db.contracts.find(c => c.id === contractId);
+    if (!billing) throw new Error('청구서를 찾을 수 없습니다.');
+    if (!contract) throw new Error('계약을 찾을 수 없습니다.');
+    if (offsetAmount <= 0) throw new Error('상계 금액은 1원 이상이어야 합니다.');
+
+    const availDeposit = contract.depositBalance || 0;
+    if (offsetAmount > availDeposit) {
+      throw new Error(`보증금 가용 잔액이 부족합니다. (가용 잔액: ₩${availDeposit.toLocaleString()}원 / 요청액: ₩${offsetAmount.toLocaleString()}원)`);
+    }
+
+    const supply = billing.totalAmount || 0;
+    const grandTotal = supply + Math.round(supply * 0.1);
+    const unpaid = Math.max(0, grandTotal - (billing.paidAmount || 0));
+    if (offsetAmount > unpaid) {
+      throw new Error(`청구서 미납액보다 큰 금액을 상계할 수 없습니다. (미납액: ₩${unpaid.toLocaleString()}원 / 요청액: ₩${offsetAmount.toLocaleString()}원)`);
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // 1. 계약 보증금 잔액 차감
+    const newDepositBalance = Math.max(0, availDeposit - offsetAmount);
+    const newDepositStatus: DepositStatus = newDepositBalance === 0 ? 'FULLY_OFFSET' : 'PARTIAL_OFFSET';
+
+    db.updateRow<Contract>('contracts', contract.id, {
+      depositBalance: newDepositBalance,
+      depositStatus: newDepositStatus,
+      updatedAt: nowIso
+    });
+
+    // 2. Payment 수납 전표 발행 (method: 'DEPOSIT_OFFSET')
+    db.insertRow<Payment>('payments', {
+      billingId: billing.id,
+      paymentDate: offsetDate,
+      amount: offsetAmount,
+      method: 'DEPOSIT_OFFSET',
+      memo: memo || `보증금 상계 수납 (잔여보증금 ₩${newDepositBalance.toLocaleString()}원)`,
+      depositOffsetContractId: contract.id,
+      createdAt: nowIso
+    });
+
+    // 3. Billing 상태 갱신
+    const nextPaid = (billing.paidAmount || 0) + offsetAmount;
+    let nextStatus: Billing['status'] = 'UNPAID';
+    if (nextPaid >= grandTotal) nextStatus = 'PAID';
+    else if (nextPaid > 0) nextStatus = 'PARTIAL';
+
+    db.updateRow<Billing>('billings', billing.id, {
+      paidAmount: nextPaid,
+      status: nextStatus,
+      updatedAt: nowIso
+    });
+
+    // 4. 계약 이력 기록
+    db.insertRow<ContractHistory>('contractHistory', {
+      contractId: contract.id,
+      changeType: 'DEPOSIT_OFFSET',
+      changeDate: offsetDate,
+      description: `보증금 상계 처리: ${billing.billingYm} 청구분 ₩${offsetAmount.toLocaleString()}원 상계 (수납후 보증금 잔액: ₩${newDepositBalance.toLocaleString()}원, 상태: ${newDepositStatus})`,
+      createdAt: nowIso
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  // 🛡️ [보증금 라이프사이클 3단계]: 계약종료 시점 미납액 보증금 일괄 반제 + 잔액 고객 반환 원스톱 파이프라인
+  const settleContractDepositAndComplete = async (
+    contractId: string,
+    settleDate: string,
+    refundAccountInfo?: { bank: string; account: string; holder: string },
+    memo?: string
+  ): Promise<{ success: boolean; totalOffsetAmount: number; refundAmount: number; updatedBillingsCount: number }> => {
+    const contract = db.contracts.find(c => c.id === contractId);
+    if (!contract) throw new Error('계약을 찾을 수 없습니다.');
+
+    let availDeposit = contract.depositBalance || 0;
+    const nowIso = new Date().toISOString();
+
+    // 1. 해당 계약 산하의 모든 미납 청구서 조회 (오래된 청구부터 순차 반제)
+    const unpaidBillings = db.billings
+      .filter(b => b.contractId === contractId && b.status !== 'PAID' && b.status !== 'REJECTED')
+      .sort((a, b) => (a.billingDate || a.billingYm).localeCompare(b.billingDate || b.billingYm));
+
+    let totalOffsetAmount = 0;
+    let updatedBillingsCount = 0;
+
+    for (const b of unpaidBillings) {
+      if (availDeposit <= 0) break;
+
+      const supply = b.totalAmount || 0;
+      const grandTotal = supply + Math.round(supply * 0.1);
+      const unpaid = Math.max(0, grandTotal - (b.paidAmount || 0));
+      if (unpaid <= 0) continue;
+
+      const offsetAmt = Math.min(availDeposit, unpaid);
+      if (offsetAmt > 0) {
+        availDeposit -= offsetAmt;
+        totalOffsetAmount += offsetAmt;
+        updatedBillingsCount++;
+
+        // Payment 수납 전표 생성
+        db.insertRow<Payment>('payments', {
+          billingId: b.id,
+          paymentDate: settleDate,
+          amount: offsetAmt,
+          method: 'DEPOSIT_OFFSET',
+          memo: `[계약종료 최종정산] 보증금 자동 반제 상계 (청구월: ${b.billingYm})`,
+          depositOffsetContractId: contract.id,
+          createdAt: nowIso
+        });
+
+        // Billing 상태 갱신
+        const nextPaid = (b.paidAmount || 0) + offsetAmt;
+        const nextStatus: Billing['status'] = nextPaid >= grandTotal ? 'PAID' : 'PARTIAL';
+        db.updateRow<Billing>('billings', b.id, {
+          paidAmount: nextPaid,
+          status: nextStatus,
+          updatedAt: nowIso
+        });
+      }
+    }
+
+    // 2. 상계 후 남은 잔여 보증금 계산 및 반환
+    const refundAmount = availDeposit; // 미납 반제 후 남은 잔액
+    let finalDepositStatus: DepositStatus = 'FULLY_OFFSET';
+    if (refundAmount > 0) {
+      finalDepositStatus = 'REFUNDED';
+    } else if (contract.depositAmount && contract.depositAmount > 0) {
+      finalDepositStatus = 'FULLY_OFFSET';
+    } else {
+      finalDepositStatus = 'UNPAID';
+    }
+
+    // 3. 계약 상태 종료(COMPLETED) 및 보증금 반환 속성 영구 저장
+    db.updateRow<Contract>('contracts', contract.id, {
+      depositBalance: 0, // 전액 상계 소진되었거나 반환 완료됨
+      depositStatus: finalDepositStatus,
+      depositRefundedDate: refundAmount > 0 ? settleDate : undefined,
+      depositRefundAmount: refundAmount,
+      depositRefundBank: refundAccountInfo?.bank || contract.depositRefundBank,
+      depositRefundAccount: refundAccountInfo?.account || contract.depositRefundAccount,
+      depositRefundHolder: refundAccountInfo?.holder || contract.depositRefundHolder,
+      status: 'COMPLETED',
+      endDate: settleDate < contract.endDate ? settleDate : contract.endDate,
+      updatedAt: nowIso
+    });
+
+    // 4. 계약 이력 무누락 기록 (헌장 1.2 & 4.2 준수)
+    db.insertRow<ContractHistory>('contractHistory', {
+      contractId: contract.id,
+      changeType: refundAmount > 0 ? 'DEPOSIT_REFUNDED' : 'DEPOSIT_OFFSET',
+      changeDate: settleDate,
+      description: `계약 종료 및 보증금 최종 정산 완결: 미납 청구 ${updatedBillingsCount}건 총 ₩${totalOffsetAmount.toLocaleString()}원 보증금 자동 반제 + 잔여 보증금 ₩${refundAmount.toLocaleString()}원 고객 계좌 반환 송금 처리 (상태: ${finalDepositStatus})${memo ? ` [비고: ${memo}]` : ''}`,
+      createdAt: nowIso
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+
+    return {
+      success: true,
+      totalOffsetAmount,
+      refundAmount,
+      updatedBillingsCount
+    };
   };
 
   // 통장입금 등록 (입금내역으로 수납 재원 등록)
@@ -11533,7 +11777,9 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       assignAssetToContract, batchAssignAssetsToContract, unassignAssetFromContract, batchUnassignAssetsFromContract, exchangeOutboundAsset,
       saveSmartDispatch, saveSmartReturn,
       completeTodo, issueExecutiveDirective, resolveExecutiveDirective, cancelExecutiveDirective,
-      generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, syncContractBillingMilestones, splitBillingAbsoluteAmount, regenerateBilling, saveCustomStatementForBilling, removeCustomStatementForBilling, toggleTenantCustomBillingStatement, approveBilling, cancelBilling, receivePayment, cancelPayment, cancelAllPaymentsForBilling, saveBankDeposit, deleteBankDeposit,
+      generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, syncContractBillingMilestones, splitBillingAbsoluteAmount, regenerateBilling, saveCustomStatementForBilling, removeCustomStatementForBilling, toggleTenantCustomBillingStatement, approveBilling, cancelBilling, receivePayment, cancelPayment, cancelAllPaymentsForBilling,
+      confirmContractDepositPayment, offsetDepositForBilling, settleContractDepositAndComplete,
+      saveBankDeposit, deleteBankDeposit,
       addReceivable, generateStandaloneBillingForReceivable, linkReceivableToBilling,
       uploadBankTransactions, matchTransactionManual, batchAutoMatchTransactions, unmatchTransaction, saveMatchingRule, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,

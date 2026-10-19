@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useSortableData } from '../hooks/useSortableData';
 import { SortableTh } from '../components/SortableTh';
 import { useApp } from '../context/AppContext';
-import { db, isActivePayment, Asset, Billing, BillingDetail, ContractHistory, normalizeEndDate, formatContractEndDate, CustomStatementItem, ApprovalPayload, TenantBankAccount, Tenant } from '../services/db';
+import { db, isActivePayment, Asset, Billing, BillingDetail, ContractHistory, normalizeEndDate, formatContractEndDate, CustomStatementItem, ApprovalPayload, TenantBankAccount, Tenant, DEPOSIT_STATUS_LABELS } from '../services/db';
 import { Plus, Download, Mail, CheckCircle, Search, DollarSign, Calendar, FileText, Send, Edit3, RotateCcw, AlertTriangle, Check, Layers, Sliders, Settings, Scissors } from 'lucide-react';
 import { emailService } from '../services/email';
 import { exportToExcel, exportTransactionStatementExcel, exportTransactionStatementExcelBuffer, calcServicePeriod, formatStatementItemName, buildStatementItemFromDetail } from '../services/excel';
@@ -49,7 +49,7 @@ export const Billings: React.FC = () => {
   const {
     billings, billingDetails, customers, contacts, contracts, contractAssets, assets, sites, users, officialMailConfigs,
     generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, regenerateBilling, generateBillingForSingleContract, splitBillingAbsoluteAmount, syncContractBillingMilestones,
-    receivePayment, cancelPayment, cancelAllPaymentsForBilling, hasPermission, currentUser, approveBilling, cancelBilling,
+    receivePayment, cancelPayment, cancelAllPaymentsForBilling, offsetDepositForBilling, hasPermission, currentUser, approveBilling, cancelBilling,
     refreshAllData, showErrorModal, bankTransactions, paymentDepositLinks, payments,
     repairs, linkRepairToBilling, unlinkRepairFromBilling, waiveRepairBilling, cancelRepairWaiver,
     deliveries, linkDeliveryToBilling, unlinkDeliveryFromBilling, waiveDeliveryBilling, cancelDeliveryWaiver,
@@ -334,11 +334,12 @@ export const Billings: React.FC = () => {
   const [payDate, setPayDate] = useState(new Date().toISOString().split('T')[0]);
   const [payMethod, setPayMethod] = useState('BANK_TRANSFER');
   const [payMemo, setPayMemo] = useState('');
-  // 2대 전용 탭: 통장입금액 수납 / 카드결제
-  const [payMode, setPayMode] = useState<'DEPOSIT' | 'CARD'>('DEPOSIT');
+  // 3대 전용 탭: 통장입금액 수납 / 카드결제 / 보증금 상계
+  const [payMode, setPayMode] = useState<'DEPOSIT' | 'CARD' | 'DEPOSIT_OFFSET'>('DEPOSIT');
   const [depositLinkDraft, setDepositLinkDraft] = useState<Record<string, number>>({}); // txId -> usedAmount
   const [cardApprovalNo, setCardApprovalNo] = useState(''); // 카드전표번호(승인번호)
   const [cardAmount, setCardAmount] = useState(0); // 카드 결제금액
+  const [depositOffsetAmount, setDepositOffsetAmount] = useState(0); // 보증금 상계 신청 금액
   // 마법사 연동 수리비 ID 목록
   const [selectedRepairIdsForWizard, setSelectedRepairIdsForWizard] = useState<string[]>([]);
   // 마법사 연동 운송료 ID 목록
@@ -1019,6 +1020,39 @@ showToast('모든 수납 내역 일괄 취소 및 통장 잔액을 복원합니�
         method: 'CARD',
         memo: payMemo ? `${payMemo} (카드승인: ${cardApprovalNo.trim()})` : `카드결제 (승인번호: ${cardApprovalNo.trim()})`
       });
+    } else if (payMode === 'DEPOSIT_OFFSET') {
+      const billing = billings.find(b => b.id === payBillingId);
+      if (!billing || !billing.contractId) {
+        showErrorModal('해당 청구서에 연결된 계약이 없습니다.', '수납 오류');
+        return;
+      }
+      const contract = contracts.find(c => c.id === billing.contractId);
+      if (!contract) {
+        showErrorModal('연결된 계약 정보를 찾을 수 없습니다.', '수납 오류');
+        return;
+      }
+      const avail = contract.depositBalance || 0;
+      if (avail <= 0) {
+        showErrorModal('해당 계약에 가용 보증금 잔액이 없습니다.', '수납 오류');
+        return;
+      }
+      if (depositOffsetAmount <= 0) {
+        showErrorModal('상계할 금액을 1원 이상 입력해 주십시오.', '수납 오류');
+        return;
+      }
+      try {
+        await offsetDepositForBilling(
+          payBillingId,
+          contract.id,
+          depositOffsetAmount,
+          payDate,
+          payMemo || `보증금 상계 수납`
+        );
+        showToast(`보증금 ₩${depositOffsetAmount.toLocaleString()}원 상계 수납이 완료되었습니다.`);
+      } catch (err: any) {
+        showErrorModal(`보증금 상계 처리 실패: ${err?.message || err}`, '수납 오류');
+        return;
+      }
     }
 
     setShowPayModal(false);
@@ -5370,6 +5404,10 @@ ${currentTenant?.tradeName || currentTenant?.corporateName || '임대인'} 올�
       {showPayModal && (() => {
         const payBilling = billings.find(b => b.id === payBillingId);
         const custId = payBilling?.customerId;
+        const payContract = contracts.find(c => c.id === payBilling?.contractId);
+        const contractDepositBalance = payContract?.depositBalance || 0;
+        const contractDepositTotal = payContract?.depositAmount || 0;
+        const contractDepositStatus = payContract?.depositStatus || 'UNPAID';
         const billingSupply = payBilling?.totalAmount || 0;
         const billingVat = Math.round(billingSupply * 0.1);
         const billingGrandTotal = billingSupply + billingVat; // 당월 청구 총액 (VAT포함)
@@ -5407,6 +5445,8 @@ ${currentTenant?.tradeName || currentTenant?.corporateName || '임대인'} 올�
         let payAmount = 0;
         if (payMode === 'DEPOSIT') {
           payAmount = Object.values(depositLinkDraft).reduce((s, v) => s + (Number(v) || 0), 0);
+        } else if (payMode === 'DEPOSIT_OFFSET') {
+          payAmount = Number(depositOffsetAmount) || 0;
         } else {
           payAmount = Number(cardAmount) || 0;
         }
@@ -5479,7 +5519,7 @@ ${currentTenant?.tradeName || currentTenant?.corporateName || '임대인'} 올�
                 </div>
               </div>
 
-              {/* 🌟 2개 탭 버튼 단일화: 통장입금액 수납 / 카드결제 */}
+              {/* 🌟 3개 탭 버튼: 통장입금액 수납 / 카드결제 / 보증금 상계 */}
               <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', marginBottom: '16px' }}>
                 <button type="button" onClick={() => setPayMode('DEPOSIT')}
                   style={{
@@ -5499,6 +5539,22 @@ ${currentTenant?.tradeName || currentTenant?.corporateName || '임대인'} 올�
                     color: payMode === 'CARD' ? 'var(--primary)' : 'var(--text-secondary)'
                   }}>
                   카드결제 (Tab)
+                </button>
+                <button type="button" onClick={() => {
+                  setPayMode('DEPOSIT_OFFSET');
+                  setDepositOffsetAmount(Math.min(unpaid, contractDepositBalance));
+                }}
+                  style={{
+                    padding: '8px 20px', fontSize: '13px', fontWeight: '700', border: 'none', background: 'none', cursor: 'pointer',
+                    borderBottom: payMode === 'DEPOSIT_OFFSET' ? '3px solid var(--primary)' : '3px solid transparent',
+                    color: payMode === 'DEPOSIT_OFFSET' ? 'var(--primary)' : 'var(--text-secondary)'
+                  }}>
+                  보증금 상계 (Tab)
+                  {contractDepositBalance > 0 && (
+                    <span style={{ marginLeft: '6px', fontSize: '11px', padding: '1px 6px', borderRadius: '10px', background: 'rgba(16, 185, 129, 0.15)', color: '#10B981' }}>
+                      잔액 ₩{contractDepositBalance.toLocaleString()}
+                    </span>
+                  )}
                 </button>
               </div>
 
@@ -5711,11 +5767,130 @@ ${currentTenant?.tradeName || currentTenant?.corporateName || '임대인'} 올�
                   </div>
                 )}
 
+                {/* ═══════════════ [탭 3: 보증금 상계] ═══════════════ */}
+                {payMode === 'DEPOSIT_OFFSET' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    {/* 계약 보증금 현황 테이블 */}
+                    <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', border: '1px solid var(--border)', background: 'var(--bg-app)', borderRadius: '6px', overflow: 'hidden' }}>
+                      <thead>
+                        <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border)' }}>
+                          <th style={{ padding: '8px 10px', fontSize: '12px', textAlign: 'left', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>계약번호</th>
+                          <th style={{ padding: '8px 10px', fontSize: '12px', textAlign: 'right', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>약정 보증금</th>
+                          <th style={{ padding: '8px 10px', fontSize: '12px', textAlign: 'center', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>보증금 상태</th>
+                          <th style={{ padding: '8px 10px', fontSize: '12px', textAlign: 'right', whiteSpace: 'nowrap', color: 'var(--primary)' }}>가용 보증금 잔액</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr style={{ fontSize: '13px', fontWeight: '700' }}>
+                          <td style={{ padding: '10px', textAlign: 'left', borderRight: '1px solid var(--border)' }}>
+                            {payContract ? payContract.contractNo : '계약 정보 없음'}
+                          </td>
+                          <td style={{ padding: '10px', textAlign: 'right', borderRight: '1px solid var(--border)' }}>
+                            {contractDepositTotal.toLocaleString()} 원
+                          </td>
+                          <td style={{ padding: '10px', textAlign: 'center', borderRight: '1px solid var(--border)' }}>
+                            <span style={{
+                              display: 'inline-block',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: 700,
+                              background: contractDepositBalance > 0 ? 'rgba(16, 185, 129, 0.1)' : 'rgba(156, 163, 175, 0.1)',
+                              color: contractDepositBalance > 0 ? '#10B981' : 'var(--text-secondary)'
+                            }}>
+                              {DEPOSIT_STATUS_LABELS[contractDepositStatus]?.label || contractDepositStatus}
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px', textAlign: 'right', color: contractDepositBalance > 0 ? '#10B981' : 'var(--danger)', fontSize: '14px' }}>
+                            {contractDepositBalance.toLocaleString()} 원
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    {contractDepositBalance <= 0 ? (
+                      <div style={{ padding: '20px', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.25)', color: 'var(--danger)', fontSize: '13px', textAlign: 'center' }}>
+                        해당 계약의 가용 보증금 잔액이 0원입니다.<br />
+                        <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>계약 상세 화면에서 보증금 입금을 먼저 확인하거나, 통장입금액 수납 탭을 이용해 주십시오.</span>
+                      </div>
+                    ) : (
+                      <div style={{ border: '1px solid var(--border)', borderRadius: '6px', overflow: 'hidden' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                          <tbody>
+                            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                              <th style={{ padding: '10px 14px', background: 'var(--bg-app)', width: '170px', textAlign: 'left', fontSize: '13px', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                                상계일자 *
+                              </th>
+                              <td style={{ padding: '8px 14px' }}>
+                                <input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} required style={{ padding: '6px 10px', fontSize: '13px' }} />
+                              </td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                              <th style={{ padding: '10px 14px', background: 'var(--bg-app)', textAlign: 'left', fontSize: '13px', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                                상계 신청 금액 *
+                              </th>
+                              <td style={{ padding: '8px 14px' }}>
+                                <div style={{ display: 'flex', gap: '8px', alignItems: 'center', maxWidth: '360px' }}>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={Math.min(unpaid, contractDepositBalance)}
+                                    value={depositOffsetAmount || ''}
+                                    onChange={e => {
+                                      const val = Math.max(0, parseInt(e.target.value) || 0);
+                                      const maxPossible = Math.min(unpaid, contractDepositBalance);
+                                      setDepositOffsetAmount(Math.min(val, maxPossible));
+                                    }}
+                                    required
+                                    style={{ flex: 1, padding: '6px 10px', fontSize: '14px', fontWeight: '700' }}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setDepositOffsetAmount(Math.min(unpaid, contractDepositBalance))}
+                                    style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '4px', background: 'var(--primary)', color: '#fff', border: 'none', cursor: 'pointer', whiteSpace: 'nowrap', fontWeight: '600' }}>
+                                    전액 상계
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setDepositOffsetAmount(0)}
+                                    style={{ padding: '6px 10px', fontSize: '11px', borderRadius: '4px', background: 'var(--bg-app)', color: 'var(--text-secondary)', border: '1px solid var(--border)', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                                    0원
+                                  </button>
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                                  최대 상계 가능액: ₩{Math.min(unpaid, contractDepositBalance).toLocaleString()} (청구 미납액과 가용 보증금 중 작은 금액)
+                                </div>
+                              </td>
+                            </tr>
+                            <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                              <th style={{ padding: '10px 14px', background: 'var(--bg-app)', textAlign: 'left', fontSize: '13px', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                                상계 후 청구잔액
+                              </th>
+                              <td style={{ padding: '10px 14px', fontSize: '14px', fontWeight: '700', color: remainingBilling === 0 ? '#10B981' : 'var(--text-primary)' }}>
+                                {remainingBilling.toLocaleString()} 원
+                                {remainingBilling === 0 && <span style={{ fontSize: '11px', color: '#10B981', marginLeft: '6px' }}>(완납)</span>}
+                              </td>
+                            </tr>
+                            <tr>
+                              <th style={{ padding: '10px 14px', background: 'var(--bg-app)', textAlign: 'left', fontSize: '13px', borderRight: '1px solid var(--border)', whiteSpace: 'nowrap' }}>
+                                상계 후 보증금 잔액
+                              </th>
+                              <td style={{ padding: '10px 14px', fontSize: '14px', fontWeight: '700', color: '#10B981' }}>
+                                {Math.max(0, contractDepositBalance - depositOffsetAmount).toLocaleString()} 원
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* 공통 비고 */}
                 <div>
                   <label style={{ fontSize: '12px', color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>비고</label>
                   <input type="text" value={payMemo} onChange={e => setPayMemo(e.target.value)}
-                    placeholder={payMode === 'DEPOSIT' ? '(통장입금 연동 자동 기록)' : '예: 법인카드 결제'} />
+                    placeholder={payMode === 'DEPOSIT' ? '(통장입금 연동 자동 기록)' : payMode === 'DEPOSIT_OFFSET' ? '보증금 상계 수납' : '예: 법인카드 결제'} />
                 </div>
               </div>
 
@@ -5726,10 +5901,16 @@ ${currentTenant?.tradeName || currentTenant?.corporateName || '임대인'} 올�
                   ref={paySubmitBtnRef}
                   type="submit" 
                   className="btn-primary"
-                  disabled={payAmount <= 0 || (payMode === 'CARD' && !cardApprovalNo.trim())}
+                  disabled={
+                    payAmount <= 0 || 
+                    (payMode === 'CARD' && !cardApprovalNo.trim()) ||
+                    (payMode === 'DEPOSIT_OFFSET' && (!payContract || payAmount > contractDepositBalance || payAmount > unpaid))
+                  }
                   style={{ fontWeight: 'bold' }}
                 >
-                  {isOverMatch ? `초과 수납 승인 (선수금 ₩${(payAmount - unpaid).toLocaleString()} 자동 적립)` : isExactMatch ? '완납 처리 완료' : isPartialMatch ? '부분 수납 처리' : '수납 완료 처리'}
+                  {payMode === 'DEPOSIT_OFFSET'
+                    ? `보증금 상계 처리 (₩${payAmount.toLocaleString()})`
+                    : isOverMatch ? `초과 수납 승인 (선수금 ₩${(payAmount - unpaid).toLocaleString()} 자동 적립)` : isExactMatch ? '완납 처리 완료' : isPartialMatch ? '부분 수납 처리' : '수납 완료 처리'}
                 </button>
               </div>
             </form>

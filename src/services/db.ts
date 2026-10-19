@@ -1715,6 +1715,17 @@ export interface SaleContractTerms {
   specialNotes?: string; // 추가 특약 사항 전문
 }
 
+/** 🛡️ IT 렌탈 보증금 라이프사이클 상태 */
+export type DepositStatus = 'UNPAID' | 'HELD' | 'PARTIAL_OFFSET' | 'FULLY_OFFSET' | 'REFUNDED';
+
+export const DEPOSIT_STATUS_LABELS: Record<DepositStatus, { label: string; color: string; badgeClass: string }> = {
+  UNPAID: { label: '보증금 미입금', color: '#9ca3af', badgeClass: 'badge-secondary' },
+  HELD: { label: '보증금 보관중', color: '#10b981', badgeClass: 'badge-success' },
+  PARTIAL_OFFSET: { label: '보증금 일부상계', color: '#f59e0b', badgeClass: 'badge-warning' },
+  FULLY_OFFSET: { label: '보증금 전액상계', color: '#3b82f6', badgeClass: 'badge-info' },
+  REFUNDED: { label: '보증금 반환완료', color: '#6366f1', badgeClass: 'badge-primary' }
+};
+
 export interface Contract {
   id: string;
   contractNo: string;
@@ -1730,7 +1741,17 @@ export interface Contract {
   contractPeriodType?: 'SHORT_TERM' | 'LONG_TERM'; // 'SHORT_TERM'(일/주/월 단기) | 'LONG_TERM'(장기 약정)
   termMonths?: number;            // 약정 개월 수 (12, 24, 36개월 등)
   earlyTerminationFeeRate?: number; // 중도해지 위약금율 (기본 10%)
-  depositAmount?: number;         // 보증금/선수금
+  depositAmount?: number;         // 약정 보증금 총액
+  depositBalance?: number;        // 현재 가용 잔여 보증금
+  depositStatus?: DepositStatus;  // 보증금 상태 ('UNPAID', 'HELD', 'PARTIAL_OFFSET', 'FULLY_OFFSET', 'REFUNDED')
+  depositPaidDate?: string;       // 보증금 입금 확인 일자 (YYYY-MM-DD)
+  depositBankTransactionId?: string; // 보증금 입금 매핑 통장 거래 ID
+  depositRefundedDate?: string;   // 보증금 반환 일자 (YYYY-MM-DD)
+  depositRefundAmount?: number;   // 반환 금액 (원)
+  depositRefundBank?: string;     // 반환 은행명
+  depositRefundAccount?: string;  // 반환 계좌번호
+  depositRefundHolder?: string;   // 반환 예금주
+  depositMemo?: string;           // 보증금 관리 메모
   pureRentalFee?: number;         // 순 렌탈료 합계
   isDeliverySetupFeeBilled?: boolean; // 운반설치비 등 청구 여부
   deliverySetupFeeAmount?: number; // 운반설치비 등 청구 금액
@@ -1783,7 +1804,7 @@ export interface ContractHistory {
   contractId: string;
   changeType: 'REGISTER' | 'EXTEND' | 'SHORTEN' | 'SUCCEED' | 'TERMINATE' | 'EXCHANGE' | 'FEE_CHANGE' | 'AS_SERVICE'
            | 'BILLING_CREATED' | 'BILLING_SENT' | 'BILLING_CANCELLED' | 'BILLING_REGENERATED' | 'PAYMENT_RECEIVED' | 'PAYMENT_CANCELLED' | 'DOCUMENT_SENT' | 'ASSET_SOLD'
-           | 'ASSET_PERIOD_CHANGE' | 'ADD_ASSET';
+           | 'ASSET_PERIOD_CHANGE' | 'ADD_ASSET' | 'DEPOSIT_RECEIVED' | 'DEPOSIT_OFFSET' | 'DEPOSIT_REFUNDED';
   changeDate: string;
   prevEndDate?: string;
   newEndDate?: string;
@@ -1905,9 +1926,10 @@ export interface Payment {
   billingId?: string | null;
   paymentDate: string;
   amount: number;
-  method: string; // 'BANK_TRANSFER' | 'CARD' | 'CASH'
+  method: string; // 'BANK_TRANSFER' | 'CARD' | 'CASH' | 'PREPAID' | 'DEPOSIT_OFFSET'
   memo: string;
   feeAdjustment?: number; // 송금수수료 등 차액 자동 감액 상계액 (500원/1,000원 등)
+  depositOffsetContractId?: string; // 보증금 상계 계약 ID (method === 'DEPOSIT_OFFSET' 시)
   createdAt: string;
   updatedAt?: string;
   // 상계(역분개) 필드: 취소 시 원 행을 삭제하지 않고 음수 상계 행을 추가한다 (G-10)

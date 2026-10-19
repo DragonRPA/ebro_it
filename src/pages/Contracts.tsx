@@ -12,7 +12,8 @@ import {
   Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery, Asset,
   OutboundInspection, normalizeEndDate, formatContractEndDate, isIndefiniteEndDate, PAYMENT_DUE_MONTH_OPTIONS,
   formatPaymentDueCondition, isCustomerRestricted, isCustomerTotalBlocked, ApprovalPayload,
-  BillingTarget, ITDeliveryMethod, IT_DELIVERY_METHOD_LABELS, IT_DELIVERY_METHODS
+  BillingTarget, ITDeliveryMethod, IT_DELIVERY_METHOD_LABELS, IT_DELIVERY_METHODS,
+  DEPOSIT_STATUS_LABELS, DepositStatus
 } from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { ContractDocumentBundleModal } from '../components/ContractDocumentBundleModal';
@@ -25,6 +26,7 @@ export const Contracts: React.FC = () => {
     createContract, extendContract, shortenContract, succeedContract, exchangeAsset, hasPermission,
     products, refreshAllData, deliveries, repairs, outboundInspections, billings, billingDetails, receivables,
     navigationPayload, setNavigationPayload, updateContractAssetPeriod, relocateContractAsset, showErrorModal,
+    confirmContractDepositPayment, settleContractDepositAndComplete, bankTransactions,
     setActiveTab: setGlobalActiveTab
   } = useApp();
 
@@ -249,6 +251,119 @@ export const Contracts: React.FC = () => {
   const [relocateTransportCost, setRelocateTransportCost] = useState(0);
   const [relocatePaidBy, setRelocatePaidBy] = useState<'OURS' | 'CUSTOMER' | 'VENDOR'>('CUSTOMER');
   const [relocateReason, setRelocateReason] = useState('');
+
+  // 5) 보증금 입금 확인 모달
+  const [showConfirmDepositModal, setShowConfirmDepositModal] = useState(false);
+  const [depositConfirmContract, setDepositConfirmContract] = useState<Contract | null>(null);
+  const [depositConfirmAmount, setDepositConfirmAmount] = useState(0);
+  const [depositConfirmDate, setDepositConfirmDate] = useState(new Date().toISOString().split('T')[0]);
+  const [depositConfirmTxId, setDepositConfirmTxId] = useState('');
+  const [depositConfirmMemo, setDepositConfirmMemo] = useState('');
+  const [isSubmittingConfirmDeposit, setIsSubmittingConfirmDeposit] = useState(false);
+
+  // 6) 계약종료 및 보증금 최종정산 모달
+  const [showDepositSettlementModal, setShowDepositSettlementModal] = useState(false);
+  const [depositSettleContract, setDepositSettleContract] = useState<Contract | null>(null);
+  const [depositSettleDate, setDepositSettleDate] = useState(new Date().toISOString().split('T')[0]);
+  const [depositRefundBank, setDepositRefundBank] = useState('');
+  const [depositRefundAccount, setDepositRefundAccount] = useState('');
+  const [depositRefundHolder, setDepositRefundHolder] = useState('');
+  const [depositSettleMemo, setDepositSettleMemo] = useState('');
+  const [isSubmittingSettleDeposit, setIsSubmittingSettleDeposit] = useState(false);
+
+  const handleOpenConfirmDeposit = (contract: Contract) => {
+    setDepositConfirmContract(contract);
+    const targetAmount = (contract.depositAmount || 0) > 0 ? contract.depositAmount! : 0;
+    setDepositConfirmAmount(targetAmount);
+    setDepositConfirmDate(new Date().toISOString().split('T')[0]);
+    setDepositConfirmTxId('');
+    setDepositConfirmMemo(`계약 ${contract.contractNo} 보증금 입금 확인`);
+    setShowConfirmDepositModal(true);
+  };
+
+  const handleConfirmDepositSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!depositConfirmContract || depositConfirmAmount <= 0) {
+      showErrorModal('입금 확인 금액을 1원 이상 입력해 주십시오.');
+      return;
+    }
+    setIsSubmittingConfirmDeposit(true);
+    try {
+      await confirmContractDepositPayment(
+        depositConfirmContract.id,
+        depositConfirmAmount,
+        depositConfirmDate,
+        depositConfirmTxId || undefined,
+        depositConfirmMemo
+      );
+      showToast(`계약 [${depositConfirmContract.contractNo}] 보증금 ₩${depositConfirmAmount.toLocaleString()}원 입금이 확인되었습니다.`);
+      setShowConfirmDepositModal(false);
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`보증금 입금 확인 실패: ${err?.message || err}`);
+    } finally {
+      setIsSubmittingConfirmDeposit(false);
+    }
+  };
+
+  const handleOpenDepositSettlement = (contract: Contract) => {
+    setDepositSettleContract(contract);
+    setDepositSettleDate(new Date().toISOString().split('T')[0]);
+    // 고객사 등록 계좌가 있다면 기본값으로 자동 프리필
+    const cust = customers.find(c => c.id === contract.customerId);
+    const defaultAcc = cust?.bankAccounts?.[0];
+    setDepositRefundBank(defaultAcc?.bankName || '');
+    setDepositRefundAccount(defaultAcc?.accountNumber || '');
+    setDepositRefundHolder(defaultAcc?.accountHolder || cust?.representative || cust?.name || '');
+    setDepositSettleMemo(`계약종료 및 보증금 최종정산 완료`);
+    setShowDepositSettlementModal(true);
+  };
+
+  const handleDepositSettlementSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!depositSettleContract) return;
+
+    const contractBillings = billings.filter(b => b.contractId === depositSettleContract.id && b.status !== 'REJECTED' && b.status !== 'PAID');
+    const unpaidTotal = contractBillings.reduce((sum, b) => {
+      const supply = b.totalAmount || 0;
+      const grand = supply + Math.round(supply * 0.1);
+      return sum + Math.max(0, grand - (b.paidAmount || 0));
+    }, 0);
+    const curBalance = depositSettleContract.depositBalance || 0;
+    const refundAmount = Math.max(0, curBalance - unpaidTotal);
+
+    if (refundAmount > 0) {
+      if (!depositRefundBank.trim() || !depositRefundAccount.trim() || !depositRefundHolder.trim()) {
+        showErrorModal('반환(환급)할 보증금 잔액이 있으므로 환급 계좌(은행, 계좌번호, 예금주)를 모두 입력해 주십시오.');
+        return;
+      }
+    }
+
+    if (!window.confirm(`계약 [${depositSettleContract.contractNo}]을 종료하고 보증금을 최종 정산하시겠습니까?\n\n- 미납 청구 상계 예정: ₩${Math.min(curBalance, unpaidTotal).toLocaleString()}원\n- 고객 환급(반환) 예정: ₩${refundAmount.toLocaleString()}원\n\n이 작업은 계약을 최종 종료(COMPLETED) 상태로 변경합니다.`)) {
+      return;
+    }
+
+    setIsSubmittingSettleDeposit(true);
+    try {
+      const result = await settleContractDepositAndComplete(
+        depositSettleContract.id,
+        depositSettleDate,
+        refundAmount > 0 ? {
+          bank: depositRefundBank.trim(),
+          account: depositRefundAccount.trim(),
+          holder: depositRefundHolder.trim()
+        } : undefined,
+        depositSettleMemo
+      );
+      showToast(`계약 [${depositSettleContract.contractNo}]이 최종 종료되었습니다. (미납 상계: ₩${result.totalOffsetAmount.toLocaleString()}원 / 반환: ₩${result.refundAmount.toLocaleString()}원)`);
+      setShowDepositSettlementModal(false);
+      refreshAllData();
+    } catch (err: any) {
+      showErrorModal(`계약종료 및 보증금 정산 실패: ${err?.message || err}`);
+    } finally {
+      setIsSubmittingSettleDeposit(false);
+    }
+  };
 
   // ⚡ O(1) 조회용 인덱스 맵 사전 계산 (필터 변경 시 O(N*M) 중첩 탐색 방지)
   const customerMap = useMemo(() => {
@@ -2515,6 +2630,16 @@ export const Contracts: React.FC = () => {
                   <button className="btn-secondary" onClick={handleOpenTransferModal} style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <ArrowLeftRight size={14} /> 계약 승계
                   </button>
+
+                  {activeContract.status !== 'COMPLETED' && (
+                    <button
+                      className="btn-danger"
+                      onClick={() => handleOpenDepositSettlement(activeContract)}
+                      style={{ padding: '6px 12px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', fontWeight: 'bold' }}
+                    >
+                      <CheckCircle2 size={14} /> 계약종료 및 보증금 최종정산
+                    </button>
+                  )}
                 </>
               )}
             </div>
@@ -2848,6 +2973,109 @@ export const Contracts: React.FC = () => {
                             </span>
                           </div>
                         ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* 🌟 보증금(가수금) 라이프사이클 관리 카드 */}
+              {(() => {
+                const depAmt = activeContract.depositAmount || 0;
+                const depBal = activeContract.depositBalance || 0;
+                const depStatus = activeContract.depositStatus || 'UNPAID';
+                const isPaid = Boolean(activeContract.depositPaidDate);
+
+                return (
+                  <div style={{
+                    marginTop: '12px',
+                    padding: '12px 14px',
+                    backgroundColor: 'var(--bg-app)',
+                    borderRadius: '8px',
+                    border: '1px solid var(--border-color)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '10px'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <ShieldCheck size={16} color="var(--primary)" />
+                        <strong style={{ fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                          보증금 (가수금) 관리
+                        </strong>
+                        <span style={{
+                          fontSize: '11px',
+                          fontWeight: 700,
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background: depBal > 0 ? 'rgba(16, 185, 129, 0.15)' : depStatus === 'REFUNDED' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(239, 68, 68, 0.12)',
+                          color: depBal > 0 ? '#10B981' : depStatus === 'REFUNDED' ? 'var(--primary)' : 'var(--danger)'
+                        }}>
+                          {DEPOSIT_STATUS_LABELS[depStatus]?.label || depStatus}
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        {canSave && (!isPaid || depStatus === 'UNPAID') && depAmt > 0 && (
+                          <button
+                            type="button"
+                            className="btn-primary"
+                            onClick={() => handleOpenConfirmDeposit(activeContract)}
+                            style={{ padding: '4px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
+                          >
+                            <CheckCircle2 size={12} /> 보증금 입금 확인
+                          </button>
+                        )}
+                        {canSave && activeContract.status !== 'COMPLETED' && (
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            onClick={() => handleOpenDepositSettlement(activeContract)}
+                            style={{ padding: '4px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--danger)', borderColor: 'var(--danger)' }}
+                          >
+                            <Receipt size={12} /> 계약종료 및 최종정산
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 4단 그리드 정보 요약 */}
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px' }}>
+                      <div style={{ padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>약정 보증금</div>
+                        <div style={{ fontSize: '12px', fontWeight: 700 }}>{depAmt.toLocaleString()}원</div>
+                      </div>
+                      <div style={{ padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>가용 보증금 잔액</div>
+                        <div style={{ fontSize: '12px', fontWeight: 800, color: depBal > 0 ? '#10B981' : 'var(--text-muted)' }}>{depBal.toLocaleString()}원</div>
+                      </div>
+                      <div style={{ padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>입금일자</div>
+                        <div style={{ fontSize: '12px', fontWeight: 600 }}>{activeContract.depositPaidDate || '미입금'}</div>
+                      </div>
+                      <div style={{ padding: '6px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)' }}>
+                        <div style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>반환일자 / 환급액</div>
+                        <div style={{ fontSize: '12px', fontWeight: 600 }}>
+                          {activeContract.depositRefundedDate ? `${activeContract.depositRefundedDate} (₩${(activeContract.depositRefundAmount || 0).toLocaleString()})` : '-'}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 부가 메모 및 환급 계좌 정보 */}
+                    {(activeContract.depositRefundAccount || activeContract.depositMemo) && (
+                      <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '2px', backgroundColor: 'var(--bg-card)', padding: '6px 10px', borderRadius: '4px', border: '1px dashed var(--border-color)' }}>
+                        {activeContract.depositRefundAccount && (
+                          <div>
+                            <span style={{ color: 'var(--text-muted)' }}>환급 계좌: </span>
+                            <strong>{activeContract.depositRefundBank} {activeContract.depositRefundAccount} ({activeContract.depositRefundHolder})</strong>
+                          </div>
+                        )}
+                        {activeContract.depositMemo && (
+                          <div>
+                            <span style={{ color: 'var(--text-muted)' }}>정산 비고: </span>
+                            <span>{activeContract.depositMemo}</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -4590,6 +4818,329 @@ export const Contracts: React.FC = () => {
                 </div>
               </form>
             </div>
+          </div>
+        );
+      })()}
+
+      {/* 🌟 모달 7: 보증금 입금 확인 모달 */}
+      {showConfirmDepositModal && depositConfirmContract && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+          <form onSubmit={handleConfirmDepositSubmit} className="card" style={{ width: '100%', maxWidth: '520px', backgroundColor: 'var(--bg-card)', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <CheckCircle2 size={18} color="var(--primary)" /> 보증금 입금 확인
+              </h3>
+              <button type="button" onClick={() => setShowConfirmDepositModal(false)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', fontSize: '18px', cursor: 'pointer' }}>✕</button>
+            </div>
+
+            {/* 계약 기본 정보 요약 박스 */}
+            <div style={{ marginBottom: '14px', padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '12.5px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>계약번호:</span>
+                <strong style={{ color: 'var(--primary)' }}>{depositConfirmContract.contractNo}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>고객사:</span>
+                <strong>{getCustName(depositConfirmContract.customerId)}</strong>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>약정 보증금:</span>
+                <span style={{ fontWeight: 700 }}>{(depositConfirmContract.depositAmount || 0).toLocaleString()}원</span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                <span style={{ color: 'var(--text-muted)' }}>현재 가용 잔액:</span>
+                <span style={{ fontWeight: 700, color: '#10B981' }}>{(depositConfirmContract.depositBalance || 0).toLocaleString()}원</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', marginBottom: '18px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>입금일자 *</label>
+                  <input
+                    type="date"
+                    value={depositConfirmDate}
+                    onChange={e => setDepositConfirmDate(e.target.value)}
+                    required
+                    style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>입금 확인 금액 *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={depositConfirmAmount || ''}
+                    onChange={e => setDepositConfirmAmount(Math.max(0, parseInt(e.target.value) || 0))}
+                    required
+                    style={{ width: '100%', padding: '8px', fontSize: '13px', fontWeight: 700, borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+              </div>
+
+              {/* 통장 거래 매핑 (선택 사항) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>
+                  연결 통장 입금 내역 (선택)
+                </label>
+                <select
+                  value={depositConfirmTxId}
+                  onChange={e => setDepositConfirmTxId(e.target.value)}
+                  style={{ width: '100%', padding: '8px', fontSize: '12.5px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)' }}
+                >
+                  <option value="">-- 통장 입금 내역 직접 매핑 안 함 (수기 입금 확인) --</option>
+                  {(bankTransactions || [])
+                    .filter(t => t.isDeposit && (t.customerId === depositConfirmContract.customerId || !t.customerId))
+                    .slice(0, 15)
+                    .map(t => (
+                      <option key={t.id} value={t.id}>
+                        [{t.transactionDate.split(' ')[0]}] {t.senderName} - ₩{(t.depositAmount || 0).toLocaleString()}원 ({t.memo || '입금'})
+                      </option>
+                    ))}
+                </select>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                  고객사 명의로 입금된 미연결 통장 내역 중 1건을 선택하거나, 수기 확인으로 바로 진행할 수 있습니다.
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>비고 및 메모</label>
+                <input
+                  type="text"
+                  value={depositConfirmMemo}
+                  onChange={e => setDepositConfirmMemo(e.target.value)}
+                  placeholder="예: 우리은행 계약보증금 1차 입금 확인"
+                  style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                />
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => setShowConfirmDepositModal(false)}
+                disabled={isSubmittingConfirmDeposit}
+              >
+                취소
+              </button>
+              <button
+                type="submit"
+                className="btn-primary"
+                disabled={depositConfirmAmount <= 0 || isSubmittingConfirmDeposit}
+                style={{ fontWeight: 800 }}
+              >
+                {isSubmittingConfirmDeposit ? '저장 중...' : '보증금 입금 승인'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 🌟 모달 8: 계약종료 및 보증금 최종정산 모달 */}
+      {showDepositSettlementModal && depositSettleContract && (() => {
+        const contractBillings = billings.filter(b => b.contractId === depositSettleContract.id && b.status !== 'REJECTED' && b.status !== 'PAID');
+        const unpaidBillings = contractBillings.map(b => {
+          const supply = b.totalAmount || 0;
+          const grand = supply + Math.round(supply * 0.1);
+          const paid = b.paidAmount || 0;
+          return {
+            ...b,
+            grandTotal: grand,
+            unpaidAmount: Math.max(0, grand - paid)
+          };
+        }).filter(b => b.unpaidAmount > 0);
+
+        const totalUnpaidAmount = unpaidBillings.reduce((s, b) => s + b.unpaidAmount, 0);
+        const curBalance = depositSettleContract.depositBalance || 0;
+        const estimatedOffset = Math.min(curBalance, totalUnpaidAmount);
+        const estimatedRemainingBillings = Math.max(0, totalUnpaidAmount - curBalance);
+        const estimatedRefund = Math.max(0, curBalance - totalUnpaidAmount);
+
+        return (
+          <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '16px' }}>
+            <form onSubmit={handleDepositSettlementSubmit} className="card" style={{ width: '100%', maxWidth: '640px', backgroundColor: 'var(--bg-card)', maxHeight: '92vh', overflowY: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', padding: '24px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+                <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--danger)' }}>
+                  <Receipt size={18} /> 계약종료 및 보증금 최종정산
+                </h3>
+                <button type="button" onClick={() => setShowDepositSettlementModal(false)} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', fontSize: '18px', cursor: 'pointer' }}>✕</button>
+              </div>
+
+              {/* 계약 기본 정보 */}
+              <div style={{ marginBottom: '14px', padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '12.5px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>종료 대상 계약:</span>
+                  <strong style={{ color: 'var(--primary)' }}>{depositSettleContract.contractNo}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>고객사:</span>
+                  <strong>{getCustName(depositSettleContract.customerId)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--text-muted)' }}>계약 운용 기간:</span>
+                  <span>{depositSettleContract.startDate} ~ {formatContractEndDate(depositSettleContract.endDate)}</span>
+                </div>
+              </div>
+
+              {/* 원스톱 자동 정산 시뮬레이션 표 */}
+              <div style={{ marginBottom: '16px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                  1. 보증금 및 미납 청구 정산 시뮬레이션 (선입선출 자동 반제)
+                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', border: '1px solid var(--border)', background: 'var(--bg-app)', borderRadius: '6px', overflow: 'hidden', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ background: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--border)' }}>
+                      <th style={{ padding: '8px 6px', borderRight: '1px solid var(--border)' }}>가용 보증금</th>
+                      <th style={{ padding: '8px 6px', borderRight: '1px solid var(--border)' }}>미납 청구 총액</th>
+                      <th style={{ padding: '8px 6px', borderRight: '1px solid var(--border)', color: 'var(--primary)' }}>보증금 상계(반제)</th>
+                      <th style={{ padding: '8px 6px', borderRight: '1px solid var(--border)' }}>상계 후 청구잔액</th>
+                      <th style={{ padding: '8px 6px', color: '#10B981' }}>고객 반환(환급)액</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr style={{ fontWeight: 700, fontSize: '13.5px' }}>
+                      <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)' }}>{curBalance.toLocaleString()}원</td>
+                      <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)', color: totalUnpaidAmount > 0 ? 'var(--danger)' : 'var(--text-primary)' }}>
+                        {totalUnpaidAmount.toLocaleString()}원
+                        {unpaidBillings.length > 0 && <span style={{ fontSize: '11px', display: 'block', fontWeight: 'normal', color: 'var(--text-muted)' }}>({unpaidBillings.length}건)</span>}
+                      </td>
+                      <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)', color: 'var(--primary)' }}>
+                        {estimatedOffset.toLocaleString()}원
+                      </td>
+                      <td style={{ padding: '10px 6px', borderRight: '1px solid var(--border)', color: estimatedRemainingBillings > 0 ? 'var(--danger)' : '#10B981' }}>
+                        {estimatedRemainingBillings.toLocaleString()}원
+                        {estimatedRemainingBillings === 0 && <span style={{ fontSize: '11px', color: '#10B981', display: 'block' }}>(완납)</span>}
+                      </td>
+                      <td style={{ padding: '10px 6px', color: '#10B981' }}>
+                        {estimatedRefund.toLocaleString()}원
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 미납 청구 내역 리스트 (있을 경우) */}
+              {unpaidBillings.length > 0 && (
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '6px', color: 'var(--text-secondary)' }}>
+                    2. 상계 대상 미납 청구 목록
+                  </div>
+                  <div style={{ maxHeight: '140px', overflowY: 'auto', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11.5px' }}>
+                      <thead>
+                        <tr style={{ background: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)' }}>
+                          <th style={{ padding: '6px 8px', textAlign: 'center' }}>귀속월</th>
+                          <th style={{ padding: '6px 8px', textAlign: 'right' }}>청구총액</th>
+                          <th style={{ padding: '6px 8px', textAlign: 'right' }}>기수납</th>
+                          <th style={{ padding: '6px 8px', textAlign: 'right', color: 'var(--danger)' }}>미납액</th>
+                          <th style={{ padding: '6px 8px', textAlign: 'center' }}>처리 예정</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {unpaidBillings.map(b => (
+                          <tr key={b.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '6px 8px', textAlign: 'center' }}><strong>{b.billingYm}</strong></td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right' }}>{b.grandTotal.toLocaleString()}원</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right' }}>{(b.paidAmount || 0).toLocaleString()}원</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'right', fontWeight: 700, color: 'var(--danger)' }}>{b.unpaidAmount.toLocaleString()}원</td>
+                            <td style={{ padding: '6px 8px', textAlign: 'center', color: 'var(--primary)', fontWeight: 600 }}>보증금 우선 상계</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* 반환액이 있을 때: 환급 계좌 입력 폼 */}
+              {estimatedRefund > 0 && (
+                <div style={{ marginBottom: '16px', padding: '12px', backgroundColor: 'rgba(16, 185, 129, 0.05)', borderRadius: '8px', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+                  <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '8px', color: '#10B981' }}>
+                    3. 잔여 보증금 반환(환급 송금) 계좌 정보 *
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.8fr 1fr', gap: '8px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>은행명 *</label>
+                      <input
+                        type="text"
+                        value={depositRefundBank}
+                        onChange={e => setDepositRefundBank(e.target.value)}
+                        placeholder="예: 기업은행"
+                        required
+                        style={{ padding: '7px', fontSize: '12.5px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>계좌번호 *</label>
+                      <input
+                        type="text"
+                        value={depositRefundAccount}
+                        onChange={e => setDepositRefundAccount(e.target.value)}
+                        placeholder="하이픈(-) 포함 입력"
+                        required
+                        style={{ padding: '7px', fontSize: '12.5px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                      />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-secondary)' }}>예금주 *</label>
+                      <input
+                        type="text"
+                        value={depositRefundHolder}
+                        onChange={e => setDepositRefundHolder(e.target.value)}
+                        placeholder="예금주 성명"
+                        required
+                        style={{ padding: '7px', fontSize: '12.5px', borderRadius: '4px', border: '1px solid var(--border-color)' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 정산 기준일 & 정산 메모 */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 3fr', gap: '10px', marginBottom: '18px' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>정산 및 종료일자 *</label>
+                  <input
+                    type="date"
+                    value={depositSettleDate}
+                    onChange={e => setDepositSettleDate(e.target.value)}
+                    required
+                    style={{ padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>정산 비고 및 사유</label>
+                  <input
+                    type="text"
+                    value={depositSettleMemo}
+                    onChange={e => setDepositSettleMemo(e.target.value)}
+                    placeholder="계약종료 및 보증금 최종정산 완료"
+                    style={{ padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)' }}
+                  />
+                </div>
+              </div>
+
+              {/* 푸터 액션 버튼 */}
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', borderTop: '1px solid var(--border-color)', paddingTop: '12px' }}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  onClick={() => setShowDepositSettlementModal(false)}
+                  disabled={isSubmittingSettleDeposit}
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="btn-primary"
+                  disabled={isSubmittingSettleDeposit}
+                  style={{ fontWeight: 800, backgroundColor: '#dc2626', borderColor: '#dc2626' }}
+                >
+                  {isSubmittingSettleDeposit ? '처리 중...' : '계약종료 및 보증금 최종정산 확정'}
+                </button>
+              </div>
+            </form>
           </div>
         );
       })()}
