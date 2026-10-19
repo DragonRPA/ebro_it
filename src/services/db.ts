@@ -1063,6 +1063,20 @@ export const getCustomerTransactionStatusLabel = (status?: string): { label: str
   return { label: '정상 거래', color: '#16a34a', badgeClass: 'badge-success', isBlocked: false, isTotal: false };
 };
 
+/** 💳 고객사 산하 복수 청구지 엔티티 (순번 1: 본사 OO팀, 순번 2: 본사 XX팀 등) */
+export interface BillingTarget {
+  id: string;                          // 청구지 고유 ID (예: 'bt-01')
+  seq: number;                         // 순번 (1, 2, 3...)
+  name: string;                        // 청구지 명칭 (예: '본사 IT운영팀', '마케팅본부', '수원사업장')
+  taxEmail: string;                    // 전자세금계산서 수신 이메일
+  bizRegNo?: string;                   // 사업자등록번호 (본사와 다를 경우)
+  subBizNo?: string;                   // 종사업장번호 4자리 (예: '0001')
+  managerName?: string;                // 청구/정산 담당자 성명
+  managerPhone?: string;               // 청구 담당자 연락처
+  memo?: string;                       // 청구 관련 특이사항
+  isDefault?: boolean;                 // 기본 청구지 여부
+}
+
 export interface Customer {
   id: string;
   name: string;
@@ -1083,6 +1097,9 @@ export interface Customer {
   paymentDueMonthOffset?: number; // 0: 당월(M0), 1: 익월(M1), 2: 익익월(M2), 3: 익익익월(M3), 기본값 1
   paymentTermDays?: number; // Net Terms 결제기한 (발행 후 N일)
   bankAccounts?: CustomerBankAccount[]; // 고객사 다중 계좌 목록
+
+  // 💳 고객사 산하 복수 청구지 목록 (순번 1: 본사 OO팀, 순번 2: 본사 XX팀 등)
+  billingTargets?: BillingTarget[];
   
   // 🌟 [신규] 고객사 기본 옵션/보양/부착물/요구사양 자동 재사용 마스터 (수량 제외 순수 품목명)
   defaultPaidOptions?: string;       // 기본 유상옵션 품목 (예: '협착난간대, 상부덮개, 소화기함' - 장비 대수 비례 수량 표기 제외)
@@ -1154,33 +1171,54 @@ export interface DeveloperDeviceProfile {
   tenant_id?: string;
 }
 
+/** 🚚 IT 장비 배송/물류 방식 */
+export type ITDeliveryMethod = 'COURIER' | 'QUICK' | 'DIRECT_INSTALL' | 'FREIGHT' | 'PICKUP';
+
+export const IT_DELIVERY_METHODS: ITDeliveryMethod[] = ['COURIER', 'QUICK', 'DIRECT_INSTALL', 'FREIGHT', 'PICKUP'];
+
+export const IT_DELIVERY_METHOD_LABELS: Record<ITDeliveryMethod, string> = {
+  COURIER: '택배 발송 (운송장)',
+  QUICK: '퀵서비스 (당일)',
+  DIRECT_INSTALL: '엔지니어 직배송/설치',
+  FREIGHT: '화물 용차 (탑차)',
+  PICKUP: '방문 수령/반납'
+};
+
 export interface CustomerSite {
   id: string;
   siteMasterId?: string | null;   // 상속받은 옵션 그룹 ID (선택적 참조)
   customerId?: string;
-  name: string;                   // 고객현장 고유 현장명
-  address: string;                // 고객현장 고유 주소
-  isActive?: boolean;             // 고객현장 가동 여부 (true: 가동중, false: 종료/완공)
-  contactName: string;
-  contact: string;
-  email: string;
-  contacts?: SiteContactPerson[]; // 👥 실제 동시 2명 이상 현장 담당자 목록 (장비, 마감, 안전)
-  billingContactName?: string;    // 마감담당자 성명
-  billingContactPhone?: string;   // 마감담당자 전화번호
-  billingContactEmail?: string;   // 마감담당자 이메일
-  safetyContactName?: string;     // 안전담당자 성명
-  safetyContactPhone?: string;    // 안전담당자 전화번호
-  safetyContactEmail?: string;    // 안전담당자 이메일
-  paymentDueMonthOffset?: number; // 0: 당월(M0), 1: 익월(M1), 2: 익익월(M2), 3: 익익익월(M3)
-  
-  // 🌟 고객현장 전용 옵션/보양/부착물/요구사양 (고객 현장관리에서 직접 설정 및 옵션그룹 상속 저장)
-  paidOptions?: string;              // 현장 전용 유상옵션 품목
-  protection?: string;               // 현장 전용 무상옵션
-  attachments?: string;              // 현장 전용 부착물
-  checkedSpecs?: Record<string, any>; // 현장 전용 요구 사양 체크 상태
-  billingDay?: number;               // 청구서(세금계산서) 마감일
-  statementClosingDay?: number;      // 거래명세서 마감일
-  paymentDueDay?: number;            // 약정 결제일 (1~30, 31: 말일)
+  name: string;                   // 설치/납품처 명칭 (예: '판교 R&D 본사 5층 개발본부')
+  address: string;                // 도로명 주소
+  addressDetail?: string;         // 상세 위치 (층, 호수, 랙 번호 등)
+  isActive?: boolean;             // 가동 여부
+  contactName?: string;           // 수령 담당자 성명
+  contact?: string;               // 수령 담당자 연락처
+  contactPhone?: string;          // 수령 담당자 연락처
+  department?: string;            // 수령 부서
+  deliveryMethod?: ITDeliveryMethod; // 기본 배송 수단
+  hasFreightElevator?: boolean;   // 화물 엘리베이터 유무
+  requiresSecurityPass?: boolean; // 보안 출입 사전등록 필요 여부
+  accessNotes?: string;           // 반입/주차/출입 안내
+  presetOptions?: any;            // IT 사전세팅/옵션
+
+  // 하위 호환 필드 (점진적 레거시 호환)
+  email?: string;
+  contacts?: SiteContactPerson[];
+  billingDay?: number;
+  statementClosingDay?: number;
+  paymentDueDay?: number;
+  paymentDueMonthOffset?: number;
+  billingContactName?: string;
+  billingContactPhone?: string;
+  billingContactEmail?: string;
+  safetyContactName?: string;
+  safetyContactPhone?: string;
+  safetyContactEmail?: string;
+  paidOptions?: string;
+  protection?: string;
+  attachments?: string;
+  checkedSpecs?: Record<string, any>;
 
   createdAt: string;
   updatedAt?: string;
@@ -1683,8 +1721,26 @@ export interface Contract {
   contractType?: ContractType; // 💡 신규 추가: 'RENTAL' (기본값) | 'SALE' (자산 매각 계약)
   saleTerms?: SaleContractTerms; // 💡 자산 매각 계약 전용 상세 조건
   customerId: string;
+  billingTargetId?: string;       // 💳 고객사 산하 지정 청구지 ID
+  billingTargetName?: string;     // 💳 지정 청구지 명칭 (예: '본사 IT운영팀', '수원사업장')
   contactId?: string;
-  siteId?: string;
+  siteId?: string;                // 📍 지정 설치/납품처 ID (1:1 귀속)
+
+  // ⏱️ IT 계약 기간 및 과금 체계 (단기 렌탈 vs 장기 약정)
+  contractPeriodType?: 'SHORT_TERM' | 'LONG_TERM'; // 'SHORT_TERM'(일/주/월 단기) | 'LONG_TERM'(장기 약정)
+  termMonths?: number;            // 약정 개월 수 (12, 24, 36개월 등)
+  earlyTerminationFeeRate?: number; // 중도해지 위약금율 (기본 10%)
+  depositAmount?: number;         // 보증금/선수금
+  pureRentalFee?: number;         // 순 렌탈료 합계
+  isDeliverySetupFeeBilled?: boolean; // 운반설치비 등 청구 여부
+  deliverySetupFeeAmount?: number; // 운반설치비 등 청구 금액
+
+  // 🚚 IT 5대 배송 및 설치 물류 체계
+  deliveryMethod?: ITDeliveryMethod; // COURIER, QUICK, DIRECT_INSTALL, FREIGHT, PICKUP
+  courierCompany?: string;        // 택배사
+  trackingNo?: string;            // 운송장번호
+  installTechName?: string;       // 설치 담당 엔지니어
+
   startDate: string;
   endDate: string;
   billingDay: number; // 청구서 발행일 (예: 25 → 매월 25일 발행, 청구기간: 전월26~당월25)

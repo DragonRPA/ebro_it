@@ -7,9 +7,9 @@ import {
   CreditCard, ShieldCheck, Zap, Sparkles, CheckCircle2, AlertCircle, 
   X, Edit2, Trash2, RefreshCw, Layers, Check, Building2, Circle,
   Sliders, Tag, Settings, CheckSquare, Square, ChevronDown, ChevronUp, FileText, FolderOpen,
-  ShieldAlert, FileSpreadsheet, SlidersHorizontal, Copy, ExternalLink
+  ShieldAlert, FileSpreadsheet, SlidersHorizontal, Copy, ExternalLink, Truck
 } from 'lucide-react';
-import { db, Customer, CustomerContact, CustomerSite, SiteMaster, CustomerBankAccount, StandardOption, logPrivacyAccess, SiteContactPerson, SiteContactType, SITE_CONTACT_TYPE_CONFIG, PAYMENT_DUE_MONTH_OPTIONS, formatPaymentDueCondition, CustomerTransactionStatus, isCustomerRestricted, isCustomerTotalBlocked, getCustomerTransactionStatusLabel } from '../services/db';
+import { db, Customer, CustomerContact, CustomerSite, SiteMaster, CustomerBankAccount, StandardOption, logPrivacyAccess, SiteContactPerson, SiteContactType, SITE_CONTACT_TYPE_CONFIG, PAYMENT_DUE_MONTH_OPTIONS, formatPaymentDueCondition, CustomerTransactionStatus, isCustomerRestricted, isCustomerTotalBlocked, getCustomerTransactionStatusLabel, BillingTarget, ITDeliveryMethod, IT_DELIVERY_METHOD_LABELS } from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { isPrivilegedPrivacyUser, maskPhoneNumber, maskEmail, maskName, maskAddress } from '../utils/privacyMasking';
 import { matchHangul, matchesChosungFilter, sortCustomersByName, createHangulMatcher } from '../utils/hangulSearch';
@@ -162,7 +162,7 @@ const CustomerListItem = React.memo<CustomerListItemProps>(({
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '2px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
-        <span>현장 {custSitesCount}개소 · 담당 {custContactsCount}명</span>
+        <span>설치/납품처 {custSitesCount}개소 · 담당 {custContactsCount}명</span>
         {canSave && (
           <button
             type="button"
@@ -345,6 +345,10 @@ export const Customers: React.FC = () => {
 
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Partial<CustomerBankAccount> | null>(null);
+
+  // 💳 고객사 청구지 (Billing Target) 모달 상태
+  const [showBillingTargetModal, setShowBillingTargetModal] = useState(false);
+  const [editingBillingTarget, setEditingBillingTarget] = useState<Partial<BillingTarget> | null>(null);
 
   // 🏷️ 전사 표준 옵션 마스터 모달 상태
   const [showOptionMasterModal, setShowOptionMasterModal] = useState(false);
@@ -685,38 +689,27 @@ export const Customers: React.FC = () => {
     const excelData = sortedCustomerSites.map((cs, idx) => ({
       'No': idx + 1,
       '고객사명': activeCustomer.name,
-      '현장명': cs.name,
-      '현장 주소': isPrivileged ? (cs.address || '-') : maskAddress(cs.address),
-      '현장 담당자': (() => {
-        const activeContacts = (cs.contacts || []).filter(c => c.isActive !== false);
-        if (activeContacts.length > 0) {
-          return activeContacts.map(c => {
-            const n = isPrivileged ? c.name : maskName(c.name);
-            return c.position ? `${n}(${c.position})` : n;
-          }).join(', ');
-        }
-        return isPrivileged ? (cs.contactName || '-') : maskName(cs.contactName);
-      })(),
-      '연락처': (() => {
-        const activeContacts = (cs.contacts || []).filter(c => c.isActive !== false);
-        if (activeContacts.length > 0) {
-          return activeContacts.map(c => isPrivileged ? c.contact : maskPhoneNumber(c.contact)).join(', ');
-        }
-        return isPrivileged ? (cs.contact || '-') : maskPhoneNumber(cs.contact);
-      })(),
-      '유상옵션': normalizeOptionString(cs.paidOptions) || normalizeOptionString(activeCustomer.defaultPaidOptions) || '-',
-      '무상옵션': normalizeOptionString(cs.protection) || normalizeOptionString(activeCustomer.defaultProtection) || '-',
-      '사용여부': cs.isActive !== false ? '가동중' : '완공/종료',
+      '설치/납품처명': cs.name,
+      '도로명 주소': isPrivileged ? (cs.address || '-') : maskAddress(cs.address),
+      '상세 위치': cs.addressDetail || '-',
+      '수령 부서': cs.department || '-',
+      '수령 담당자': isPrivileged ? (cs.contactName || '-') : maskName(cs.contactName || '-'),
+      '수령 연락처': isPrivileged ? (cs.contactPhone || cs.contact || '-') : maskPhoneNumber(cs.contactPhone || cs.contact || '-'),
+      '기본 배송수단': IT_DELIVERY_METHOD_LABELS[cs.deliveryMethod || 'COURIER'] || '택배 발송',
+      '화물 엘리베이터': cs.hasFreightElevator !== false ? '있음' : '없음',
+      '출입 보안등록': cs.requiresSecurityPass ? '사전등록 필수' : '자유 출입',
+      '반입/출입 메모': cs.accessNotes || '-',
+      '가동 상태': cs.isActive !== false ? '가동중' : '완공/종료',
       '등록 일시': cs.createdAt?.substring(0, 10) || '-'
     }));
-    exportToExcel(excelData, `현장목록_${activeCustomer.name}_${new Date().toISOString().split('T')[0]}`, '현장리스트');
+    exportToExcel(excelData, `설치납품처목록_${activeCustomer.name}_${new Date().toISOString().split('T')[0]}`, '설치납품처대장');
     logPrivacyAccess(
       'EXCEL_DOWNLOAD',
       'customer_sites',
-      `고객사 [${activeCustomer.name}] 현장 목록 ${excelData.length}건 엑셀 다운로드 (${isPrivileged ? '경영진/개발자 전체 원본' : '개인정보 마스킹 적용'})`,
+      `고객사 [${activeCustomer.name}] 설치/납품처 목록 ${excelData.length}건 엑셀 다운로드 (${isPrivileged ? '경영진/개발자 전체 원본' : '개인정보 마스킹 적용'})`,
       { targetSubjectId: activeCustomer.id, targetSubjectName: activeCustomer.name, isMasked: !isPrivileged }
     );
-    showToast(`현장 목록 (${customerSites.length}건) 엑셀이 다운로드되었습니다. (${isPrivileged ? '전체 정보' : '마스킹 적용'})`);
+    showToast(`설치/납품처 목록 (${customerSites.length}건) 엑셀이 다운로드되었습니다. (${isPrivileged ? '전체 정보' : '마스킹 적용'})`);
   };
 
   // 고객사 등록/수정 핸들러
@@ -886,62 +879,120 @@ export const Customers: React.FC = () => {
     }
   };
 
-  // 👥 현장 등록/수정 및 다중 담당자(동시 2인 이상) 핸들러
+  // 💳 고객사 산하 청구지 (Billing Targets) 관리 핸들러
+  const handleOpenAddBillingTarget = () => {
+    if (!activeCustomer) return;
+    const existingTargets = activeCustomer.billingTargets || [];
+    const nextSeq = existingTargets.length > 0 ? Math.max(...existingTargets.map(t => t.seq || 0)) + 1 : 1;
+    setEditingBillingTarget({
+      id: '',
+      seq: nextSeq,
+      name: '',
+      taxEmail: '',
+      bizRegNo: activeCustomer.bizRegNo || '',
+      subBizNo: '',
+      managerName: '',
+      managerPhone: '',
+      memo: '',
+      isDefault: existingTargets.length === 0
+    });
+    setShowBillingTargetModal(true);
+  };
+
+  const handleOpenEditBillingTarget = (target: BillingTarget) => {
+    setEditingBillingTarget({ ...target });
+    setShowBillingTargetModal(true);
+  };
+
+  const handleDeleteBillingTarget = async (targetId: string) => {
+    if (!activeCustomer) return;
+    if (!window.confirm('해당 청구지를 삭제하시겠습니까?')) return;
+    const nextTargets = (activeCustomer.billingTargets || []).filter(t => t.id !== targetId);
+    try {
+      await saveCustomer({ ...activeCustomer, billingTargets: nextTargets });
+      await refreshAllData();
+      showToast('청구지가 삭제되었습니다.');
+    } catch (err: any) {
+      showErrorModal(`청구지 삭제 실패: ${err?.message || String(err)}`, '청구지 삭제 오류');
+    }
+  };
+
+  const handleSaveBillingTargetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingBillingTarget || !editingBillingTarget.name?.trim() || !editingBillingTarget.taxEmail?.trim() || !activeCustomer) return;
+
+    const currentTargets = [...(activeCustomer.billingTargets || [])];
+    let nextTargets: BillingTarget[];
+
+    if (editingBillingTarget.id) {
+      nextTargets = currentTargets.map(t => {
+        if (t.id === editingBillingTarget.id) {
+          return {
+            ...t,
+            seq: Number(editingBillingTarget.seq) || t.seq,
+            name: editingBillingTarget.name!.trim(),
+            taxEmail: editingBillingTarget.taxEmail!.trim(),
+            bizRegNo: editingBillingTarget.bizRegNo?.trim(),
+            subBizNo: editingBillingTarget.subBizNo?.trim(),
+            managerName: editingBillingTarget.managerName?.trim(),
+            managerPhone: editingBillingTarget.managerPhone?.trim(),
+            memo: editingBillingTarget.memo?.trim(),
+            isDefault: Boolean(editingBillingTarget.isDefault)
+          };
+        }
+        return editingBillingTarget.isDefault ? { ...t, isDefault: false } : t;
+      });
+    } else {
+      const newId = `BT-${Date.now()}`;
+      const newTarget: BillingTarget = {
+        id: newId,
+        seq: Number(editingBillingTarget.seq) || (currentTargets.length + 1),
+        name: editingBillingTarget.name.trim(),
+        taxEmail: editingBillingTarget.taxEmail.trim(),
+        bizRegNo: editingBillingTarget.bizRegNo?.trim(),
+        subBizNo: editingBillingTarget.subBizNo?.trim(),
+        managerName: editingBillingTarget.managerName?.trim(),
+        managerPhone: editingBillingTarget.managerPhone?.trim(),
+        memo: editingBillingTarget.memo?.trim(),
+        isDefault: Boolean(editingBillingTarget.isDefault) || currentTargets.length === 0
+      };
+      const adjustedTargets = newTarget.isDefault ? currentTargets.map(t => ({ ...t, isDefault: false })) : currentTargets;
+      nextTargets = [...adjustedTargets, newTarget];
+    }
+
+    nextTargets.sort((a, b) => (a.seq || 0) - (b.seq || 0));
+
+    try {
+      await saveCustomer({ ...activeCustomer, billingTargets: nextTargets });
+      await refreshAllData();
+      showToast('청구지 정보가 저장되었습니다.');
+      setShowBillingTargetModal(false);
+      setEditingBillingTarget(null);
+    } catch (err: any) {
+      showErrorModal(`청구지 저장 실패: ${err?.message || String(err)}`, '청구지 저장 오류');
+    }
+  };
+
+  // 🏢 설치/납품처 등록/수정 핸들러
   const handleOpenAddSite = () => {
     if (!selectedCustomerId) return;
     const parentCust = customers.find(c => c.id === selectedCustomerId);
-    
-    // 👥 3대 담당자 기본 슬롯 (장비담당자 / 마감담당자 / 안전담당자)
-    const initialContacts: SiteContactPerson[] = [
-      {
-        id: 'SC-EQ-' + Date.now(),
-        contactType: 'EQUIPMENT',
-        name: '',
-        position: '현장소장',
-        contact: '',
-        email: '',
-        isPrimary: true,
-        isActive: true,
-        memo: ''
-      },
-      {
-        id: 'SC-CL-' + (Date.now() + 1),
-        contactType: 'CLOSING',
-        name: '',
-        position: '공무과장',
-        contact: '',
-        email: '',
-        isPrimary: false,
-        isActive: true,
-        memo: ''
-      },
-      {
-        id: 'SC-SF-' + (Date.now() + 2),
-        contactType: 'SAFETY',
-        name: '',
-        position: '안전관리자',
-        contact: '',
-        email: '',
-        isPrimary: false,
-        isActive: true,
-        memo: ''
-      }
-    ];
 
     setEditingSite({
       customerId: selectedCustomerId,
       name: '',
       address: '',
+      addressDetail: '',
+      department: '',
+      contactName: '',
+      contactPhone: '',
+      contact: '',
+      deliveryMethod: 'COURIER',
+      hasFreightElevator: true,
+      requiresSecurityPass: false,
+      accessNotes: '',
       isActive: true,
       siteMasterId: null,
-      contactName: '',
-      contact: '',
-      email: '',
-      contacts: initialContacts,
-      statementClosingDay: parentCust?.defaultStatementClosingDay || 25,
-      billingDay: parentCust?.defaultBillingDay || 30,
-      paymentDueMonthOffset: parentCust?.paymentDueMonthOffset ?? 1,
-      paymentDueDay: parentCust?.paymentDueDay || 25,
       paidOptions: parentCust?.defaultPaidOptions || '',
       protection: parentCust?.defaultProtection || '',
       attachments: parentCust?.defaultAttachments || '',
@@ -954,178 +1005,27 @@ export const Customers: React.FC = () => {
   };
 
   const handleOpenEditSite = (cs: CustomerSite) => {
-
-    let contactsList: SiteContactPerson[] = [];
-
-    if (cs.contacts && Array.isArray(cs.contacts) && cs.contacts.length > 0) {
-      contactsList = cs.contacts.map((c, idx) => {
-        let deducedType: SiteContactType = c.contactType || 'EQUIPMENT';
-        if (!c.contactType) {
-          const pos = (c.position || '').toLowerCase();
-          const name = (c.name || '').toLowerCase();
-          if (pos.includes('안전') || name.includes('안전')) deducedType = 'SAFETY';
-          else if (pos.includes('공무') || pos.includes('마감') || pos.includes('정산') || pos.includes('회계') || pos.includes('경리')) deducedType = 'CLOSING';
-          else if (idx === 0) deducedType = 'EQUIPMENT';
-          else if (idx === 1) deducedType = 'CLOSING';
-          else if (idx === 2) deducedType = 'SAFETY';
-        }
-        return {
-          ...c,
-          id: c.id || `SC-${idx}-${Date.now()}`,
-          contactType: deducedType,
-          isPrimary: c.isPrimary !== undefined ? c.isPrimary : (idx === 0 || deducedType === 'EQUIPMENT'),
-          isActive: c.isActive !== false
-        };
-      });
-
-      // 3대 담당자 중 누락된 유형이 있다면 보완하여 상시 관리 가능하도록 준비
-      const typesPresent = new Set(contactsList.map(c => c.contactType));
-      if (!typesPresent.has('EQUIPMENT')) {
-        contactsList.unshift({
-          id: 'SC-EQ-' + Date.now(),
-          contactType: 'EQUIPMENT',
-          name: cs.contactName || '',
-          position: '현장소장',
-          contact: cs.contact || '',
-          email: cs.email || '',
-          isPrimary: true,
-          isActive: true
-        });
-      }
-      if (!typesPresent.has('CLOSING')) {
-        contactsList.push({
-          id: 'SC-CL-' + (Date.now() + 1),
-          contactType: 'CLOSING',
-          name: cs.billingContactName || '',
-          position: '공무과장',
-          contact: cs.billingContactPhone || '',
-          email: cs.billingContactEmail || '',
-          isPrimary: false,
-          isActive: Boolean(cs.billingContactName || cs.billingContactPhone)
-        });
-      }
-      if (!typesPresent.has('SAFETY')) {
-        contactsList.push({
-          id: 'SC-SF-' + (Date.now() + 2),
-          contactType: 'SAFETY',
-          name: cs.safetyContactName || '',
-          position: '안전관리자',
-          contact: cs.safetyContactPhone || '',
-          email: cs.safetyContactEmail || '',
-          isPrimary: false,
-          isActive: Boolean(cs.safetyContactName || cs.safetyContactPhone)
-        });
-      }
-    } else {
-      // 기존 플랫 필드(contactName, billingContactName, safetyContactName)로부터 3대 담당자 슬롯 복원
-      contactsList = [
-        {
-          id: 'SC-EQ-' + Date.now(),
-          contactType: 'EQUIPMENT',
-          name: cs.contactName || '',
-          position: '현장소장',
-          contact: cs.contact || '',
-          email: cs.email || '',
-          isPrimary: true,
-          isActive: true
-        },
-        {
-          id: 'SC-CL-' + (Date.now() + 1),
-          contactType: 'CLOSING',
-          name: cs.billingContactName || '',
-          position: '공무과장',
-          contact: cs.billingContactPhone || '',
-          email: cs.billingContactEmail || '',
-          isPrimary: false,
-          isActive: Boolean(cs.billingContactName || cs.billingContactPhone)
-        },
-        {
-          id: 'SC-SF-' + (Date.now() + 2),
-          contactType: 'SAFETY',
-          name: cs.safetyContactName || '',
-          position: '안전관리자',
-          contact: cs.safetyContactPhone || '',
-          email: cs.safetyContactEmail || '',
-          isPrimary: false,
-          isActive: Boolean(cs.safetyContactName || cs.safetyContactPhone)
-        }
-      ];
-    }
-
-    const parentCust = customers.find(c => c.id === (cs.customerId || ''));
     setEditingSite({
       ...cs,
+      addressDetail: cs.addressDetail || '',
+      department: cs.department || '',
+      contactName: cs.contactName || '',
+      contactPhone: cs.contactPhone || cs.contact || '',
+      contact: cs.contactPhone || cs.contact || '',
+      deliveryMethod: cs.deliveryMethod || 'COURIER',
+      hasFreightElevator: cs.hasFreightElevator !== false,
+      requiresSecurityPass: Boolean(cs.requiresSecurityPass),
+      accessNotes: cs.accessNotes || '',
       isActive: cs.isActive !== false,
       paidOptions: normalizeOptionString(cs.paidOptions),
       protection: normalizeOptionString(cs.protection),
       attachments: normalizeOptionString(cs.attachments || (cs.checkedSpecs as any)?.__attachments),
-      checkedSpecs: cs.checkedSpecs ? { ...cs.checkedSpecs } : {},
-      statementClosingDay: cs.statementClosingDay || parentCust?.defaultStatementClosingDay || 25,
-      billingDay: cs.billingDay || parentCust?.defaultBillingDay || 30,
-      paymentDueMonthOffset: cs.paymentDueMonthOffset !== undefined ? cs.paymentDueMonthOffset : (parentCust?.paymentDueMonthOffset ?? 1),
-      paymentDueDay: cs.paymentDueDay || parentCust?.paymentDueDay || 25,
-      contacts: contactsList
+      checkedSpecs: cs.checkedSpecs ? { ...cs.checkedSpecs } : {}
     });
     setShowSiteSpecs(false);
     setSiteOptionRefSearch('');
     setSelectedRefSiteId(cs.siteMasterId || '');
     setShowSiteModal(true);
-  };
-
-  const handleAddSiteContact = (type: SiteContactType = 'EQUIPMENT') => {
-    if (!editingSite) return;
-    const currentList = editingSite.contacts || [];
-    const cfg = SITE_CONTACT_TYPE_CONFIG[type] || SITE_CONTACT_TYPE_CONFIG.EQUIPMENT;
-    const newContact: SiteContactPerson = {
-      id: 'SC-' + type.slice(0, 2) + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-      contactType: type,
-      name: '',
-      position: cfg.defaultPosition,
-      contact: '',
-      email: '',
-      isPrimary: currentList.length === 0,
-      isActive: true,
-      memo: ''
-    };
-    setEditingSite({
-      ...editingSite,
-      contacts: [...currentList, newContact]
-    });
-  };
-
-  const handleUpdateSiteContact = (index: number, field: keyof SiteContactPerson, value: any) => {
-    if (!editingSite || !editingSite.contacts) return;
-    const updated = [...editingSite.contacts];
-    updated[index] = { ...updated[index], [field]: value };
-    setEditingSite({ ...editingSite, contacts: updated });
-  };
-
-  const handleSetPrimarySiteContact = (index: number) => {
-    if (!editingSite || !editingSite.contacts) return;
-    const updated = editingSite.contacts.map((c, i) => ({
-      ...c,
-      isPrimary: i === index
-    }));
-    setEditingSite({ ...editingSite, contacts: updated });
-  };
-
-  const handleToggleSiteContactActive = (index: number) => {
-    if (!editingSite || !editingSite.contacts) return;
-    const updated = [...editingSite.contacts];
-    updated[index] = {
-      ...updated[index],
-      isActive: updated[index].isActive === false ? true : false
-    };
-    setEditingSite({ ...editingSite, contacts: updated });
-  };
-
-  const handleRemoveSiteContact = (index: number) => {
-    if (!editingSite || !editingSite.contacts) return;
-    const updated = editingSite.contacts.filter((_, i) => i !== index);
-    if (updated.length > 0 && !updated.some(c => c.isPrimary)) {
-      updated[0].isPrimary = true;
-    }
-    setEditingSite({ ...editingSite, contacts: updated });
   };
 
   const handleSaveSiteSubmit = async (e: React.FormEvent) => {
@@ -1140,67 +1040,42 @@ export const Customers: React.FC = () => {
       (s.name || '').replace(/\s+/g, '') === normalizedName
     );
     if (duplicateInSameCustomer) {
-      showErrorModal(`현재 고객사에 동일한 현장명이 이미 등록되어 있습니다.\n\n입력: [${rawName}]\n기존: [${duplicateInSameCustomer.name}]`);
+      showErrorModal(`현재 고객사에 동일한 설치/납품처명이 이미 등록되어 있습니다.\n\n입력: [${rawName}]\n기존: [${duplicateInSameCustomer.name}]`);
       return;
     }
 
     try {
-      // 👥 3대 담당자 (장비 / 마감 / 안전) 정규화 및 플랫 필드 동기화
-      const rawContacts = editingSite.contacts || [];
-      // 입력된 데이터가 있거나 활성화된 항목 필터
-      const validContacts = rawContacts.filter(c => 
-        (c.name && c.name.trim() !== '') || 
-        (c.contact && c.contact.trim() !== '') || 
-        (c.email && c.email.trim() !== '')
-      );
-
-      // 유형별 대표/활성 담당자 추출
-      const eqContact = validContacts.find(c => c.contactType === 'EQUIPMENT' && c.isActive !== false)
-        || validContacts.find(c => c.contactType === 'EQUIPMENT')
-        || validContacts.find(c => c.isPrimary)
-        || validContacts[0];
-
-      const closingContact = validContacts.find(c => c.contactType === 'CLOSING' && c.isActive !== false)
-        || validContacts.find(c => c.contactType === 'CLOSING');
-
-      const safetyContact = validContacts.find(c => c.contactType === 'SAFETY' && c.isActive !== false)
-        || validContacts.find(c => c.contactType === 'SAFETY');
-
       const cleanAddr = sanitizeSiteAddressInput(editingSite.address);
+      const contactVal = (editingSite.contactPhone || editingSite.contact || '').trim();
 
       const siteToSave: CustomerSite = {
         ...editingSite,
         name: rawName,
         address: cleanAddr,
+        addressDetail: (editingSite.addressDetail || '').trim(),
+        department: (editingSite.department || '').trim(),
+        contactName: (editingSite.contactName || '').trim(),
+        contactPhone: contactVal,
+        contact: contactVal,
+        deliveryMethod: editingSite.deliveryMethod || 'COURIER',
+        hasFreightElevator: editingSite.hasFreightElevator !== false,
+        requiresSecurityPass: Boolean(editingSite.requiresSecurityPass),
+        accessNotes: (editingSite.accessNotes || '').trim(),
         isActive: editingSite.isActive !== false,
         siteMasterId: editingSite.siteMasterId || null,
         paidOptions: normalizeOptionString(editingSite.paidOptions),
         protection: normalizeOptionString(editingSite.protection),
         attachments: normalizeOptionString(editingSite.attachments),
-        checkedSpecs: editingSite.checkedSpecs || {},
-        // 1. 장비담당자 (하위호환 플랫 필드)
-        contactName: eqContact?.name || editingSite.contactName || '',
-        contact: eqContact?.contact || editingSite.contact || '',
-        email: eqContact?.email || editingSite.email || '',
-        // 2. 마감담당자 (거래명세서 / 계산서 수신인)
-        billingContactName: closingContact?.name || '',
-        billingContactPhone: closingContact?.contact || '',
-        billingContactEmail: closingContact?.email || '',
-        // 3. 안전담당자 (안전관리 / 점검결과 수신인)
-        safetyContactName: safetyContact?.name || '',
-        safetyContactPhone: safetyContact?.contact || '',
-        safetyContactEmail: safetyContact?.email || '',
-        // 4. 전체 담당자 목록 저장
-        contacts: validContacts.length > 0 ? validContacts : undefined
+        checkedSpecs: editingSite.checkedSpecs || {}
       } as CustomerSite;
 
       await saveSite(siteToSave as Omit<CustomerSite, 'id' | 'createdAt'>);
-      showToast(`현장 [${rawName}] 정보가 저장되었습니다.`);
+      showToast(`설치/납품처 [${rawName}] 정보가 저장되었습니다.`);
       setShowSiteModal(false);
       setEditingSite(null);
       await refreshAllData();
     } catch (err: any) {
-      showErrorModal(`현장 저장 실패: ${err?.message || err}`, '현장 저장 오류');
+      showErrorModal(`설치/납품처 저장 실패: ${err?.message || err}`, '설치/납품처 저장 오류');
     }
   };
 
@@ -1932,11 +1807,105 @@ const handleDeleteAccount = async (accId: string) => {
                 </div>
               </div>
 
-              {/* 2. 등록 현장(Sites) 고밀도 그리드 */}
+              {/* 2. 고객사 청구지 (Billing Targets) 관리 섹션 */}
               <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                   <div style={{ fontWeight: 600, fontSize: '12.5px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <MapPin size={14} className="text-success" /> 고객 현장 목록 ({customerSites.length}개소)
+                    <CreditCard size={14} className="text-primary" /> 청구지 목록 (Billing Targets) ({(activeCustomer.billingTargets || []).length}건)
+                  </div>
+                  {canSave && (
+                    <button
+                      type="button"
+                      className="btn-save btn-sm"
+                      onClick={handleOpenAddBillingTarget}
+                    >
+                      <PlusCircle size={11} /> 청구지 추가
+                    </button>
+                  )}
+                </div>
+
+                <div className="table-container" style={{ overflowX: 'auto', overflowY: 'auto', maxHeight: '220px', border: '1px solid var(--border-color)', borderRadius: '6px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
+                    <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: 'var(--bg-card)' }}>
+                      <tr style={{ backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                        <th style={{ padding: '5px 6px', textAlign: 'center', width: '45px', whiteSpace: 'nowrap' }}>순번</th>
+                        <th style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>청구부서 / 사업장</th>
+                        <th style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>세금계산서 수신 이메일</th>
+                        <th style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>청구 담당자</th>
+                        <th style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>연락처</th>
+                        <th style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>사업자번호</th>
+                        <th style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>메모</th>
+                        <th style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>기본</th>
+                        <th style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>관리</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(!activeCustomer.billingTargets || activeCustomer.billingTargets.length === 0) ? (
+                        <tr>
+                          <td colSpan={9} style={{ textAlign: 'center', padding: '16px 0', color: 'var(--text-muted)' }}>
+                            등록된 청구지가 없습니다. 세금계산서 수신처 및 청구 대상 부서/사업장을 추가해 주십시오.
+                          </td>
+                        </tr>
+                      ) : (
+                        activeCustomer.billingTargets.map((bt, btIdx) => (
+                          <tr key={bt.id || btIdx} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                            <td style={{ padding: '5px 6px', textAlign: 'center', fontWeight: 600 }}>{bt.seq || (btIdx + 1)}</td>
+                            <td style={{ padding: '5px 6px', fontWeight: 600, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
+                              {bt.name}
+                              {bt.isDefault && (
+                                <span className="badge badge-primary" style={{ fontSize: '9px', padding: '1px 4px', marginLeft: '4px' }}>기본</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '5px 6px', fontFamily: 'monospace', color: 'var(--primary)', whiteSpace: 'nowrap' }}>{bt.taxEmail}</td>
+                            <td style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>{bt.managerName || '-'}</td>
+                            <td style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>{bt.managerPhone || '-'}</td>
+                            <td style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>
+                              {bt.bizRegNo || '-'}
+                              {bt.subBizNo ? ` (${bt.subBizNo})` : ''}
+                            </td>
+                            <td style={{ padding: '5px 6px', color: 'var(--text-muted)', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bt.memo || '-'}</td>
+                            <td style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              {bt.isDefault ? (
+                                <span style={{ color: 'var(--success)', fontWeight: 700 }}>●</span>
+                              ) : (
+                                <span style={{ color: 'var(--text-muted)' }}>-</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                              {canSave && (
+                                <div style={{ display: 'inline-flex', gap: '3px' }}>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={() => handleOpenEditBillingTarget(bt)}
+                                    style={{ padding: '1px 5px', fontSize: '11.5px' }}
+                                  >
+                                    수정
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn-secondary"
+                                    onClick={() => handleDeleteBillingTarget(bt.id)}
+                                    style={{ padding: '1px 5px', fontSize: '11.5px', color: 'var(--danger)' }}
+                                  >
+                                    삭제
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 3. 등록 설치/납품처(CustomerSites) 고밀도 그리드 */}
+              <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <div style={{ fontWeight: 600, fontSize: '12.5px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <MapPin size={14} className="text-success" /> 설치/납품처 목록 ({customerSites.length}개소)
                   </div>
                   <div style={{ display: 'flex', gap: '6px' }}>
                     {canSave && (
@@ -1945,7 +1914,7 @@ const handleDeleteAccount = async (accId: string) => {
                         className="btn-save btn-sm"
                         onClick={handleOpenAddSite}
                       >
-                        <PlusCircle size={11} /> 현장 추가
+                        <PlusCircle size={11} /> 설치/납품처 추가
                       </button>
                     )}
                     <button
@@ -1953,7 +1922,7 @@ const handleDeleteAccount = async (accId: string) => {
                       className="btn-excel-download btn-sm"
                       onClick={handleExportSites}
                     >
-                      <Download size={11} /> 현장 엑셀
+                      <Download size={11} /> 설치/납품처 엑셀
                     </button>
                   </div>
                 </div>
@@ -1962,21 +1931,22 @@ const handleDeleteAccount = async (accId: string) => {
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px', textAlign: 'left' }}>
                     <thead style={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: 'var(--bg-card)' }}>
                       <tr style={{ backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
-                        <SortableTh label="현장명" sortKey="name" currentSort={sortConfigSites} onSort={requestSortSites} style={{ padding: '5px 6px', whiteSpace: 'nowrap' }} />
+                        <SortableTh label="설치/납품처명" sortKey="name" currentSort={sortConfigSites} onSort={requestSortSites} style={{ padding: '5px 6px', whiteSpace: 'nowrap' }} />
                         <th style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>관리</th>
-                        <SortableTh label="현장 주소" sortKey="address" currentSort={sortConfigSites} onSort={requestSortSites} style={{ padding: '5px 6px', whiteSpace: 'nowrap' }} />
-                        <SortableTh label="현장 소장/담당" sortKey="contactName" currentSort={sortConfigSites} onSort={requestSortSites} style={{ padding: '5px 6px', whiteSpace: 'nowrap' }} />
-                        <SortableTh label="연락처" sortKey="contact" currentSort={sortConfigSites} onSort={requestSortSites} style={{ padding: '5px 6px', whiteSpace: 'nowrap' }} />
-                        <SortableTh label="명세서 마감일" sortKey="closingDay" currentSort={sortConfigSites} onSort={requestSortSites} style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }} align="center" />
+                        <SortableTh label="도로명 주소 & 상세위치" sortKey="address" currentSort={sortConfigSites} onSort={requestSortSites} style={{ padding: '5px 6px', whiteSpace: 'nowrap' }} />
+                        <th style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>수령 부서 / 담당자</th>
+                        <th style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>연락처</th>
+                        <th style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>기본 배송수단</th>
+                        <th style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>반입 환경</th>
                         <th style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>상태</th>
-                        <th style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>유상옵션 / 보양</th>
+                        <th style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>옵션 그룹 / 사전세팅</th>
                       </tr>
                     </thead>
                     <tbody>
                       {sortedCustomerSites.length === 0 ? (
                         <tr>
-                          <td colSpan={8} style={{ textAlign: 'center', padding: '16px 0', color: 'var(--text-muted)' }}>
-                            등록된 현장이 없습니다. 현장을 추가해 주세요.
+                          <td colSpan={9} style={{ textAlign: 'center', padding: '16px 0', color: 'var(--text-muted)' }}>
+                            등록된 설치/납품처가 없습니다. 설치/납품처를 추가해 주세요.
                           </td>
                         </tr>
                       ) : (
@@ -1987,6 +1957,7 @@ const handleDeleteAccount = async (accId: string) => {
                           const hasActiveContracts = activeContractsCount > 0;
                           const isSiteActive = cs.isActive !== false;
                           const linkedOptionGroup = cs.siteMasterId ? (siteMasters || []).find(m => m.id === cs.siteMasterId) : undefined;
+                          const deliveryLabel = IT_DELIVERY_METHOD_LABELS[cs.deliveryMethod || 'COURIER'] || '택배 발송';
 
                           return (
                             <tr key={cs.id} style={{ borderBottom: '1px solid var(--border-color)', opacity: isSiteActive ? 1 : 0.65 }}>
@@ -2028,7 +1999,7 @@ const handleDeleteAccount = async (accId: string) => {
                                   </div>
                                 )}
                               </td>
-                              <td style={{ padding: '5px 6px', whiteSpace: 'nowrap', maxWidth: '240px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              <td style={{ padding: '5px 6px', whiteSpace: 'nowrap', maxWidth: '260px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                 {isMissingSiteAddress(cs.address) ? (
                                   <span
                                     style={{
@@ -2044,128 +2015,123 @@ const handleDeleteAccount = async (accId: string) => {
                                       border: '1px solid rgba(245, 158, 11, 0.5)',
                                       whiteSpace: 'nowrap'
                                     }}
-                                    title="현장 주소가 등록되지 않았습니다. [수정] 버튼에서 주소를 입력할 수 있습니다."
+                                    title="도로명 주소가 등록되지 않았습니다."
                                   >
                                     ⚠️ 주소 미등록
                                   </span>
                                 ) : (
-                                  cs.address
+                                  <div>
+                                    <span>{cs.address}</span>
+                                    {cs.addressDetail && (
+                                      <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)' }}>
+                                        {cs.addressDetail}
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
                               </td>
-                            <td style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>
-                              {cs.contacts && cs.contacts.filter(c => c.isActive !== false).length > 0 ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                  {cs.contacts.filter(c => c.isActive !== false).map((c, cIdx) => {
-                                    const typeCfg = c.contactType ? SITE_CONTACT_TYPE_CONFIG[c.contactType] : (cIdx === 0 ? SITE_CONTACT_TYPE_CONFIG.EQUIPMENT : undefined);
+                              <td style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  {cs.department && (
+                                    <span style={{ padding: '0 4px', fontSize: '9.5px', borderRadius: '3px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                                      {cs.department}
+                                    </span>
+                                  )}
+                                  <strong style={{ color: 'var(--text-main)' }}>{cs.contactName || '-'}</strong>
+                                </div>
+                              </td>
+                              <td style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>
+                                <span>{cs.contactPhone || cs.contact || '-'}</span>
+                              </td>
+                              <td style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                <span style={{ padding: '1px 5px', fontSize: '10px', borderRadius: '3px', backgroundColor: 'rgba(14, 165, 233, 0.1)', color: '#0284c7', border: '1px solid rgba(14, 165, 233, 0.3)', fontWeight: 600 }}>
+                                  {deliveryLabel.split(' ')[0]}
+                                </span>
+                              </td>
+                              <td style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', gap: '3px', justifyContent: 'center' }}>
+                                  <span style={{ fontSize: '9.5px', padding: '0 4px', borderRadius: '3px', backgroundColor: cs.hasFreightElevator !== false ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)', color: cs.hasFreightElevator !== false ? '#059669' : '#dc2626' }}>
+                                    {cs.hasFreightElevator !== false ? 'EV있음' : 'EV없음'}
+                                  </span>
+                                  {cs.requiresSecurityPass && (
+                                    <span style={{ fontSize: '9.5px', padding: '0 4px', borderRadius: '3px', backgroundColor: 'rgba(245, 158, 11, 0.1)', color: '#d97706' }}>
+                                      보안등록
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => canSave && handleToggleCustomerSiteStatus(cs)}
+                                  style={{
+                                    padding: '1px 6px',
+                                    fontSize: '10px',
+                                    fontWeight: 700,
+                                    borderRadius: '4px',
+                                    cursor: canSave ? 'pointer' : 'default',
+                                    border: isSiteActive ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(148, 163, 184, 0.4)',
+                                    backgroundColor: isSiteActive ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.14)',
+                                    color: isSiteActive ? '#059669' : '#64748b',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title={canSave ? '클릭하여 가동중 / 완공·종료 상태 전환' : undefined}
+                                >
+                                  {isSiteActive ? '가동중' : '완공/종료'}
+                                </button>
+                              </td>
+                              <td style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>
+                                <div 
+                                  onClick={() => canSave && handleOpenSiteOptionModal(cs)}
+                                  style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: canSave ? 'pointer' : 'default', flexWrap: 'nowrap' }}
+                                  title={canSave ? "클릭하여 설치/납품처 옵션 관리" : undefined}
+                                >
+                                  {(() => {
+                                    const paidStr = normalizeOptionString(cs.paidOptions);
+                                    const protStr = normalizeOptionString(cs.protection);
+                                    const attStr = normalizeOptionString(cs.attachments || (cs.checkedSpecs as any)?.__attachments);
+                                    const hasPaid = Boolean(paidStr && paidStr !== '-' && paidStr !== 'NONE' && paidStr !== '없음');
+                                    const hasProt = Boolean(protStr && protStr !== 'NONE' && protStr !== '-' && protStr !== '없음');
+                                    const hasAtt = Boolean(attStr && attStr !== 'NONE' && attStr !== '-' && attStr !== '없음');
+                                    if (!hasPaid && !hasProt && !hasAtt) {
+                                      return (
+                                        <span style={{ padding: '1px 6px', fontSize: '11px', borderRadius: '3px', backgroundColor: 'var(--bg-app)', color: 'var(--text-muted)', border: '1px dashed var(--border-color)' }}>
+                                          (기본상속)
+                                        </span>
+                                      );
+                                    }
                                     return (
-                                      <div key={c.id || cIdx} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}>
-                                        {typeCfg && (
-                                          <span style={{ padding: '0 4px', fontSize: '9px', borderRadius: '3px', color: typeCfg.color, backgroundColor: typeCfg.bg, fontWeight: 700, border: `1px solid ${typeCfg.color}35`, whiteSpace: 'nowrap' }}>
-                                            {typeCfg.label.slice(0, 2)}
+                                      <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
+                                        {hasPaid && (
+                                          <span style={{ padding: '1px 5px', fontSize: '9.5px', borderRadius: '3px', backgroundColor: 'rgba(59, 130, 246, 0.12)', color: 'var(--primary)', border: '1px solid rgba(59, 130, 246, 0.3)', fontWeight: 600 }}>
+                                            {paidStr}
                                           </span>
                                         )}
-                                        <span style={{ fontWeight: 600 }}>{c.name || '-'}</span>
-                                        {c.position && <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>({c.position})</span>}
-                                        {c.isPrimary && <span className="badge badge-primary" style={{ fontSize: '9px', padding: '0 3px' }}>대표</span>}
+                                        {hasProt && (
+                                          <span style={{ padding: '1px 5px', fontSize: '9.5px', borderRadius: '3px', backgroundColor: 'rgba(16, 185, 129, 0.12)', color: 'var(--success)', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 600 }}>
+                                            {protStr}
+                                          </span>
+                                        )}
+                                        {hasAtt && (
+                                          <span style={{ padding: '1px 5px', fontSize: '9.5px', borderRadius: '3px', backgroundColor: 'rgba(124, 58, 237, 0.12)', color: '#7c3aed', border: '1px solid rgba(124, 58, 237, 0.3)', fontWeight: 600 }}>
+                                            {attStr}
+                                          </span>
+                                        )}
                                       </div>
                                     );
-                                  })}
+                                  })()}
                                 </div>
-                              ) : (
-                                <span>{cs.contactName || '-'}</span>
-                              )}
-                            </td>
-                            <td style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>
-                              {cs.contacts && cs.contacts.filter(c => c.isActive !== false).length > 0 ? (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '3px' }}>
-                                  {cs.contacts.filter(c => c.isActive !== false).map((c, cIdx) => (
-                                    <div key={c.id || cIdx} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px' }}>
-                                      <span>{c.contact || '-'}</span>
-                                      {c.email && <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>&lt;{c.email}&gt;</span>}
-                                    </div>
-                                  ))}
-                                </div>
-                              ) : (
-                                <span>{cs.contact || '-'}{cs.email ? ` (${cs.email})` : ''}</span>
-                              )}
-                            </td>
-                            <td style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                              <span style={{ fontSize: '11.5px', fontWeight: 600, color: cs.statementClosingDay ? 'var(--primary)' : 'var(--text-muted)' }}>
-                                매월 {cs.statementClosingDay === 31 ? '말일' : `${cs.statementClosingDay || activeCustomer?.defaultStatementClosingDay || 25}일`}
-                              </span>
-                            </td>
-                            <td style={{ padding: '5px 6px', textAlign: 'center', whiteSpace: 'nowrap' }}>
-                              <button
-                                type="button"
-                                onClick={() => canSave && handleToggleCustomerSiteStatus(cs)}
-                                style={{
-                                  padding: '1px 6px',
-                                  fontSize: '10px',
-                                  fontWeight: 700,
-                                  borderRadius: '4px',
-                                  cursor: canSave ? 'pointer' : 'default',
-                                  border: isSiteActive ? '1px solid rgba(16, 185, 129, 0.4)' : '1px solid rgba(148, 163, 184, 0.4)',
-                                  backgroundColor: isSiteActive ? 'rgba(16, 185, 129, 0.12)' : 'rgba(148, 163, 184, 0.14)',
-                                  color: isSiteActive ? '#059669' : '#64748b',
-                                  whiteSpace: 'nowrap'
-                                }}
-                                title={canSave ? '클릭하여 가동중 / 완공·종료 상태 전환' : undefined}
-                              >
-                                {isSiteActive ? '가동중' : '완공/종료'}
-                              </button>
-                            </td>
-                            <td style={{ padding: '5px 6px', whiteSpace: 'nowrap' }}>
-                              <div 
-                                onClick={() => canSave && handleOpenSiteOptionModal(cs)}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', cursor: canSave ? 'pointer' : 'default', flexWrap: 'nowrap' }}
-                                title={canSave ? "클릭하여 현장 옵션 관리" : undefined}
-                              >
-                                {(() => {
-                                  const paidStr = normalizeOptionString(cs.paidOptions);
-                                  const protStr = normalizeOptionString(cs.protection);
-                                  const attStr = normalizeOptionString(cs.attachments || (cs.checkedSpecs as any)?.__attachments);
-                                  const hasPaid = Boolean(paidStr && paidStr !== '-' && paidStr !== 'NONE' && paidStr !== '없음');
-                                  const hasProt = Boolean(protStr && protStr !== 'NONE' && protStr !== '-' && protStr !== '없음');
-                                  const hasAtt = Boolean(attStr && attStr !== 'NONE' && attStr !== '-' && attStr !== '없음');
-                                  if (!hasPaid && !hasProt && !hasAtt) {
-                                    return (
-                                      <span style={{ padding: '1px 6px', fontSize: '11px', borderRadius: '3px', backgroundColor: 'var(--bg-app)', color: 'var(--text-muted)', border: '1px dashed var(--border-color)' }}>
-                                        (기본상속)
-                                      </span>
-                                    );
-                                  }
-                                  return (
-                                    <div style={{ display: 'flex', gap: '3px', alignItems: 'center' }}>
-                                      {hasPaid && (
-                                        <span style={{ padding: '1px 5px', fontSize: '9.5px', borderRadius: '3px', backgroundColor: 'rgba(59, 130, 246, 0.12)', color: 'var(--primary)', border: '1px solid rgba(59, 130, 246, 0.3)', fontWeight: 600 }}>
-                                          {paidStr}
-                                        </span>
-                                      )}
-                                      {hasProt && (
-                                        <span style={{ padding: '1px 5px', fontSize: '9.5px', borderRadius: '3px', backgroundColor: 'rgba(16, 185, 129, 0.12)', color: 'var(--success)', border: '1px solid rgba(16, 185, 129, 0.3)', fontWeight: 600 }}>
-                                          {protStr}
-                                        </span>
-                                      )}
-                                      {hasAtt && (
-                                        <span style={{ padding: '1px 5px', fontSize: '9.5px', borderRadius: '3px', backgroundColor: 'rgba(124, 58, 237, 0.12)', color: '#7c3aed', border: '1px solid rgba(124, 58, 237, 0.3)', fontWeight: 600 }}>
-                                          {attStr}
-                                        </span>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
               </div>
 
-              {/* 3. 등록 담당자(Contacts) 고밀도 그리드 */}
+              {/* 4. 등록 담당자(Contacts) 고밀도 그리드 */}
               <div style={{ padding: '8px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                   <div style={{ fontWeight: 600, fontSize: '12.5px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -2906,7 +2872,7 @@ const handleDeleteAccount = async (accId: string) => {
           <form onSubmit={handleSaveSiteSubmit} className="card" style={{ width: '100%', maxWidth: '660px', maxHeight: '90vh', overflowY: 'auto', backgroundColor: 'var(--bg-card)' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
               <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
-                {editingSite.id ? '현장 수정' : '신규 현장 등록'}
+                {editingSite.id ? '설치/납품처 수정' : '신규 설치/납품처 등록'}
               </h3>
               <button type="button" onClick={() => setShowSiteModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
             </div>
@@ -2915,18 +2881,18 @@ const handleDeleteAccount = async (accId: string) => {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12px' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 140px', gap: '8px' }}>
                 <div>
-                  <label style={labelStyle}>현장명 *</label>
+                  <label style={labelStyle}>설치/납품처명 *</label>
                   <input
                     type="text"
                     style={inputStyle}
                     value={editingSite.name || ''}
                     onChange={e => setEditingSite({ ...editingSite, name: e.target.value })}
-                    placeholder="고객 현장명을 입력하세요 (예: 평택 P4 복합동 현장)"
+                    placeholder="설치/납품처 명칭 (예: 판교 R&D 본사 5층 개발본부, 수원사업장 IDC)"
                     required
                   />
                 </div>
                 <div>
-                  <label style={labelStyle}>현장 가동 상태</label>
+                  <label style={labelStyle}>가동 상태</label>
                   <select
                     style={inputStyle}
                     value={editingSite.isActive !== false ? 'ACTIVE' : 'COMPLETED'}
@@ -2939,350 +2905,124 @@ const handleDeleteAccount = async (accId: string) => {
               </div>
 
               <div>
-                <label style={labelStyle}>현장 주소 *</label>
+                <label style={labelStyle}>도로명 주소 *</label>
                 <input
                   type="text"
                   style={inputStyle}
                   value={editingSite.address || ''}
                   onChange={e => setEditingSite({ ...editingSite, address: e.target.value })}
-                  placeholder="현장 도로명 또는 지번 주소를 입력하세요"
+                  placeholder="설치/납품처 도로명 주소를 입력하세요"
+                  required
                 />
               </div>
 
-              {/* 👥 현장 담당자 섹션 (3대 유형: 장비담당자, 마감담당자, 안전담당자) */}
-              <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', backgroundColor: 'var(--bg-app)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              {/* 🏢 IT 수령처 및 담당자 정보 (사용자 지침: 이메일 제외, 부서/이름/연락처만 유지) */}
+              <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', backgroundColor: 'var(--bg-app)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <User size={15} className="text-primary" /> 수령처 및 담당자 정보
+                </span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                   <div>
-                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                      <User size={15} className="text-primary" /> 현장 담당자 관리
-                    </span>
-                    <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                      장비담당자(배차/운용), 마감담당자(명세서 수신), 안전담당자(점검결과)
-                    </span>
+                    <label style={labelStyle}>상세 위치 (층, 호수, 랙 번호)</label>
+                    <input
+                      type="text"
+                      style={inputStyle}
+                      value={editingSite.addressDetail || ''}
+                      onChange={e => setEditingSite({ ...editingSite, addressDetail: e.target.value })}
+                      placeholder="예: 5층 SW개발3팀, 랙 A-12"
+                    />
                   </div>
-                  <div style={{ display: 'flex', gap: '4px' }}>
-                    <button
-                      type="button"
-                      onClick={() => handleAddSiteContact('EQUIPMENT')}
-                      style={{
-                        padding: '2px 8px',
-                        fontSize: '11px',
-                        border: '1px solid rgba(37, 99, 235, 0.3)',
-                        borderRadius: '4px',
-                        backgroundColor: 'rgba(37, 99, 235, 0.08)',
-                        color: '#2563eb',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                        fontWeight: 600
-                      }}
-                      title="장비담당자 추가"
-                    >
-                      <Plus size={11} /> + 장비
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAddSiteContact('CLOSING')}
-                      style={{
-                        padding: '2px 8px',
-                        fontSize: '11px',
-                        border: '1px solid rgba(5, 150, 105, 0.3)',
-                        borderRadius: '4px',
-                        backgroundColor: 'rgba(5, 150, 105, 0.08)',
-                        color: '#059669',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                        fontWeight: 600
-                      }}
-                      title="마감담당자 추가"
-                    >
-                      <Plus size={11} /> + 마감
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleAddSiteContact('SAFETY')}
-                      style={{
-                        padding: '2px 8px',
-                        fontSize: '11px',
-                        border: '1px solid rgba(217, 119, 6, 0.3)',
-                        borderRadius: '4px',
-                        backgroundColor: 'rgba(217, 119, 6, 0.08)',
-                        color: '#d97706',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '3px',
-                        fontWeight: 600
-                      }}
-                      title="안전담당자 추가"
-                    >
-                      <Plus size={11} /> + 안전
-                    </button>
+                  <div>
+                    <label style={labelStyle}>수령 부서</label>
+                    <input
+                      type="text"
+                      style={inputStyle}
+                      value={editingSite.department || ''}
+                      onChange={e => setEditingSite({ ...editingSite, department: e.target.value })}
+                      placeholder="예: IT운영팀, 시스템기획실"
+                    />
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {(editingSite.contacts || []).map((sc, scIdx) => {
-                    const cType: SiteContactType = sc.contactType || (scIdx === 0 ? 'EQUIPMENT' : (scIdx === 1 ? 'CLOSING' : 'SAFETY'));
-                    const cfg = SITE_CONTACT_TYPE_CONFIG[cType] || SITE_CONTACT_TYPE_CONFIG.EQUIPMENT;
-                    const isInactive = sc.isActive === false;
-
-                    return (
-                      <div
-                        key={sc.id || scIdx}
-                        style={{
-                          border: `1px solid ${isInactive ? 'var(--border-color)' : cfg.color + '40'}`,
-                          borderRadius: '6px',
-                          padding: '10px 12px',
-                          backgroundColor: isInactive ? 'rgba(0,0,0,0.03)' : 'var(--bg-card)',
-                          opacity: isInactive ? 0.65 : 1,
-                          transition: 'all 0.15s ease'
-                        }}
-                      >
-                        {/* 카드 상단 바: 유형 뱃지, 설명, 사용여부 토글, 대표 지정, 삭제 */}
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px', flexWrap: 'wrap', gap: '6px' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span
-                              style={{
-                                padding: '2px 7px',
-                                fontSize: '11px',
-                                fontWeight: 700,
-                                borderRadius: '4px',
-                                color: cfg.color,
-                                backgroundColor: cfg.bg,
-                                border: `1px solid ${cfg.color}40`,
-                                whiteSpace: 'nowrap'
-                              }}
-                            >
-                              {cfg.label}
-                            </span>
-                            <span style={{ fontSize: '11.5px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                              ({cfg.subLabel})
-                            </span>
-
-                            {/* 유형 변경 선택기 */}
-                            <select
-                              value={cType}
-                              onChange={e => handleUpdateSiteContact(scIdx, 'contactType', e.target.value as SiteContactType)}
-                              style={{
-                                fontSize: '11.5px',
-                                padding: '1px 4px',
-                                borderRadius: '3px',
-                                border: '1px solid var(--border-color)',
-                                backgroundColor: 'var(--bg-app)',
-                                color: 'var(--text-main)',
-                                cursor: 'pointer'
-                              }}
-                              title="담당자 유형 변경"
-                            >
-                              <option value="EQUIPMENT">장비담당자</option>
-                              <option value="CLOSING">마감담당자</option>
-                              <option value="SAFETY">안전담당자</option>
-                            </select>
-
-                            {sc.isPrimary ? (
-                              <span className="badge badge-primary" style={{ fontSize: '9.5px', padding: '1px 5px', whiteSpace: 'nowrap' }}>
-                                ★ 대표
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleSetPrimarySiteContact(scIdx)}
-                                style={{
-                                  padding: '1px 5px',
-                                  fontSize: '11px',
-                                  border: '1px solid var(--border-color)',
-                                  borderRadius: '3px',
-                                  background: 'transparent',
-                                  cursor: 'pointer',
-                                  color: 'var(--text-secondary)',
-                                  whiteSpace: 'nowrap'
-                                }}
-                              >
-                                대표 지정
-                              </button>
-                            )}
-                          </div>
-
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            {/* 사용 / 미사용 관리 토글 */}
-                            <button
-                              type="button"
-                              onClick={() => handleToggleSiteContactActive(scIdx)}
-                              style={{
-                                padding: '2px 8px',
-                                fontSize: '11.5px',
-                                fontWeight: 600,
-                                border: `1px solid ${!isInactive ? 'rgba(16, 185, 129, 0.4)' : 'rgba(156, 163, 175, 0.4)'}`,
-                                borderRadius: '4px',
-                                backgroundColor: !isInactive ? 'rgba(16, 185, 129, 0.12)' : 'rgba(156, 163, 175, 0.12)',
-                                color: !isInactive ? 'var(--success, #059669)' : 'var(--text-muted, #6b7280)',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '4px',
-                                whiteSpace: 'nowrap'
-                              }}
-                              title={!isInactive ? '클릭 시 미사용 전환' : '클릭 시 사용 전환'}
-                            >
-                              {!isInactive ? (
-                                <>
-                                  <CheckCircle2 size={11} /> 사용중
-                                </>
-                              ) : (
-                                <>
-                                  <X size={11} /> 미사용
-                                </>
-                              )}
-                            </button>
-
-                            {(editingSite.contacts || []).length > 1 && (
-                              <button data-hs-trigger="Delete"
-                                type="button"
-                                onClick={() => handleRemoveSiteContact(scIdx)}
-                                style={{
-                                  background: 'none',
-                                  border: 'none',
-                                  color: 'var(--danger-color, #ef4444)',
-                                  cursor: 'pointer',
-                                  padding: '2px',
-                                  display: 'flex',
-                                  alignItems: 'center'
-                                }}
-                                title="담당자 삭제"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* 입력 필드 (상하 스택) */}
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <label style={{ ...labelStyle, whiteSpace: 'nowrap' }}>
-                              {cfg.label} 성명 {cType === 'EQUIPMENT' && '*'}
-                            </label>
-                            <input
-                              type="text"
-                              style={inputStyle}
-                              value={sc.name || ''}
-                              onChange={e => handleUpdateSiteContact(scIdx, 'name', e.target.value)}
-                              placeholder={`예: ${cType === 'EQUIPMENT' ? '김소장' : cType === 'CLOSING' ? '박과장' : '이대리'}`}
-                              required={cType === 'EQUIPMENT' && !isInactive}
-                            />
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <label style={{ ...labelStyle, whiteSpace: 'nowrap' }}>직책 / 역할</label>
-                            <input
-                              type="text"
-                              style={inputStyle}
-                              value={sc.position || ''}
-                              onChange={e => handleUpdateSiteContact(scIdx, 'position', e.target.value)}
-                              placeholder={cfg.defaultPosition}
-                            />
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.3fr', gap: '8px' }}>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <label style={{ ...labelStyle, whiteSpace: 'nowrap' }}>
-                              전화번호 (휴대폰) {cType === 'EQUIPMENT' && '*'}
-                            </label>
-                            <input
-                              type="text"
-                              style={inputStyle}
-                              value={sc.contact || ''}
-                              onChange={e => handleUpdateSiteContact(scIdx, 'contact', e.target.value)}
-                              placeholder="010-0000-0000"
-                              required={cType === 'EQUIPMENT' && !isInactive}
-                            />
-                          </div>
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                            <label style={{ ...labelStyle, whiteSpace: 'nowrap' }}>
-                              이메일주소 {cType === 'CLOSING' && <span style={{ fontSize: '11px', color: '#059669', fontWeight: 600 }}>[명세서/계산서]</span>}
-                            </label>
-                            <input
-                              type="email"
-                              style={inputStyle}
-                              value={sc.email || ''}
-                              onChange={e => handleUpdateSiteContact(scIdx, 'email', e.target.value)}
-                              placeholder="site@company.com"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  <div>
+                    <label style={labelStyle}>수령 담당자 성명 *</label>
+                    <input
+                      type="text"
+                      style={inputStyle}
+                      value={editingSite.contactName || ''}
+                      onChange={e => setEditingSite({ ...editingSite, contactName: e.target.value })}
+                      placeholder="예: 김수령 대리"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={labelStyle}>수령 담당자 연락처 *</label>
+                    <input
+                      type="text"
+                      style={inputStyle}
+                      value={editingSite.contactPhone || editingSite.contact || ''}
+                      onChange={e => setEditingSite({ ...editingSite, contactPhone: e.target.value, contact: e.target.value })}
+                      placeholder="예: 010-1234-5678"
+                      required
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* 📅 현장 마감 조건 (거래명세서 마감일 / 계산서 청구일 / 약정 결제일) */}
-              <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px 14px', backgroundColor: 'var(--bg-app)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                  {/* 거래명세서 마감일 */}
+              {/* 🚚 IT 5대 배송 수단 및 반입/보안 인프라 환경 */}
+              <div style={{ border: '1px solid var(--border-color)', borderRadius: '6px', padding: '12px', backgroundColor: 'var(--bg-app)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Truck size={15} className="text-primary" /> 배송 및 반입·출입 인프라 환경
+                </span>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '8px' }}>
                   <div>
-                    <label style={{ ...labelStyle, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span>거래명세서 마감일</span>
-                      <span style={{ fontSize: '11px', color: 'var(--primary)', fontWeight: 700 }}>*청구생성 연동</span>
-                    </label>
+                    <label style={labelStyle}>기본 배송 수단</label>
                     <select
                       style={inputStyle}
-                      value={editingSite.statementClosingDay || activeCustomer?.defaultStatementClosingDay || 25}
-                      onChange={e => setEditingSite({ ...editingSite, statementClosingDay: Number(e.target.value) })}
+                      value={editingSite.deliveryMethod || 'COURIER'}
+                      onChange={e => setEditingSite({ ...editingSite, deliveryMethod: e.target.value as ITDeliveryMethod })}
                     >
-                      {Array.from({ length: 30 }, (_, i) => i + 1).map(day => (
-                        <option key={day} value={day}>매월 {day}일</option>
-                      ))}
-                      <option value={31}>31일 (말일)</option>
+                      <option value="COURIER">택배 발송 (운송장)</option>
+                      <option value="QUICK">퀵서비스 (당일 배송)</option>
+                      <option value="DIRECT_INSTALL">엔지니어 직배송/설치</option>
+                      <option value="FREIGHT">화물 용차 (탑차)</option>
+                      <option value="PICKUP">방문 수령/반납</option>
                     </select>
                   </div>
-
-                  {/* 세금계산서 청구 마감일 */}
                   <div>
-                    <label style={{ ...labelStyle, whiteSpace: 'nowrap' }}>
-                      세금계산서 청구일
-                    </label>
+                    <label style={labelStyle}>화물 엘리베이터</label>
                     <select
                       style={inputStyle}
-                      value={editingSite.billingDay || activeCustomer?.defaultBillingDay || 30}
-                      onChange={e => setEditingSite({ ...editingSite, billingDay: Number(e.target.value) })}
+                      value={editingSite.hasFreightElevator !== false ? 'YES' : 'NO'}
+                      onChange={e => setEditingSite({ ...editingSite, hasFreightElevator: e.target.value === 'YES' })}
                     >
-                      {Array.from({ length: 30 }, (_, i) => i + 1).map(day => (
-                        <option key={day} value={day}>매월 {day}일</option>
-                      ))}
-                      <option value={31}>31일 (말일)</option>
+                      <option value="YES">이용 가능 (승강기 有)</option>
+                      <option value="NO">없음 (계단/사다리차)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>출입 보안 사전등록</label>
+                    <select
+                      style={inputStyle}
+                      value={editingSite.requiresSecurityPass ? 'REQUIRED' : 'NONE'}
+                      onChange={e => setEditingSite({ ...editingSite, requiresSecurityPass: e.target.value === 'REQUIRED' })}
+                    >
+                      <option value="NONE">자유 출입 / 신분증 교환</option>
+                      <option value="REQUIRED">사전 보안등록 필수</option>
                     </select>
                   </div>
                 </div>
 
-                {/* 약정 결제일 */}
                 <div>
-                  <label style={{ ...labelStyle, whiteSpace: 'nowrap' }}>현장 약정 결제일 (미지정 시 고객사 조건 상속)</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: '6px', maxWidth: '340px' }}>
-                    <select
-                      style={inputStyle}
-                      value={editingSite.paymentDueMonthOffset !== undefined ? editingSite.paymentDueMonthOffset : (activeCustomer?.paymentDueMonthOffset ?? 1)}
-                      onChange={e => setEditingSite({ ...editingSite, paymentDueMonthOffset: Number(e.target.value) })}
-                    >
-                      {PAYMENT_DUE_MONTH_OPTIONS.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                    <select
-                      style={inputStyle}
-                      value={editingSite.paymentDueDay || activeCustomer?.paymentDueDay || 25}
-                      onChange={e => setEditingSite({ ...editingSite, paymentDueDay: Number(e.target.value) })}
-                    >
-                      {Array.from({ length: 30 }, (_, i) => i + 1).map(day => (
-                        <option key={day} value={day}>{day}일</option>
-                      ))}
-                      <option value={31}>말일</option>
-                    </select>
-                  </div>
+                  <label style={labelStyle}>반입/주차/출입 안내 메모</label>
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    value={editingSite.accessNotes || ''}
+                    onChange={e => setEditingSite({ ...editingSite, accessNotes: e.target.value })}
+                    placeholder="예: 지하 2층 화물하역장 진입 후 관리실 방문증 수령 필요"
+                  />
                 </div>
               </div>
 
@@ -3819,13 +3559,144 @@ const handleDeleteAccount = async (accId: string) => {
                   }}
                 >
                   <Trash2 size={13} />
-                  현장 삭제
+                  설치/납품처 삭제
                 </button>
               )}
               <div style={{ display: 'flex', gap: '8px' }}>
                 <button type="button" className="btn-secondary" onClick={() => setShowSiteModal(false)} style={{ padding: '5px 14px', fontSize: '12px' }}>취소</button>
                 <button data-hs-trigger="Save" type="submit" className="btn-primary" style={{ padding: '5px 16px', fontSize: '12px' }}>저장</button>
               </div>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* 💳 고객사 청구지 (Billing Target) 등록/수정 모달 */}
+      {showBillingTargetModal && editingBillingTarget && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100,
+          padding: '20px'
+        }}>
+          <form onSubmit={handleSaveBillingTargetSubmit} className="card" style={{ width: '100%', maxWidth: '480px', backgroundColor: 'var(--bg-card)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid var(--border-color)', paddingBottom: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 'bold' }}>
+                {editingBillingTarget.id ? '청구지 정보 수정' : '신규 청구지 등록'}
+              </h3>
+              <button type="button" onClick={() => setShowBillingTargetModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)' }}><X size={18} /></button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', fontSize: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '80px 1fr', gap: '8px' }}>
+                <div>
+                  <label style={labelStyle}>순번 *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    style={inputStyle}
+                    value={editingBillingTarget.seq || 1}
+                    onChange={e => setEditingBillingTarget({ ...editingBillingTarget, seq: Number(e.target.value) })}
+                    required
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>청구부서 / 사업장 명칭 *</label>
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    value={editingBillingTarget.name || ''}
+                    onChange={e => setEditingBillingTarget({ ...editingBillingTarget, name: e.target.value })}
+                    placeholder="예: 본사 IT운영팀, 마케팅본부, 수원사업장"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={labelStyle}>전자세금계산서 수신 이메일 *</label>
+                <input
+                  type="email"
+                  style={inputStyle}
+                  value={editingBillingTarget.taxEmail || ''}
+                  onChange={e => setEditingBillingTarget({ ...editingBillingTarget, taxEmail: e.target.value })}
+                  placeholder="tax@company.com"
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={labelStyle}>청구/정산 담당자</label>
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    value={editingBillingTarget.managerName || ''}
+                    onChange={e => setEditingBillingTarget({ ...editingBillingTarget, managerName: e.target.value })}
+                    placeholder="예: 이회계 대리"
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>담당자 연락처</label>
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    value={editingBillingTarget.managerPhone || ''}
+                    onChange={e => setEditingBillingTarget({ ...editingBillingTarget, managerPhone: e.target.value })}
+                    placeholder="예: 02-1234-5678"
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '8px' }}>
+                <div>
+                  <label style={labelStyle}>사업자등록번호 (본사와 상이할 시)</label>
+                  <input
+                    type="text"
+                    style={inputStyle}
+                    value={editingBillingTarget.bizRegNo || ''}
+                    onChange={e => setEditingBillingTarget({ ...editingBillingTarget, bizRegNo: e.target.value })}
+                    placeholder="000-00-00000"
+                  />
+                </div>
+                <div>
+                  <label style={labelStyle}>종사업장번호 (4자리)</label>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    style={inputStyle}
+                    value={editingBillingTarget.subBizNo || ''}
+                    onChange={e => setEditingBillingTarget({ ...editingBillingTarget, subBizNo: e.target.value })}
+                    placeholder="예: 0001"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={labelStyle}>청구 특이사항 메모</label>
+                <input
+                  type="text"
+                  style={inputStyle}
+                  value={editingBillingTarget.memo || ''}
+                  onChange={e => setEditingBillingTarget({ ...editingBillingTarget, memo: e.target.value })}
+                  placeholder="예: 매월 25일 마감 후 영수(청구) 발행 요망"
+                />
+              </div>
+
+              <div style={{ paddingTop: '4px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '12px', fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    checked={Boolean(editingBillingTarget.isDefault)}
+                    onChange={e => setEditingBillingTarget({ ...editingBillingTarget, isDefault: e.target.checked })}
+                  />
+                  <span>이 청구지를 고객사의 [기본 청구지]로 설정</span>
+                </label>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end', marginTop: '14px', paddingTop: '10px', borderTop: '1px solid var(--border-color)' }}>
+              <button type="button" className="btn-secondary" onClick={() => setShowBillingTargetModal(false)} style={{ padding: '5px 14px', fontSize: '12px' }}>취소</button>
+              <button data-hs-trigger="Save" type="submit" className="btn-primary" style={{ padding: '5px 16px', fontSize: '12px' }}>저장</button>
             </div>
           </form>
         </div>

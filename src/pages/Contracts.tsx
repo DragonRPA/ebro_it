@@ -6,9 +6,14 @@ import { useApp } from '../context/AppContext';
 import {
   Plus, Calendar, Search, Download, Edit3, Repeat, Clock, Wrench, ChevronLeft,
   Building2, ArrowLeftRight, Receipt, FolderOpen, AlertCircle, ExternalLink, Copy, AlertTriangle, FileText,
-  Truck, CheckCircle2, Network
+  Truck, CheckCircle2, Network, Package, MapPin, ShieldCheck, Tag, Info
 } from 'lucide-react';
-import { Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery, Asset, OutboundInspection, normalizeEndDate, formatContractEndDate, isIndefiniteEndDate, PAYMENT_DUE_MONTH_OPTIONS, formatPaymentDueCondition, isCustomerRestricted, isCustomerTotalBlocked, ApprovalPayload } from '../services/db';
+import {
+  Contract, db, Customer, CustomerContact, CustomerSite, ContractAsset, ContractHistory, Delivery, Asset,
+  OutboundInspection, normalizeEndDate, formatContractEndDate, isIndefiniteEndDate, PAYMENT_DUE_MONTH_OPTIONS,
+  formatPaymentDueCondition, isCustomerRestricted, isCustomerTotalBlocked, ApprovalPayload,
+  BillingTarget, ITDeliveryMethod, IT_DELIVERY_METHOD_LABELS, IT_DELIVERY_METHODS
+} from '../services/db';
 import { exportToExcel } from '../services/excel';
 import { ContractDocumentBundleModal } from '../components/ContractDocumentBundleModal';
 import { matchHangul, createHangulMatcher, sortCustomersByName, compareCustomerNames } from '../utils/hangulSearch';
@@ -120,6 +125,25 @@ export const Contracts: React.FC = () => {
   const [paymentDueDay, setPaymentDueDay] = useState(25);
   const [paymentDueMonthOffset, setPaymentDueMonthOffset] = useState(1);
 
+  // 🏛️ IT 도메인 청구지, 계약 기간 유형, 배송수단, 운반설치비 등 (1계약 = 1청구지, 1설치/납품처 단일 귀속)
+  const [billingTargetSelect, setBillingTargetSelect] = useState<string>('');
+  const [contractPeriodType, setContractPeriodType] = useState<'SHORT_TERM' | 'LONG_TERM'>('SHORT_TERM');
+  const [termMonths, setTermMonths] = useState<number>(12);
+  const [earlyTerminationFeeRate, setEarlyTerminationFeeRate] = useState<number>(10);
+  const [depositAmount, setDepositAmount] = useState<number>(0);
+  const [isDeliverySetupFeeBilled, setIsDeliverySetupFeeBilled] = useState<boolean>(false);
+  const [deliverySetupFeeAmount, setDeliverySetupFeeAmount] = useState<number>(50000);
+  const [deliveryMethod, setDeliveryMethod] = useState<ITDeliveryMethod>('COURIER');
+  const [courierCompany, setCourierCompany] = useState<string>('CJ대한통운');
+  const [trackingNo, setTrackingNo] = useState<string>('');
+  const [installTechName, setInstallTechName] = useState<string>('');
+
+  const selectedCustomerBillingTargets = useMemo(() => {
+    if (!custSelect || custSelect === 'NEW') return [];
+    const cust = customers.find(c => c.id === custSelect);
+    return cust?.billingTargets || [];
+  }, [custSelect, customers]);
+
   // 컬럼 표시 여부 토글 상태
   const [showOutboundProgressCol, setShowOutboundProgressCol] = useState(false);
   const [showPeriodCol, setShowPeriodCol] = useState(true);
@@ -194,10 +218,13 @@ export const Contracts: React.FC = () => {
   const [exchangeIdentifyType, setExchangeIdentifyType] = useState<'KNOWN' | 'UNKNOWN'>('KNOWN');
   const [exchangeReason, setExchangeReason] = useState('');
 
-  // Feature 2) 동일 고객+현장 중복 계약 인터셉터 모달
+  // Feature 2) 동일 고객+설치/납품처 중복 계약 인터셉터 모달
   const [duplicateContractModal, setDuplicateContractModal] = useState<Contract | null>(null);
   const [pendingContractPayload, setPendingContractPayload] = useState<{
-    customerId: string; contactId?: string; siteId?: string; salespersonId?: string;
+    customerId: string; billingTargetId?: string; billingTargetName?: string; contactId?: string; siteId?: string; salespersonId?: string;
+    contractPeriodType?: 'SHORT_TERM' | 'LONG_TERM'; termMonths?: number; earlyTerminationFeeRate?: number; depositAmount?: number;
+    pureRentalFee?: number; isDeliverySetupFeeBilled?: boolean; deliverySetupFeeAmount?: number;
+    deliveryMethod?: ITDeliveryMethod; courierCompany?: string; trackingNo?: string; installTechName?: string;
     startDate: string; endDate: string; billingDay: number;
     statementClosingDay: number; paymentDueDay: number; paymentDueMonthOffset?: number; lateInterestRate: number; status: string;
     basket: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[];
@@ -637,9 +664,25 @@ export const Contracts: React.FC = () => {
             aValue = getCustName(a.customerId);
             bValue = getCustName(b.customerId);
             break;
+          case 'billingTarget':
+            aValue = a.billingTargetName || '';
+            bValue = b.billingTargetName || '';
+            break;
           case 'site':
             aValue = getSiteName(a.siteId);
             bValue = getSiteName(b.siteId);
+            break;
+          case 'periodType':
+            aValue = a.contractPeriodType || 'SHORT_TERM';
+            bValue = b.contractPeriodType || 'SHORT_TERM';
+            break;
+          case 'deliveryMethod':
+            aValue = a.deliveryMethod || '';
+            bValue = b.deliveryMethod || '';
+            break;
+          case 'deliveryFee':
+            aValue = a.isDeliverySetupFeeBilled ? (a.deliverySetupFeeAmount || 0) : 0;
+            bValue = b.isDeliverySetupFeeBilled ? (b.deliverySetupFeeAmount || 0) : 0;
             break;
           case 'rentalFee': {
             const casA = contractAssetsByContractMap.get(a.id) || [];
@@ -1292,22 +1335,26 @@ export const Contracts: React.FC = () => {
                    c.status === 'SUCCEEDED' ? '승계됨' :
                    c.status === 'SHORTENED' ? '단축종료' : '종료',
 
-        // ② 거래처 및 현장
+        // ② 거래처 및 설치/납품처
         '고객사명': getCustName(c.customerId),
-        '현장명': getSiteName(c.siteId),
-        '현장 담당자': getContactName(c.contactId),
+        '청구지': c.billingTargetName || '본사 기본청구',
+        '설치/납품처': getSiteName(c.siteId),
+        '계약유형': c.contractPeriodType === 'LONG_TERM' ? `장기약정 (${c.termMonths || 12}개월)` : '단기렌탈 (일할)',
+        '배송수단': c.deliveryMethod ? IT_DELIVERY_METHOD_LABELS[c.deliveryMethod] : '택배 발송',
         '영업 담당자': (c.salespersonId ? userMap.get(c.salespersonId)?.name : undefined) || '-',
 
         // ③ 체결 장비 요약
         '체결 장비 수': `${cas.length}대`,
         '체결 장비 목록': assetSummary || '-',
 
-        // ④ 계약 일정 및 청구 조건
+        // ④ 계약 일정 및 비용 조건
         '계약 시작일': c.startDate,
         '계약 만료일': formatContractEndDate(c.endDate),
         '청구 마감일': `매월 ${c.billingDay}일`,
         '납기일': formatPaymentDueCondition(c.paymentDueMonthOffset, c.paymentDueDay),
-        '월 임대료 합계(원)': totalMonthlyRent,
+        '월 순 렌탈료(원)': c.pureRentalFee || totalMonthlyRent,
+        '운반설치비 등(원)': c.isDeliverySetupFeeBilled ? (c.deliverySetupFeeAmount || 0) : 0,
+        '보증금(원)': c.depositAmount || 0,
 
         // ⑤ 승계 및 이력 연계
         '전계약번호': c.predecessorContractNo || '-',
@@ -1441,7 +1488,24 @@ export const Contracts: React.FC = () => {
 
       const finalSalespersonId = salespersonSelect || currentUser?.id;
 
-      // ── Feature 2: 동일 고객+현장 중복 활성 계약 인터셉터 ──────────────────
+      let finalBillingTargetId = billingTargetSelect;
+      let finalBillingTargetName = '';
+      if (finalCustomerId) {
+        const curCust = customers.find(c => c.id === finalCustomerId);
+        const curBt = (curCust?.billingTargets || []).find(b => b.id === finalBillingTargetId);
+        if (curBt) {
+          finalBillingTargetName = curBt.name;
+        } else if (curCust?.billingTargets && curCust.billingTargets.length > 0) {
+          finalBillingTargetId = curCust.billingTargets[0].id;
+          finalBillingTargetName = curCust.billingTargets[0].name;
+        } else {
+          finalBillingTargetName = '본사 기본청구';
+        }
+      }
+
+      const totalBasketMonthlyRent = cleanedBasket.reduce((sum, item) => sum + (item.monthlyRentalFee || 0), 0);
+
+      // ── Feature 2: 동일 고객+설치/납품처 중복 활성 계약 인터셉터 ──────────────────
       const existingActiveContract = contracts.find(c =>
         c.customerId === finalCustomerId &&
         c.siteId === (finalSiteId && finalSiteId !== 'NEW' ? finalSiteId : undefined) &&
@@ -1452,9 +1516,22 @@ export const Contracts: React.FC = () => {
         // 계속 진행할 수 있도록 payload를 보존한 뒤 모달 오픈
         setPendingContractPayload({
           customerId: finalCustomerId!,
+          billingTargetId: finalBillingTargetId || undefined,
+          billingTargetName: finalBillingTargetName || undefined,
           contactId: finalContactId && finalContactId !== 'NEW' ? finalContactId : undefined,
           siteId: finalSiteId && finalSiteId !== 'NEW' ? finalSiteId : undefined,
           salespersonId: finalSalespersonId,
+          contractPeriodType,
+          termMonths: contractPeriodType === 'LONG_TERM' ? termMonths : undefined,
+          earlyTerminationFeeRate: contractPeriodType === 'LONG_TERM' ? earlyTerminationFeeRate : undefined,
+          depositAmount: contractPeriodType === 'LONG_TERM' ? depositAmount : undefined,
+          pureRentalFee: totalBasketMonthlyRent,
+          isDeliverySetupFeeBilled,
+          deliverySetupFeeAmount: isDeliverySetupFeeBilled ? deliverySetupFeeAmount : 0,
+          deliveryMethod,
+          courierCompany: deliveryMethod === 'COURIER' ? courierCompany : undefined,
+          trackingNo: deliveryMethod === 'COURIER' ? trackingNo : undefined,
+          installTechName: deliveryMethod === 'DIRECT_INSTALL' ? installTechName : undefined,
           startDate,
           endDate: isEndDateOpen ? '미정' : endDate,
           billingDay: cleanBillingDay,
@@ -1472,9 +1549,22 @@ export const Contracts: React.FC = () => {
 
       createContract({
         customerId: finalCustomerId,
+        billingTargetId: finalBillingTargetId || undefined,
+        billingTargetName: finalBillingTargetName || undefined,
         contactId: finalContactId && finalContactId !== 'NEW' ? finalContactId : undefined,
         siteId: finalSiteId && finalSiteId !== 'NEW' ? finalSiteId : undefined,
         salespersonId: finalSalespersonId,
+        contractPeriodType,
+        termMonths: contractPeriodType === 'LONG_TERM' ? termMonths : undefined,
+        earlyTerminationFeeRate: contractPeriodType === 'LONG_TERM' ? earlyTerminationFeeRate : undefined,
+        depositAmount: contractPeriodType === 'LONG_TERM' ? depositAmount : undefined,
+        pureRentalFee: totalBasketMonthlyRent,
+        isDeliverySetupFeeBilled,
+        deliverySetupFeeAmount: isDeliverySetupFeeBilled ? deliverySetupFeeAmount : 0,
+        deliveryMethod,
+        courierCompany: deliveryMethod === 'COURIER' ? courierCompany : undefined,
+        trackingNo: deliveryMethod === 'COURIER' ? trackingNo : undefined,
+        installTechName: deliveryMethod === 'DIRECT_INSTALL' ? installTechName : undefined,
         startDate: startDate,
         endDate: isEndDateOpen ? '미정' : endDate,
         billingDay: cleanBillingDay,
@@ -1488,6 +1578,17 @@ export const Contracts: React.FC = () => {
       setActiveTab('ALL_LIST');
       setViewMode('LIST');
       setBasket([]);
+      setBillingTargetSelect('');
+      setContractPeriodType('SHORT_TERM');
+      setTermMonths(12);
+      setEarlyTerminationFeeRate(10);
+      setDepositAmount(0);
+      setIsDeliverySetupFeeBilled(false);
+      setDeliverySetupFeeAmount(50000);
+      setDeliveryMethod('COURIER');
+      setCourierCompany('CJ대한통운');
+      setTrackingNo('');
+      setInstallTechName('');
     } finally {
       setIsSubmittingContract(false);
     }
@@ -1652,8 +1753,8 @@ export const Contracts: React.FC = () => {
             </h2>
             <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>
               {viewMode === 'DETAIL'
-                ? `${getCustName(activeContract?.customerId || '')} — ${getSiteName(activeContract?.siteId)}`
-                : '계약 등록, 상태 변경, 기간 조정 및 승계 내역을 관리합니다.'}
+                ? `${getCustName(activeContract?.customerId || '')} ➔ ${getSiteName(activeContract?.siteId)} (청구지: ${activeContract?.billingTargetName || '본사 기본청구'})`
+                : '계약 등록, 청구지 및 설치/납품처 단일 귀속, 단기/장기 약정 기간 및 배송 관리'}
             </p>
           </div>
         </div>
@@ -1785,7 +1886,7 @@ export const Contracts: React.FC = () => {
                 <Search size={16} color="var(--text-muted)" />
                 <input
                   type="text"
-                  placeholder="통합 검색 (계약번호, 고객사명, 현장명, 자산번호, 담당자명...)"
+                  placeholder="통합 검색 (계약번호, 고객사명, 설치/납품처명, 자산번호, 담당자명...)"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') handleSearchClick(); }}
@@ -1803,7 +1904,7 @@ export const Contracts: React.FC = () => {
               </div>
             </div>
 
-            {/* 2행: 고객사, 현장, 시작일, 종료일 세부 상세 필터 (레이블 상단 헤더 세로 스택 구조) */}
+            {/* 2행: 고객사, 설치/납품처, 시작일, 종료일 세부 상세 필터 (레이블 상단 헤더 세로 스택 구조) */}
             <div data-mid="contract-detailed-filters" style={{ display: 'flex', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap', backgroundColor: 'var(--bg-app)', padding: '10px 14px', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
               {/* 고객사 콤보박스 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, position: 'relative' }}>
@@ -1848,9 +1949,9 @@ export const Contracts: React.FC = () => {
                 </div>
               </div>
 
-              {/* 현장 콤보박스 */}
+              {/* 설치/납품처 콤보박스 */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0, position: 'relative' }}>
-                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>현장 선택</label>
+                <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>설치/납품처 선택</label>
                 <div style={{ position: 'relative' }}>
                   <input
                     type="text"
@@ -1862,7 +1963,7 @@ export const Contracts: React.FC = () => {
                     }}
                     onFocus={() => setSiteDropdownOpen(true)}
                     onBlur={() => setTimeout(() => setSiteDropdownOpen(false), 150)}
-                    placeholder="전체 현장"
+                    placeholder="전체 설치/납품처"
                     style={{ padding: '6px 28px 6px 10px', borderRadius: '6px', fontSize: '12.5px', border: '1px solid var(--border-color)', outline: 'none', backgroundColor: 'var(--bg-card)', color: 'var(--text-primary)', whiteSpace: 'nowrap', minWidth: '160px', width: '100%' }}
                   />
                   {siteInputText && (
@@ -1876,7 +1977,7 @@ export const Contracts: React.FC = () => {
                       <div
                         onMouseDown={() => { setSiteFilter('ALL'); setSiteInputText(''); setSiteDropdownOpen(false); }}
                         style={{ padding: '8px 12px', fontSize: '12.5px', cursor: 'pointer', color: siteFilter === 'ALL' ? 'var(--primary)' : 'var(--text-primary)', fontWeight: siteFilter === 'ALL' ? 700 : 400 }}
-                      >전체 현장</div>
+                      >전체 설치/납품처</div>
                       {(customerFilter === 'ALL' ? sites : sites.filter(s => s.customerId === customerFilter))
                         .filter(s => !siteInputText || matchHangul(s.name, siteInputText))
                         .map(s => (
@@ -2067,10 +2168,14 @@ export const Contracts: React.FC = () => {
                     <th style={{ textAlign: 'center', whiteSpace: 'nowrap', width: '80px' }}>상세 보기</th>
                     <SortableTh label="계약번호" sortKey="contractNo" currentSort={sortConfig} onSort={handleSort} />
                     <SortableTh label="고객사명" sortKey="customer" currentSort={sortConfig} onSort={handleSort} />
-                    <SortableTh label="현장명" sortKey="site" currentSort={sortConfig} onSort={handleSort} />
+                    <SortableTh label="청구지" sortKey="billingTarget" currentSort={sortConfig} onSort={handleSort} />
+                    <SortableTh label="설치/납품처" sortKey="site" currentSort={sortConfig} onSort={handleSort} />
+                    <SortableTh label="계약유형" sortKey="periodType" currentSort={sortConfig} onSort={handleSort} align="center" />
                     {showOutboundProgressCol && <th style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>출고 진행 현황</th>}
                     <SortableTh label="체결 자산" sortKey="assets" currentSort={sortConfig} onSort={handleSort} />
-                    <SortableTh label="월 렌탈료" sortKey="rentalFee" currentSort={sortConfig} onSort={handleSort} align="right" />
+                    <SortableTh label="순 렌탈료" sortKey="rentalFee" currentSort={sortConfig} onSort={handleSort} align="right" />
+                    <SortableTh label="운반설치비 등" sortKey="deliveryFee" currentSort={sortConfig} onSort={handleSort} align="right" />
+                    <SortableTh label="배송수단" sortKey="deliveryMethod" currentSort={sortConfig} onSort={handleSort} align="center" />
                     {showPeriodCol && <SortableTh label="계약 기간" sortKey="period" currentSort={sortConfig} onSort={handleSort} />}
                     {showLastBilledCol && <SortableTh label="최근 청구 기간" sortKey="billingPeriod" currentSort={sortConfig} onSort={handleSort} />}
                     {showBillingCountCol && <SortableTh label="청구 건수" sortKey="billingCount" currentSort={sortConfig} onSort={handleSort} align="center" />}
@@ -2083,7 +2188,7 @@ export const Contracts: React.FC = () => {
                 <tbody style={{ whiteSpace: 'nowrap' }}>
                   {sortedContracts.length === 0 ? (
                     <tr>
-                      <td colSpan={10 + (showOutboundProgressCol ? 1 : 0) + (showPeriodCol ? 1 : 0) + (showLastBilledCol ? 1 : 0) + (showBillingCountCol ? 1 : 0)} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
+                      <td colSpan={13 + (showOutboundProgressCol ? 1 : 0) + (showPeriodCol ? 1 : 0) + (showLastBilledCol ? 1 : 0) + (showBillingCountCol ? 1 : 0)} style={{ textAlign: 'center', padding: '36px 0', color: 'var(--text-muted)', fontSize: '13px' }}>
                         조회 결과가 없습니다.
                       </td>
                     </tr>
@@ -2160,7 +2265,17 @@ export const Contracts: React.FC = () => {
                               )}
                             </div>
                           </td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: '12px', fontWeight: 600 }}>{c.billingTargetName || '본사 기본청구'}</span>
+                          </td>
                           <td style={{ whiteSpace: 'nowrap' }}>{getSiteName(c.siteId)}</td>
+                          <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
+                            {c.contractPeriodType === 'LONG_TERM' ? (
+                              <span className="badge badge-info" style={{ fontSize: '10.5px', fontWeight: 700 }}>장기 ({c.termMonths || 12}개월)</span>
+                            ) : (
+                              <span className="badge badge-secondary" style={{ fontSize: '10.5px' }}>단기 (일할)</span>
+                            )}
+                          </td>
                           {showOutboundProgressCol && (
                             <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
                               {renderMilestoneBadges(c, (cid) => {
@@ -2187,7 +2302,23 @@ export const Contracts: React.FC = () => {
                             ) : hasZeroFee ? (
                               <span style={{ color: 'var(--danger)', fontWeight: 700 }}>0원 (미입력)</span>
                             ) : (
-                              <span>{totalFee.toLocaleString()}원</span>
+                              <span>{(c.pureRentalFee || totalFee).toLocaleString()}원</span>
+                            )}
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
+                            {c.isDeliverySetupFeeBilled ? (
+                              <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{(c.deliverySetupFeeAmount || 0).toLocaleString()}원</span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>면제</span>
+                            )}
+                          </td>
+                          <td style={{ whiteSpace: 'nowrap', textAlign: 'center' }}>
+                            {c.deliveryMethod ? (
+                              <span style={{ fontSize: '10.5px', padding: '2px 6px', borderRadius: '4px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', whiteSpace: 'nowrap' }}>
+                                {IT_DELIVERY_METHOD_LABELS[c.deliveryMethod] || c.deliveryMethod}
+                              </span>
+                            ) : (
+                              <span style={{ color: 'var(--text-muted)' }}>-</span>
                             )}
                           </td>
                           {showPeriodCol && <td style={{ whiteSpace: 'nowrap' }}>{c.startDate} ~ {formatContractEndDate(c.endDate)}</td>}
@@ -2525,48 +2656,89 @@ export const Contracts: React.FC = () => {
                     )}
                   </div>
                 </div>
-                <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>현장명</label><strong>{getSiteName(activeContract.siteId)}</strong></div>
+                <div>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>지정 청구지 (1:1 귀속)</label>
+                  <strong style={{ color: 'var(--primary)' }}>{activeContract.billingTargetName || '본사 기본청구'}</strong>
+                </div>
+
+                <div>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>설치/납품처 (1:1 귀속)</label>
+                  <strong>{getSiteName(activeContract.siteId)}</strong>
+                </div>
                 
                 <div><label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>영업담당</label><span>{users.find(u => u.id === activeContract.salespersonId)?.name || '-'}</span></div>
-                <div style={{ visibility: 'hidden' }}></div>
                 
-                {/* 3분할 담당자 상세 정보 (Full Width) */}
+                <div>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>계약 기간 유형</label>
+                  {activeContract.contractPeriodType === 'LONG_TERM' ? (
+                    <span className="badge badge-info" style={{ fontSize: '11.5px', fontWeight: 700 }}>
+                      장기 약정 ({activeContract.termMonths || 12}개월 / 위약금율 {activeContract.earlyTerminationFeeRate ?? 10}% / 보증금 {(activeContract.depositAmount || 0).toLocaleString()}원)
+                    </span>
+                  ) : (
+                    <span className="badge badge-secondary" style={{ fontSize: '11.5px' }}>
+                      단기 렌탈 (일/주/월 일할 계산)
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>순 렌탈료 / 운반설치비 등</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <strong>월 {(activeContract.pureRentalFee || activeContractAssets.reduce((s, ca) => s + (ca.monthlyRentalFee || 0), 0)).toLocaleString()}원</strong>
+                    <span style={{ fontSize: '12px', color: activeContract.isDeliverySetupFeeBilled ? 'var(--primary)' : 'var(--text-muted)' }}>
+                      + 운반설치비: {activeContract.isDeliverySetupFeeBilled ? `${(activeContract.deliverySetupFeeAmount || 0).toLocaleString()}원` : '면제'}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block' }}>배송 수단 및 정보</label>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ fontWeight: 600 }}>{activeContract.deliveryMethod ? IT_DELIVERY_METHOD_LABELS[activeContract.deliveryMethod] : '택배 발송'}</span>
+                    {activeContract.deliveryMethod === 'COURIER' && activeContract.trackingNo && (
+                      <span style={{ fontSize: '11.5px', color: 'var(--text-muted)' }}>
+                        ({activeContract.courierCompany || '택배사'} {activeContract.trackingNo})
+                      </span>
+                    )}
+                    {activeContract.deliveryMethod === 'DIRECT_INSTALL' && activeContract.installTechName && (
+                      <span style={{ fontSize: '11.5px', color: 'var(--primary)' }}>
+                        (담당: {activeContract.installTechName})
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* 설치/납품처 거점 및 반입 인프라 카드 (Full Width) */}
                 <div style={{ gridColumn: '1 / -1', marginTop: '4px', paddingTop: '10px', borderTop: '1px dashed var(--border-color)' }}>
-                  <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block', marginBottom: '8px' }}>현장 담당자 정보</label>
+                  <label style={{ color: 'var(--text-muted)', fontSize: '11px', display: 'block', marginBottom: '8px' }}>설치/납품처 거점 및 수령 인프라</label>
                   {(() => {
                     const curSite = sites.find(s => s.id === activeContract.siteId);
-                    const actContacts = (curSite?.contacts || []).filter(c => c.isActive !== false);
-                    if (actContacts.length === 0) {
-                      return <span style={{ color: 'var(--text-muted)' }}>등록된 현장 담당자가 없습니다.</span>;
+                    if (!curSite) {
+                      return <span style={{ color: 'var(--text-muted)' }}>등록된 설치/납품처 정보가 없습니다.</span>;
                     }
                     return (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                        {actContacts.map(c => {
-                          const typeLabel = c.contactType === 'EQUIPMENT' ? '장비' : c.contactType === 'CLOSING' ? '마감' : c.contactType === 'SAFETY' ? '안전' : '현장';
-                          const typeColor = c.contactType === 'EQUIPMENT' ? '#2563eb' : c.contactType === 'CLOSING' ? '#059669' : c.contactType === 'SAFETY' ? '#d97706' : '#4b5563';
-                          const typeBg = c.contactType === 'EQUIPMENT' ? '#eff6ff' : c.contactType === 'CLOSING' ? '#ecfdf5' : c.contactType === 'SAFETY' ? '#fffbeb' : '#f3f4f6';
-                          
-                          return (
-                            <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
-                              <span style={{ 
-                                padding: '2px 6px', 
-                                backgroundColor: typeBg, 
-                                border: `1px solid ${typeColor}40`, 
-                                borderRadius: '4px', 
-                                fontSize: '10px', 
-                                fontWeight: 700,
-                                color: typeColor,
-                                width: '32px',
-                                textAlign: 'center'
-                              }}>
-                                {typeLabel}
-                              </span>
-                              <strong style={{ minWidth: '50px' }}>{c.name}</strong>
-                              {c.contact && <span style={{ color: 'var(--text-main)', minWidth: '100px' }}>{c.contact}</span>}
-                              {c.email && <span style={{ color: 'var(--text-muted)' }}>{c.email}</span>}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '8px', backgroundColor: 'var(--bg-app)', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', fontSize: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div><span style={{ color: 'var(--text-muted)' }}>기본 주소:</span> <strong>{curSite.address || '-'}</strong></div>
+                          {curSite.addressDetail && <div><span style={{ color: 'var(--text-muted)' }}>상세 위치:</span> <strong style={{ color: 'var(--primary)' }}>{curSite.addressDetail}</strong></div>}
+                          <div><span style={{ color: 'var(--text-muted)' }}>수령 부서 / 담당자:</span> <strong>{curSite.department || '수령부서'} / {curSite.contactName || curSite.contact || '수령인'} ({curSite.contactPhone || curSite.contact || '연락처미등록'})</strong></div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <span style={{ color: 'var(--text-muted)' }}>반입 환경:</span>
+                            <span className={curSite.hasFreightElevator ? "badge badge-success" : "badge badge-secondary"} style={{ fontSize: '10px' }}>
+                              {curSite.hasFreightElevator ? '✓ 화물EV 있음' : '화물EV 없음/미확인'}
+                            </span>
+                            <span className={curSite.requiresSecurityPass ? "badge badge-warning" : "badge badge-info"} style={{ fontSize: '10px' }}>
+                              {curSite.requiresSecurityPass ? '⚠️ 보안출입 사전등록 필요' : '자유 출입'}
+                            </span>
+                          </div>
+                          {curSite.accessNotes && (
+                            <div style={{ color: 'var(--text-secondary)', fontSize: '11.5px', marginTop: '2px' }}>
+                              <span style={{ color: 'var(--text-muted)' }}>반입메모:</span> {curSite.accessNotes}
                             </div>
-                          );
-                        })}
+                          )}
+                        </div>
                       </div>
                     );
                   })()}
@@ -2773,11 +2945,11 @@ export const Contracts: React.FC = () => {
                           siteId: activeContract.siteId,
                           contractId: activeContract.id,
                           category: '옵션장착',
-                          issueDescription: `현장 옵션 추가 장착 의뢰 (계약: ${activeContract.contractNo})`
+                          issueDescription: `설치처 옵션 추가 장착 의뢰 (계약: ${activeContract.contractNo})`
                         });
                       }} 
                       style={{ padding: '5px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px', color: 'var(--primary)', borderColor: 'var(--primary)' }}
-                      title="해당 계약 현장으로 옵션 추가장착(유상 AS) 접수 이동"
+                      title="해당 계약 설치/납품처로 옵션 추가장착(유상 AS) 접수 이동"
                     >
                       <Plus size={13} /> 옵션 장착 AS 의뢰
                     </button>
@@ -2908,8 +3080,8 @@ export const Contracts: React.FC = () => {
                                   }} style={{ padding: '2px 6px', fontSize: '10.5px' }}>
                                     <Edit3 size={11} /> 기간 수정
                                   </button>
-                                  <button className="btn-secondary" onClick={() => handleOpenRelocateModal(ca)} style={{ padding: '2px 6px', fontSize: '10.5px' }} title="동일 고객 타 현장으로 장비 이동">
-                                    <Truck size={11} /> 현장 이동
+                                  <button className="btn-secondary" onClick={() => handleOpenRelocateModal(ca)} style={{ padding: '2px 6px', fontSize: '10.5px' }} title="동일 고객 타 설치/납품처로 장비 이동">
+                                    <Truck size={11} /> 거점 이동
                                   </button>
                                   <button 
                                     className="btn-secondary" 
@@ -2920,7 +3092,7 @@ export const Contracts: React.FC = () => {
                                         contractId: activeContract.id,
                                         assetNo: asset?.assetNo,
                                         category: '옵션장착',
-                                        issueDescription: `현장 옵션 추가 장착 의뢰 (장비: ${asset?.assetNo || '지정'}, 계약: ${activeContract.contractNo})`
+                                        issueDescription: `설치처 옵션 추가 장착 의뢰 (장비: ${asset?.assetNo || '지정'}, 계약: ${activeContract.contractNo})`
                                       });
                                     }} 
                                     style={{ padding: '2px 6px', fontSize: '10.5px', color: 'var(--primary)' }} 
@@ -3094,7 +3266,7 @@ export const Contracts: React.FC = () => {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <Wrench size={16} color="var(--primary)" /> 계약 현장 AS 및 정비 이력 ({contractRepairs.length}건)
+                      <Wrench size={16} color="var(--primary)" /> 계약 방문/설치처 AS 및 정비 이력 ({contractRepairs.length}건)
                     </h3>
                     {isFrequent && (
                       <span className="badge badge-danger" style={{ fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -3110,7 +3282,7 @@ export const Contracts: React.FC = () => {
                 <div className="table-container" style={{ border: 'none', maxHeight: '280px', overflowY: 'auto' }}>
                   {contractRepairs.length === 0 ? (
                     <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0', fontSize: '12.5px' }}>
-                      ✓ 이 계약에 발생한 현장 AS 및 정비 이력이 없습니다. (무장애 운용중)
+                      ✓ 이 계약에 발생한 방문/설치처 AS 및 정비 이력이 없습니다. (무장애 운용중)
                     </div>
                   ) : (
                     <table style={{ width: '100%', fontSize: '12px', whiteSpace: 'nowrap' }}>
@@ -3128,14 +3300,14 @@ export const Contracts: React.FC = () => {
                       <tbody>
                         {contractRepairs.map(r => {
                           const asset = assets.find(a => a.id === r.assetId);
-                          const assetLabel = asset?.assetNo || r.assetNo || (activeContractAssets.length === 1 ? (assets.find(a => a.id === activeContractAssets[0].assetId)?.assetNo || '단독장비') : '현장확인');
+                          const assetLabel = asset?.assetNo || r.assetNo || (activeContractAssets.length === 1 ? (assets.find(a => a.id === activeContractAssets[0].assetId)?.assetNo || '단독장비') : '설치처확인');
                           const dateStr = r.visitDate || r.completedDate || r.requestDate || (r.createdAt ? r.createdAt.split('T')[0] : '');
 
                           return (
                             <tr key={r.id} style={{ borderBottom: '1px solid var(--border-color)' }}>
                               <td style={{ padding: '6px 8px', color: 'var(--text-muted)' }}>{dateStr}</td>
                               <td style={{ padding: '6px 8px', fontWeight: 600, color: 'var(--primary)' }}>
-                                {assetLabel} <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>({r.modelName || asset?.modelName || '고소작업대'})</span>
+                                {assetLabel} <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 400 }}>({r.modelName || asset?.modelName || '장비'})</span>
                               </td>
                               <td style={{ padding: '6px 8px' }}>
                                 <span style={{ fontWeight: 600 }}>[{r.issueCategory || '일반'}]</span> {r.issueDescription || r.details || '-'}
@@ -3196,7 +3368,7 @@ export const Contracts: React.FC = () => {
               </div>
               
               <div style={{ fontSize: '13px', marginBottom: '12px' }}>
-                고객사: <strong>{getCustName(c.customerId)}</strong> | 현장: <strong>{getSiteName(c.siteId)}</strong>
+                고객사: <strong>{getCustName(c.customerId)}</strong> | 설치/납품처: <strong>{getSiteName(c.siteId)}</strong>
               </div>
               
               <table className="table" style={{ width: '100%', fontSize: '12px', textAlign: 'left' }}>
@@ -3487,10 +3659,10 @@ export const Contracts: React.FC = () => {
                   ))}
                 </select>
               </div>
-              {/* 양수 현장 및 담당자 선택 영역 추가 */}
+              {/* 양수 설치/납품처 및 담당자 선택 영역 */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>양수 현장 선택 *</label>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>양수 설치/납품처 선택 *</label>
                   <select
                     value={succSiteId}
                     onChange={e => setSuccSiteId(e.target.value)}
@@ -3506,7 +3678,7 @@ export const Contracts: React.FC = () => {
                       color: succCustId ? 'var(--text-primary)' : 'var(--text-muted)'
                     }}
                   >
-                    <option value="">{!succCustId ? '고객사를 먼저 선택하세요' : '-- 양수 현장 선택 --'}</option>
+                    <option value="">{!succCustId ? '고객사를 먼저 선택하세요' : '-- 양수 설치/납품처 선택 --'}</option>
                     {db.sites.filter(s => s.customerId === succCustId).map(s => (
                       <option key={s.id} value={s.id}>{s.name} ({s.address || '주소 미기재'})</option>
                     ))}
@@ -3514,7 +3686,7 @@ export const Contracts: React.FC = () => {
                 </div>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>양수 현장 담당자</label>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>수령/현장 담당자</label>
                   <select
                     value={succContactId}
                     onChange={e => setSuccContactId(e.target.value)}
@@ -3534,7 +3706,7 @@ export const Contracts: React.FC = () => {
                       const selectedSite = db.sites.find(s => s.id === succSiteId);
                       if (selectedSite && selectedSite.contacts && selectedSite.contacts.length > 0) {
                         return (
-                          <optgroup label="[현장 소속 담당자]">
+                          <optgroup label="[설치/납품처 담당자]">
                             {selectedSite.contacts.filter(c => c.isActive !== false).map(c => (
                               <option key={c.id} value={c.id}>{c.name} ({c.contactType === 'EQUIPMENT' ? '장비' : c.contactType === 'CLOSING' ? '마감' : c.contactType === 'SAFETY' ? '안전' : '현장담당'})</option>
                             ))}
@@ -3774,10 +3946,11 @@ export const Contracts: React.FC = () => {
             </div>
           )}
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1fr 1fr', gap: '12px', marginBottom: '16px' }}>
+          {/* 1. 기본 귀속 정보: 고객사(본사), 청구지(1:1), 설치/납품처(1:1), 영업담당 */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1.2fr 1.2fr 1fr', gap: '12px', marginBottom: '16px' }}>
             <div data-mid="create-contract-cust" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <label style={{ fontSize: '12px', fontWeight: 600 }}>고객사 선택 *</label>
+                <label style={{ fontSize: '12px', fontWeight: 600 }}>고객사(본사) 선택 *</label>
                 {custModalSearch && (
                   <button
                     type="button"
@@ -3806,7 +3979,16 @@ export const Contracts: React.FC = () => {
                       setStatementClosingDay(sel.defaultStatementClosingDay || 25);
                       setPaymentDueDay(sel.paymentDueDay || 25);
                       setPaymentDueMonthOffset(sel.paymentDueMonthOffset !== undefined ? sel.paymentDueMonthOffset : 1);
+                      const bts = sel.billingTargets || [];
+                      if (bts.length > 0) {
+                        const defaultBt = bts.find(b => b.isDefault) || bts[0];
+                        setBillingTargetSelect(defaultBt.id);
+                      } else {
+                        setBillingTargetSelect('');
+                      }
                     }
+                  } else {
+                    setBillingTargetSelect('');
                   }
                 }}
                 required
@@ -3823,48 +4005,156 @@ export const Contracts: React.FC = () => {
               </select>
             </div>
 
-            <div data-mid="create-contract-site" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600 }}>현장 선택 *</label>
+            {/* 청구지 선택 (1:1 단일 귀속) */}
+            <div data-mid="create-contract-billing-target" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600 }}>청구지 선택 (1:1 귀속) *</label>
               <select
-                value={siteSelect}
-                onChange={e => setSiteSelect(e.target.value)}
+                value={billingTargetSelect}
+                onChange={e => setBillingTargetSelect(e.target.value)}
                 required
                 disabled={!custSelect || custSelect === 'NEW'}
                 style={{ width: '100%', padding: '7px 8px', fontSize: '12.5px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: (!custSelect || custSelect === 'NEW') ? 'var(--bg-app)' : 'var(--bg-card)', color: 'var(--text-main)', marginTop: '26px' }}
               >
-                <option value="">-- 현장 선택 --</option>
+                <option value="">-- 청구지 선택 --</option>
+                {selectedCustomerBillingTargets.map(bt => (
+                  <option key={bt.id} value={bt.id}>
+                    {bt.name} {bt.taxEmail ? `(${bt.taxEmail})` : ''} {bt.isDefault ? '[기본]' : ''}
+                  </option>
+                ))}
+                {selectedCustomerBillingTargets.length === 0 && custSelect && custSelect !== 'NEW' && (
+                  <option value="DEFAULT">본사 기본청구 (등록된 세부 청구지 없음)</option>
+                )}
+              </select>
+            </div>
+
+            {/* 설치/납품처 선택 (1:1 단일 귀속) */}
+            <div data-mid="create-contract-site" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <label style={{ fontSize: '12px', fontWeight: 600 }}>설치/납품처 선택 (1:1 귀속) *</label>
+              <select
+                value={siteSelect}
+                onChange={e => {
+                  const val = e.target.value;
+                  setSiteSelect(val);
+                  const selSite = sites.find(s => s.id === val);
+                  if (selSite?.deliveryMethod) {
+                    setDeliveryMethod(selSite.deliveryMethod);
+                  }
+                }}
+                required
+                disabled={!custSelect || custSelect === 'NEW'}
+                style={{ width: '100%', padding: '7px 8px', fontSize: '12.5px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: (!custSelect || custSelect === 'NEW') ? 'var(--bg-app)' : 'var(--bg-card)', color: 'var(--text-main)', marginTop: '26px' }}
+              >
+                <option value="">-- 설치/납품처 선택 --</option>
                 {custSelect && custSelect !== 'NEW' && sites.filter(s => s.customerId === custSelect).map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
+                  <option key={s.id} value={s.id}>{s.name} {s.addressDetail ? `(${s.addressDetail})` : ''}</option>
                 ))}
               </select>
             </div>
 
+            {/* 영업담당 */}
             <div data-mid="create-contract-salesperson" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
               <label style={{ fontSize: '12px', fontWeight: 600 }}>영업담당 *</label>
-              <select value={salespersonSelect} onChange={e => setSalespersonSelect(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '24px' }}>
+              <select value={salespersonSelect} onChange={e => setSalespersonSelect(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '26px' }}>
                 {users.map(u => (
                   <option key={u.id} value={u.id}>{u.name}</option>
                 ))}
               </select>
             </div>
+          </div>
 
-            <div data-mid="create-contract-start-date" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={{ fontSize: '12px', fontWeight: 600 }}>계약 시작일 *</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '24px' }} />
+          {/* 2. 계약 기간 유형 및 약정 조건 */}
+          <div style={{ padding: '14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <Calendar size={15} color="var(--primary)" />
+                <h4 style={{ fontWeight: 600, margin: 0, fontSize: '13px' }}>계약 기간 유형 및 약정 조건</h4>
+              </div>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button
+                  type="button"
+                  className={contractPeriodType === 'SHORT_TERM' ? 'btn-primary' : 'btn-secondary'}
+                  onClick={() => setContractPeriodType('SHORT_TERM')}
+                  style={{ padding: '4px 12px', fontSize: '12px' }}
+                >
+                  단기 렌탈 (일/주/월 일할)
+                </button>
+                <button
+                  type="button"
+                  className={contractPeriodType === 'LONG_TERM' ? 'btn-primary' : 'btn-secondary'}
+                  onClick={() => setContractPeriodType('LONG_TERM')}
+                  style={{ padding: '4px 12px', fontSize: '12px' }}
+                >
+                  장기 약정 (12/24/36개월)
+                </button>
+              </div>
+            </div>
+
+            {contractPeriodType === 'LONG_TERM' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px', marginBottom: '12px', padding: '10px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>약정 기간 *</label>
+                  <select value={termMonths} onChange={e => {
+                    const m = Number(e.target.value);
+                    setTermMonths(m);
+                    if (startDate) {
+                      const d = new Date(startDate);
+                      d.setMonth(d.getMonth() + m);
+                      setEndDate(d.toISOString().split('T')[0]);
+                    }
+                  }} style={{ padding: '7px' }}>
+                    <option value={12}>12개월 (1년 약정)</option>
+                    <option value={24}>24개월 (2년 약정)</option>
+                    <option value={36}>36개월 (3년 약정)</option>
+                    <option value={48}>48개월 (4년 약정)</option>
+                  </select>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>중도해지 위약금율 (%)</label>
+                  <input type="number" min={0} max={100} value={earlyTerminationFeeRate} onChange={e => setEarlyTerminationFeeRate(Number(e.target.value))} style={{ padding: '7px' }} />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>보증금 (원)</label>
+                  <input type="number" min={0} value={depositAmount} onChange={e => setDepositAmount(Number(e.target.value))} style={{ padding: '7px' }} />
+                </div>
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+              <div>
+                <label style={{ fontSize: '12px', fontWeight: 600, display: 'block', marginBottom: '4px' }}>계약 시작일 *</label>
+                <input type="date" value={startDate} onChange={e => {
+                  setStartDate(e.target.value);
+                  if (contractPeriodType === 'LONG_TERM') {
+                    const d = new Date(e.target.value);
+                    d.setMonth(d.getMonth() + termMonths);
+                    setEndDate(d.toISOString().split('T')[0]);
+                  }
+                }} required style={{ width: '100%', padding: '8px' }} />
+              </div>
+
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>계약 만료일 *</label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11.5px', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={isEndDateOpen} onChange={e => setIsEndDateOpen(e.target.checked)} />
+                    종료일 미정
+                  </label>
+                </div>
+                {!isEndDateOpen && (
+                  <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} required style={{ width: '100%', padding: '8px' }} />
+                )}
+              </div>
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '16px' }}>
-            <div data-mid="create-contract-end-date">
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input type="checkbox" checked={isEndDateOpen} onChange={e => setIsEndDateOpen(e.target.checked)} />
-                종료일 미정 (상시 대여중)
-              </label>
-              {!isEndDateOpen && (
-                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} required style={{ width: '100%', padding: '8px', marginTop: '4px' }} />
-              )}
+          {/* 3. 본사 통합 청구 및 대금 결제 조건 */}
+          <div style={{ padding: '14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+              <Receipt size={15} color="var(--primary)" />
+              <h4 style={{ fontWeight: 600, margin: 0, fontSize: '13px' }}>본사 마감 및 청구 조건</h4>
             </div>
-
             <div data-mid="create-contract-billing-terms" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.45fr', gap: '10px' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label style={{ fontSize: '12px', fontWeight: 600, whiteSpace: 'nowrap' }}>청구 마감일 (일) *</label>
@@ -3880,7 +4170,7 @@ export const Contracts: React.FC = () => {
                   <select
                     value={paymentDueMonthOffset}
                     onChange={e => setPaymentDueMonthOffset(Number(e.target.value))}
-                    style={{ width: '100%', padding: '8px 6px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
+                    style={{ width: '100%', padding: '8px 6px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                   >
                     {PAYMENT_DUE_MONTH_OPTIONS.map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -3889,7 +4179,7 @@ export const Contracts: React.FC = () => {
                   <select
                     value={paymentDueDay}
                     onChange={e => setPaymentDueDay(Number(e.target.value))}
-                    style={{ width: '100%', padding: '8px 6px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
+                    style={{ width: '100%', padding: '8px 6px', fontSize: '12px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-card)', color: 'var(--text-main)' }}
                   >
                     {Array.from({ length: 30 }, (_, i) => i + 1).map(day => (
                       <option key={day} value={day}>{day}일</option>
@@ -3898,6 +4188,73 @@ export const Contracts: React.FC = () => {
                   </select>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* 4. IT 5대 배송 수단 및 운반설치비 등 */}
+          <div style={{ padding: '14px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '10px' }}>
+              <Truck size={15} color="var(--primary)" />
+              <h4 style={{ fontWeight: 600, margin: 0, fontSize: '13px' }}>배송 수단 및 운반설치비 등</h4>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '12px', alignItems: 'flex-start', marginBottom: '10px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={{ fontSize: '12px', fontWeight: 600 }}>배송 수단 *</label>
+                <select value={deliveryMethod} onChange={e => setDeliveryMethod(e.target.value as ITDeliveryMethod)} style={{ padding: '8px' }}>
+                  {IT_DELIVERY_METHODS.map(m => (
+                    <option key={m} value={m}>{IT_DELIVERY_METHOD_LABELS[m]}</option>
+                  ))}
+                </select>
+              </div>
+
+              {deliveryMethod === 'COURIER' && (
+                <>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600 }}>택배사</label>
+                    <select value={courierCompany} onChange={e => setCourierCompany(e.target.value)} style={{ padding: '8px' }}>
+                      {['CJ대한통운', '우체국택배', '한진택배', '로젠택배', '롯데택배', '경동택배', '대신택배', '기타'].map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '12px', fontWeight: 600 }}>송장번호</label>
+                    <input type="text" value={trackingNo} onChange={e => setTrackingNo(e.target.value)} placeholder="운송장 번호 입력" style={{ padding: '8px' }} />
+                  </div>
+                </>
+              )}
+
+              {deliveryMethod === 'DIRECT_INSTALL' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label style={{ fontSize: '12px', fontWeight: 600 }}>담당 설치 엔지니어</label>
+                  <input type="text" value={installTechName} onChange={e => setInstallTechName(e.target.value)} placeholder="엔지니어 성명" style={{ padding: '8px' }} />
+                </div>
+              )}
+            </div>
+
+            {/* 운반설치비 등 유상 청구 여부 (관례 반영: 순 렌탈료 + 운반설치비 묶음 청구) */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginTop: '10px', paddingTop: '10px', borderTop: '1px dashed var(--border-color)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                <input type="checkbox" checked={isDeliverySetupFeeBilled} onChange={e => setIsDeliverySetupFeeBilled(e.target.checked)} />
+                <span>운반설치비 등 별도 청구 (유상)</span>
+              </label>
+              {isDeliverySetupFeeBilled ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)' }}>청구 금액:</label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1000}
+                    value={deliverySetupFeeAmount}
+                    onChange={e => setDeliverySetupFeeAmount(Number(e.target.value))}
+                    style={{ width: '130px', padding: '6px 8px', fontSize: '12px' }}
+                  />
+                  <span style={{ fontSize: '12px' }}>원 (VAT 별도)</span>
+                </div>
+              ) : (
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>(운반설치비 면제 — 순 렌탈료만 청구)</span>
+              )}
             </div>
           </div>
 
@@ -3929,7 +4286,7 @@ export const Contracts: React.FC = () => {
                   <select value={selectedModelToAdd} onChange={e => setSelectedModelToAdd(e.target.value)} style={{ padding: '7px', minWidth: '180px' }}>
                     <option value="">-- 제품 모델 선택 --</option>
                     {products.map(p => (
-                      <option key={p.id} value={p.modelName}>{p.modelName}{p.shortName ? ` / ${p.shortName}` : ''} ({p.feet}피트)</option>
+                      <option key={p.id} value={p.modelName}>{p.category ? `[${p.category}] ` : ''}{p.modelName}{p.shortName ? ` (${p.shortName})` : ''}</option>
                     ))}
                   </select>
                 </div>
@@ -3978,18 +4335,18 @@ export const Contracts: React.FC = () => {
         initialContractId={bundleTargetContractId}
       />
 
-      {/* Feature 2: 동일 고객+현장 중복 계약 인터셉터 모달 */}
+      {/* Feature 2: 동일 고객+설치/납품처 중복 계약 인터셉터 모달 */}
       {duplicateContractModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', zIndex: 3000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: '12px', padding: '28px', maxWidth: '520px', width: '94%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
               <AlertTriangle size={22} color="#f59e0b" />
-              <span style={{ fontSize: '16px', fontWeight: 700 }}>동일 현장 활성 계약 감지</span>
+              <span style={{ fontSize: '16px', fontWeight: 700 }}>동일 설치/납품처 활성 계약 감지</span>
             </div>
             <div style={{ fontSize: '13.5px', color: 'var(--text-secondary)', marginBottom: '20px', lineHeight: 1.6 }}>
-              <strong>{getCustName(duplicateContractModal.customerId)}</strong> 거래처의 <strong>{getSiteName(duplicateContractModal.siteId)}</strong> 현장에<br/>
+              <strong>{getCustName(duplicateContractModal.customerId)}</strong> 고객사의 <strong>{getSiteName(duplicateContractModal.siteId)}</strong> 설치/납품처에<br/>
               이미 활성 계약(<code style={{ fontSize: '12px', backgroundColor: 'var(--bg-muted)', padding: '1px 5px', borderRadius: '3px' }}>{duplicateContractModal.id.slice(0, 8)}…</code>)이 존재합니다.<br/><br/>
-              동일 고객·현장은 <strong>단일 계약 원칙</strong>에 따라 1개의 계약으로 통합 관리합니다.<br/>
+              동일 고객·설치/납품처는 <strong>단일 계약 원칙 (1청구지 1설치/납품처 귀속)</strong>에 따라 1개의 계약으로 통합 관리합니다.<br/>
               아래 중 처리 방법을 선택하십시오.
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -4086,12 +4443,12 @@ export const Contracts: React.FC = () => {
         </div>
       )}
 
-      {/* Feature 6: 현장간 장비 이동 (Site Transfer) 모달 */}
+      {/* Feature 6: 설치/납품처간 장비 이동 (거점 이동) 모달 */}
       {showRelocateModal && relocateCa && activeContract && (() => {
         const asset = assets.find(a => a.id === relocateCa.assetId);
         const currentSite = sites.find(s => s.id === activeContract.siteId);
         const currentCust = customers.find(c => c.id === activeContract.customerId);
-        // 동일 고객사의 다른 현장 목록 (현재 현장 제외)
+        // 동일 고객사의 다른 설치/납품처 목록 (현재 설치/납품처 제외)
         const availableSites = sites.filter(s => s.customerId === activeContract.customerId && s.id !== activeContract.siteId);
 
         return (
@@ -4099,12 +4456,12 @@ export const Contracts: React.FC = () => {
             <div className="card" style={{ width: '100%', maxWidth: '520px', backgroundColor: 'var(--bg-card)', boxShadow: '0 20px 60px rgba(0,0,0,0.3)', padding: '24px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                 <h3 className="card-title" style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Truck size={18} color="var(--primary)" /> 현장간 장비 이동
+                  <Truck size={18} color="var(--primary)" /> 설치/납품처간 장비 이동 (거점 이동)
                 </h3>
                 <button type="button" onClick={() => { setShowRelocateModal(false); setRelocateCa(null); }} style={{ border: 'none', background: 'none', color: 'var(--text-muted)', fontSize: '18px', cursor: 'pointer' }}>✕</button>
               </div>
 
-              {/* 기본 장비 및 현장 정보 */}
+              {/* 기본 장비 및 설치/납품처 정보 */}
               <div style={{ marginBottom: '14px', padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '12.5px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--text-muted)' }}>이동 대상 장비:</span>
@@ -4115,8 +4472,8 @@ export const Contracts: React.FC = () => {
                   <strong>{currentCust?.name || '-'}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: 'var(--text-muted)' }}>현재 출발 현장:</span>
-                  <span style={{ fontWeight: 600 }}>{currentSite?.name || '1현장'}</span>
+                  <span style={{ color: 'var(--text-muted)' }}>현재 설치/납품처:</span>
+                  <span style={{ fontWeight: 600 }}>{currentSite?.name || '1거점'}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: 'var(--text-muted)' }}>상속 렌탈료:</span>
@@ -4126,21 +4483,21 @@ export const Contracts: React.FC = () => {
 
               <form onSubmit={handleSaveRelocate} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>이동 목적지 현장 *</label>
+                  <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>이동 목적지 설치/납품처 *</label>
                   <select
                     value={relocateTargetSiteId}
                     onChange={e => setRelocateTargetSiteId(e.target.value)}
                     required
                     style={{ width: '100%', padding: '9px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)' }}
                   >
-                    <option value="">-- 동일 고객사 등록 현장 선택 --</option>
+                    <option value="">-- 동일 고객사 등록 설치/납품처 선택 --</option>
                     {availableSites.map(s => (
                       <option key={s.id} value={s.id}>{s.name} ({s.address || '주소 미기재'})</option>
                     ))}
                   </select>
                   {availableSites.length === 0 && (
                     <span style={{ fontSize: '11px', color: 'var(--danger)' }}>
-                      해당 고객사에 등록된 다른 현장이 없습니다. [거래처 관리]에서 새 현장을 먼저 등록하십시오.
+                      해당 고객사에 등록된 다른 설치/납품처가 없습니다. [고객 관리]에서 새 설치/납품처를 먼저 등록하십시오.
                     </span>
                   )}
                 </div>
@@ -4160,7 +4517,7 @@ export const Contracts: React.FC = () => {
                     <label style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-secondary)' }}>이동 사유</label>
                     <input
                       type="text"
-                      placeholder="예: 맞은편 2공구 공정 투입"
+                      placeholder="예: 맞은편 연구동 3층 확장 배정"
                       value={relocateReason}
                       onChange={e => setRelocateReason(e.target.value)}
                       style={{ width: '100%', padding: '8px', fontSize: '13px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-body)' }}
@@ -4177,14 +4534,14 @@ export const Contracts: React.FC = () => {
                       onChange={e => setRelocateNeedTransport(e.target.checked)}
                       style={{ width: '16px', height: '16px' }}
                     />
-                    <span>🚚 현장간 장비 이동 운송 배차 즉시 의뢰 발행</span>
+                    <span>🚚 설치/납품처간 장비 이동 운송 배차 즉시 의뢰 발행</span>
                   </label>
 
                   {relocateNeedTransport && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '4px', paddingLeft: '24px' }}>
                       <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                        • 상차지: {currentSite?.name || '1현장'} ({currentSite?.address || '주소지'})<br/>
-                        • 하차지: {sites.find(s => s.id === relocateTargetSiteId)?.name || '2현장'} ({sites.find(s => s.id === relocateTargetSiteId)?.address || '주소지'})
+                        • 상차지: {currentSite?.name || '1거점'} ({currentSite?.address || '주소지'})<br/>
+                        • 하차지: {sites.find(s => s.id === relocateTargetSiteId)?.name || '2거점'} ({sites.find(s => s.id === relocateTargetSiteId)?.address || '주소지'})
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -4228,7 +4585,7 @@ export const Contracts: React.FC = () => {
                     disabled={!relocateTargetSiteId || !relocateDate}
                     style={{ fontWeight: 800 }}
                   >
-                    현장 이동 확정
+                    거점 이동 확정
                   </button>
                 </div>
               </form>

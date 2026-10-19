@@ -303,6 +303,7 @@ CREATE TABLE customers (
     "defaultProtection"   TEXT, -- 고객사 기본 보양작업
     "defaultCheckedSpecs" JSONB, -- 고객사 기본 요구사양 체크 상태
     "bankAccounts"        JSONB, -- 고객사 환불/거래 계좌 목록
+    "billingTargets"      JSONB DEFAULT '[]'::jsonb, -- 고객사 산하 복수 청구지 목록 (순번, 청구부서/사업장, 계산서이메일, 담당자)
     "driveFolderId"       TEXT,
     "openingDate"         TEXT, -- 개업연월일
     "taxOffice"           TEXT, -- 관할 세무서
@@ -353,28 +354,27 @@ CREATE TABLE customer_contacts (
     "tenant_id"           TEXT NOT NULL DEFAULT 'giyeonlift'
 );
 
--- 2-5. 고객사 현장 (customer_sites - 고객이 거래하는 모든 현장 및 현장별 옵션 직접 보관)
+-- 2-5. IT 설치/납품처 (customer_sites - 사업장·지사·IDC 등 물리적 납품 거점 관리, 마감일은 본사에서 전담)
 CREATE TABLE customer_sites (
     id                    TEXT PRIMARY KEY,
     "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
-    "siteMasterId"        TEXT REFERENCES site_masters(id) ON DELETE SET NULL, -- 상속받은 옵션 그룹 ID (선택)
-    name                  TEXT NOT NULL,
-    address               TEXT,
-    "contactName"         TEXT,
-    contact               TEXT,
-    email                 TEXT,
-    "contacts"            JSONB DEFAULT '[]'::jsonb,
-    "paidOptions"         TEXT,
-    "protection"          TEXT,
-    "checkedSpecs"        JSONB,
-    "billingDay"          INTEGER,
-    "statementClosingDay" INTEGER,
-    "paymentDueDay"       INTEGER,
-    "paymentDueMonthOffset" INTEGER DEFAULT 1,
+    "siteMasterId"        TEXT REFERENCES site_masters(id) ON DELETE SET NULL, -- 옵션 프리셋 (선택)
+    name                  TEXT NOT NULL, -- 설치/납품처 명칭 (예: 판교 R&D 본사 5층)
+    address               TEXT, -- 도로명 주소
+    "addressDetail"       TEXT, -- 상세 위치 (층, 호수, 랙 번호 등)
+    "contactName"         TEXT, -- 수령 담당자 성명
+    contact               TEXT, -- 수령 담당자 연락처
+    "contactPhone"        TEXT, -- 보조 연락처
+    department            TEXT, -- 수령 부서
+    "deliveryMethod"      TEXT DEFAULT 'COURIER', -- 기본 배송 수단 (COURIER, QUICK, DIRECT_INSTALL, FREIGHT, PICKUP)
+    "hasFreightElevator"  BOOLEAN DEFAULT TRUE, -- 화물 엘리베이터 유무
+    "requiresSecurityPass" BOOLEAN DEFAULT FALSE, -- 보안 출입 사전등록 필요 여부
+    "accessNotes"         TEXT, -- 반입/주차/출입 특이사항
+    "presetOptions"       JSONB DEFAULT '[]'::jsonb, -- IT 세팅 및 옵션 (OS클린설치, 도킹, 모니터암, 켄싱턴락 등)
     "isActive"            BOOLEAN NOT NULL DEFAULT TRUE,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL,
-    "tenant_id"           TEXT NOT NULL DEFAULT 'giyeonlift'
+    "tenant_id"           TEXT NOT NULL DEFAULT 'ebro_it'
 );
 
 
@@ -602,17 +602,36 @@ CREATE TABLE transport_drivers (
 -- 📜 [도메인 3] 계약, 배차 및 출고/입고 (Operations)
 -- ==============================================================================
 
--- 3-1. 임대 계약 마스터 (contracts)
+-- 3-1. IT 임대 계약 마스터 (contracts - 1계약 = 1청구지, 1설치/납품처 단일 귀속)
 CREATE TABLE contracts (
     id                    TEXT PRIMARY KEY,
     "contractNo"          TEXT NOT NULL UNIQUE,
     "contractType"        TEXT CHECK ("contractType" IN ('RENTAL', 'SALE')) NOT NULL DEFAULT 'RENTAL',
     "customerId"          TEXT NOT NULL REFERENCES customers(id) ON DELETE CASCADE,
+    "billingTargetId"     TEXT, -- 고객사 산하 지정 청구지 ID
+    "billingTargetName"   TEXT, -- 지정 청구지 명칭 (예: 본사 IT운영팀)
     "salespersonId"       TEXT REFERENCES users(id) ON DELETE SET NULL,
     "contactId"           TEXT REFERENCES customer_contacts(id) ON DELETE SET NULL,
-    "siteId"              TEXT REFERENCES customer_sites(id) ON DELETE SET NULL,
+    "siteId"              TEXT REFERENCES customer_sites(id) ON DELETE SET NULL, -- 지정 설치/납품처 1곳
+
+    -- IT 계약 기간 및 과금 모델
+    "contractPeriodType"  TEXT CHECK ("contractPeriodType" IN ('SHORT_TERM', 'LONG_TERM')) NOT NULL DEFAULT 'LONG_TERM',
+    "termMonths"          INTEGER DEFAULT 12, -- 약정 개월수 (12/24/36개월 등)
+    "earlyTerminationFeeRate" DOUBLE PRECISION DEFAULT 10, -- 중도해지 위약금율 (%)
+    "depositAmount"       DOUBLE PRECISION DEFAULT 0, -- 보증금/선수금
     "startDate"           TEXT NOT NULL,
     "endDate"             TEXT NOT NULL,
+    "pureRentalFee"       DOUBLE PRECISION DEFAULT 0, -- 순 렌탈료 합산
+    "isDeliverySetupFeeBilled" BOOLEAN DEFAULT FALSE, -- 운반설치비 등 청구 여부
+    "deliverySetupFeeAmount" DOUBLE PRECISION DEFAULT 0, -- 운반설치비 등 청구액
+
+    -- IT 배송 및 설치
+    "deliveryMethod"      TEXT DEFAULT 'COURIER', -- 배송 수단 (COURIER, QUICK, DIRECT_INSTALL, FREIGHT, PICKUP)
+    "courierCompany"      TEXT, -- 택배사 (CJ대한통운, 롯데, 우체국 등)
+    "trackingNo"          TEXT, -- 운송장번호
+    "installTechName"     TEXT, -- 설치 담당 엔지니어
+
+    -- 본사 정산 및 청구 마감 속성
     "billingDay"          INTEGER NOT NULL DEFAULT 30,
     "statementClosingDay" INTEGER, -- 거래명세서 마감일
     "customerName"        TEXT,
@@ -634,7 +653,7 @@ CREATE TABLE contracts (
     "billingCount"        INTEGER NOT NULL DEFAULT 0,
     "createdAt"           TEXT NOT NULL,
     "updatedAt"           TEXT NOT NULL,
-    "tenant_id"           TEXT NOT NULL DEFAULT 'giyeonlift'
+    "tenant_id"           TEXT NOT NULL DEFAULT 'ebro_it'
 );
 
 -- 3-2. 체결 자산 목록 (contract_assets)
