@@ -367,27 +367,28 @@ export const SmartDispatch4: React.FC = () => {
         if (prod.defaultOs) target.os = prod.defaultOs;
       }
 
-      // 고객사의 이전 계약 단가 자동 승계 확인
+      // 카테고리별 표준 기본 월단가 기본 제안
+      const cat = prod?.category || 'LAPTOP';
+      let defaultMonthly = 50000;
+      if (cat === 'SERVER') defaultMonthly = 350000;
+      else if (cat === 'DESKTOP') defaultMonthly = 60000;
+      else if (cat === 'LAPTOP') defaultMonthly = 70000;
+      else if (cat === 'MONITOR') defaultMonthly = 20000;
+      else if (cat === 'PRINTER') defaultMonthly = 120000;
+
+      // 고객사의 이전 계약 단가 자동 승계 확인 (헌장 2.2)
       if (selectedCustomer) {
         const custContractIds = contracts.filter(c => c.customerId === selectedCustomer.id).map(c => c.id);
         const pastCA = db.contractAssets
           .filter(ca => custContractIds.includes(ca.contractId) && ca.expectedModel === productModelName && ca.monthlyRentalFee > 0)
           .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
         if (pastCA) {
-          target.monthlyRate = pastCA.monthlyRentalFee;
-          target.dailyRate = pastCA.dailyRentalFee || Math.round(pastCA.monthlyRentalFee / 30);
-        } else {
-          // 카테고리별 표준 기본 월단가 제안
-          const cat = prod?.category || 'LAPTOP';
-          if (cat === 'SERVER') target.monthlyRate = 350000;
-          else if (cat === 'DESKTOP') target.monthlyRate = 60000;
-          else if (cat === 'LAPTOP') target.monthlyRate = 70000;
-          else if (cat === 'MONITOR') target.monthlyRate = 20000;
-          else if (cat === 'PRINTER') target.monthlyRate = 120000;
-          else target.monthlyRate = 50000;
-          target.dailyRate = Math.round(target.monthlyRate / 30);
+          defaultMonthly = pastCA.monthlyRentalFee;
         }
       }
+
+      target.monthlyRate = defaultMonthly;
+      target.dailyRate = Math.round(defaultMonthly / 30);
 
       next[index] = target;
       return next;
@@ -539,11 +540,19 @@ export const SmartDispatch4: React.FC = () => {
         const effectiveSsd = it.ssd === '직접 입력' ? (it.ssdCustom || '별도 SSD') : it.ssd;
         const effectiveOs = it.os === '직접 입력' ? (it.osCustom || '별도 OS') : it.os;
 
+        const mRate = Math.max(0, Number(it.monthlyRate) || 0);
+        const dRate = Math.max(0, Number(it.dailyRate) || 0);
+
         return {
           modelName: it.modelName.trim(),
           qty: Math.max(1, Math.floor(Number(it.qty) || 1)),
-          monthlyRate: Math.max(0, Number(it.monthlyRate) || 0),
-          dailyRate: Math.max(0, Number(it.dailyRate) || 0),
+          monthlyRate: mRate,
+          dailyRate: dRate,
+          monthlyRent: mRate,
+          dailyRent: dRate,
+          monthlyRentalFee: mRate,
+          dailyRentalFee: dRate,
+          unitPrice: mRate,
           vga: effectiveVga,
           ram: effectiveRam,
           ssd: effectiveSsd,
@@ -978,7 +987,7 @@ export const SmartDispatch4: React.FC = () => {
                       <div className="relative">
                         <input
                           type="number"
-                          value={item.monthlyRate || ''}
+                          value={item.monthlyRate === 0 ? '0' : (item.monthlyRate || '')}
                           onChange={e => {
                             const m = parseInt(e.target.value, 10) || 0;
                             handleUpdateItemField(idx, 'monthlyRate', m);

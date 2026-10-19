@@ -53,7 +53,24 @@ export interface SmartDispatchData {
   taxBillEmail: string;
   loadingTime: string;
   unloadingTime: string;
-  equipments: { modelName: string, qty: number }[];
+  equipments: {
+    modelName: string;
+    qty: number;
+    monthlyRate?: number;
+    dailyRate?: number;
+    monthlyRent?: number;
+    dailyRent?: number;
+    monthlyRentalFee?: number;
+    dailyRentalFee?: number;
+    unitPrice?: number;
+    vga?: string;
+    ram?: string;
+    ssd?: string;
+    os?: string;
+    swList?: string[];
+    customSpecNote?: string;
+    customSwNote?: string;
+  }[];
   paidOptions?: string;
   protection?: string;
   attachments?: string;
@@ -3119,16 +3136,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const custContractIds = db.contracts.filter(c => c.customerId === finalCustomer.id).map(c => c.id);
 
+    let totalContractPureRentalFee = 0;
+
     data.equipments.forEach((eq) => {
       const eqData = eq as any;
       const count = Math.max(1, Math.floor(Number(eq.qty) || 1));
 
-      // 1. 명시된 단가 확인 (모바일 발주 등)
-      let determinedMonthly = Number(eqData.monthlyRent || eqData.monthlyRentalFee) || 0;
-      let determinedDaily = Number(eqData.dailyRent || eqData.dailyRentalFee) || 0;
+      // 1. 사용자가 직접 입력/지정한 단가 최우선 반영 (헌장 1.2, 1.4 - 입력값 누락 덮어쓰기 방지)
+      const rawMonthly = eqData.monthlyRate ?? eqData.monthlyRent ?? eqData.monthlyRentalFee ?? eqData.unitPrice;
+      const rawDaily = eqData.dailyRate ?? eqData.dailyRent ?? eqData.dailyRentalFee;
 
-      // 2. 미입력 시 고객사의 동일 모델 최근 계약 단가 자동 상속 (헌장 2.2)
-      if (!determinedMonthly && finalCustomer?.id) {
+      let determinedMonthly = (rawMonthly !== undefined && rawMonthly !== null && rawMonthly !== '' && !isNaN(Number(rawMonthly)))
+        ? Math.max(0, Number(rawMonthly))
+        : 0;
+      let determinedDaily = (rawDaily !== undefined && rawDaily !== null && rawDaily !== '' && !isNaN(Number(rawDaily)))
+        ? Math.max(0, Number(rawDaily))
+        : (determinedMonthly > 0 ? Math.round(determinedMonthly / 30) : 0);
+
+      // 2. 단가 미입력(0원) 시 고객사의 동일 모델 최근 계약 단가 자동 상속 (헌장 2.2)
+      if (determinedMonthly === 0 && finalCustomer?.id) {
         const recentCustCA = db.contractAssets
           .filter(ca => custContractIds.includes(ca.contractId) && ca.expectedModel === eq.modelName && ca.monthlyRentalFee > 0)
           .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
@@ -3138,26 +3164,39 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
-      // 3. 미입력 시 자산 마스터 동일 모델의 표준 월 렌탈료 상속
-      if (!determinedMonthly) {
+      // 3. 미입력 시 자산/제품 마스터 동일 모델의 표준 월 렌탈료 상속
+      if (determinedMonthly === 0) {
+        const prod = db.products?.find((p: any) => p.modelName === eq.modelName);
         const peerAsset = db.assets.find(a => a.modelName === eq.modelName && (a.monthlyRentalFee || a.dailyRentalFee));
-        if (peerAsset) {
-          determinedMonthly = peerAsset.monthlyRentalFee || 0;
-          determinedDaily = peerAsset.dailyRentalFee || (determinedMonthly ? Math.round(determinedMonthly / 30) : 0);
+        if (peerAsset?.monthlyRentalFee) {
+          determinedMonthly = peerAsset.monthlyRentalFee;
+          determinedDaily = peerAsset.dailyRentalFee || Math.round(determinedMonthly / 30);
+        } else if (prod?.category) {
+          // IT 렌탈 카테고리별 표준 기본 월단가
+          const cat = String(prod.category).toUpperCase();
+          if (cat === 'SERVER') determinedMonthly = 350000;
+          else if (cat === 'DESKTOP') determinedMonthly = 60000;
+          else if (cat === 'LAPTOP') determinedMonthly = 70000;
+          else if (cat === 'MONITOR') determinedMonthly = 20000;
+          else if (cat === 'PRINTER') determinedMonthly = 120000;
+          else determinedMonthly = 50000;
+          determinedDaily = Math.round(determinedMonthly / 30);
         }
       }
 
-      // 4. 모델명 규격 기반 표준 단가 추정
-      if (!determinedMonthly) {
+      // 4. 모델명 키워드 기반 IT 기본 단가 추정 (AWP 고소작업대 하드코딩 완전 퇴출)
+      if (determinedMonthly === 0) {
         const m = (eq.modelName || '').toUpperCase();
-        if (m.includes('53') || m.includes('1614')) determinedMonthly = 1500000;
-        else if (m.includes('46') || m.includes('1412')) determinedMonthly = 1200000;
-        else if (m.includes('40') || m.includes('1212')) determinedMonthly = 900000;
-        else if (m.includes('32') || m.includes('1012')) determinedMonthly = 600000;
-        else if (m.includes('26') || m.includes('0812')) determinedMonthly = 500000;
-        else determinedMonthly = 400000;
+        if (m.includes('SERVER') || m.includes('서버') || m.includes('XEON')) determinedMonthly = 350000;
+        else if (m.includes('NOTEBOOK') || m.includes('LAPTOP') || m.includes('노트북') || m.includes('THINKPAD') || m.includes('GRAM') || m.includes('MACBOOK')) determinedMonthly = 70000;
+        else if (m.includes('MONITOR') || m.includes('모니터') || m.includes('VIEW') || m.includes('24인치') || m.includes('27인치')) determinedMonthly = 20000;
+        else if (m.includes('PRINTER') || m.includes('복합기') || m.includes('프린터')) determinedMonthly = 120000;
+        else if (m.includes('DESKTOP') || m.includes('데스크탑') || m.includes('PC') || m.includes('본체')) determinedMonthly = 60000;
+        else determinedMonthly = 50000; // IT 표준 기본단가
         determinedDaily = Math.round(determinedMonthly / 30);
       }
+
+      totalContractPureRentalFee += determinedMonthly * count;
 
       for(let i=0; i<count; i++) {
         db.insertRow<ContractAsset>('contractAssets', {
@@ -3173,22 +3212,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     });
 
+    // 🌟 계약의 순 렌탈료 합계(pureRentalFee)를 체결 자산 슬롯들의 단가 합산으로 동기화 갱신
+    if (totalContractPureRentalFee > 0) {
+      db.updateRow<Contract>('contracts', contract.id, {
+        pureRentalFee: totalContractPureRentalFee
+      });
+    }
+
     await notify('🚚 [5/5 배차 생성] 배차/운송 관리 출고대기 지시건 생성 중...', 90);
 
     // 신규 배차(Delivery) - 출고 대기 건 자동 생성
-    const cargoItems = JSON.stringify(data.equipments.map((e: any) => ({
-      modelName: e.modelName,
-      count: Number(e.qty) || 1,
-      qty: Number(e.qty) || 1,
-      monthlyRent: e.monthlyRate || e.monthlyRent || 0,
-      dailyRent: e.dailyRate || e.dailyRent || 0,
-      vga: e.vga || '',
-      ram: e.ram || '',
-      ssd: e.ssd || '',
-      os: e.os || '',
-      swList: e.swList || [],
-      customSpecNote: e.customSpecNote || ''
-    })));
+    const cargoItems = JSON.stringify(data.equipments.map((e: any) => {
+      const mFee = Number(e.monthlyRate ?? e.monthlyRent ?? e.monthlyRentalFee ?? e.unitPrice) || 0;
+      const dFee = Number(e.dailyRate ?? e.dailyRent ?? e.dailyRentalFee) || (mFee > 0 ? Math.round(mFee / 30) : 0);
+      return {
+        modelName: e.modelName,
+        count: Number(e.qty) || 1,
+        qty: Number(e.qty) || 1,
+        monthlyRent: mFee,
+        monthlyRentalFee: mFee,
+        dailyRent: dFee,
+        dailyRentalFee: dFee,
+        vga: e.vga || '',
+        ram: e.ram || '',
+        ssd: e.ssd || '',
+        os: e.os || '',
+        swList: e.swList || [],
+        customSpecNote: e.customSpecNote || ''
+      };
+    }));
     const dData = data as any;
     const loadingDateStr = extractDate(data.loadingTime) || contract.startDate;
     const getTimeSlot = (tStr: string | undefined) => {
