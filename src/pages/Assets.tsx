@@ -213,7 +213,7 @@ export const Assets: React.FC = () => {
       '구분': log.type === 'ACQUISITION' ? '취득' : log.type === 'OUTBOUND' ? '출고' : log.type === 'INBOUND' ? '입고' : log.type === 'INBOUND_CANCEL' ? '입고취소' : log.type === 'DISPOSAL' ? '매각' : '정비',
       '입고고유번호': log.inboundNo || '-',
       '발생일자': log.eventDate,
-      '관리번호': log.assetNo,
+      '자산번호': log.assetNo,
       '모델명': log.modelName,
       '거래처(고객사)': log.customerName || '-',
       '현장명': log.siteName || '-',
@@ -458,7 +458,7 @@ export const Assets: React.FC = () => {
       // 기본 비재무 자산 속성 (전 부서 공통)
       const baseRow: Record<string, any> = {
         'No': idx + 1,
-        '관리번호': a.assetNo || '-',
+        '자산번호': a.assetNo || '-',
         '모델명': a.modelName || '-',
         '실장 RAM': a.ramConfig || (a.totalRamGb ? `${a.totalRamGb}GB` : '-'),
         '실장 스토리지': a.totalStorageText || '-',
@@ -624,7 +624,7 @@ export const Assets: React.FC = () => {
             <Search size={13} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
             <input
               type="text"
-              placeholder="관리번호, 모델명, 제조사, S/N, 임차처"
+              placeholder="자산번호, 모델명, 제조사, S/N, 임차처"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               style={{
@@ -746,8 +746,8 @@ export const Assets: React.FC = () => {
               <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>
                 {/* 1. 상세 (고정) */}
                 <th style={{ padding: '7px 8px', width: '50px', textAlign: 'center', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 12, backgroundColor: 'var(--bg-app)' }}>상세</th>
-                {/* 2. 관리번호 (고정) */}
-                <SortableTh sortKey="assetNo" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px', width: '90px', position: 'sticky', left: '50px', zIndex: 12, backgroundColor: 'var(--bg-app)' }}>관리번호</SortableTh>
+                {/* 2. 자산번호 (고정) */}
+                <SortableTh sortKey="assetNo" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px', width: '90px', position: 'sticky', left: '50px', zIndex: 12, backgroundColor: 'var(--bg-app)' }}>자산번호</SortableTh>
                 {/* 3. 모델명 */}
                 <SortableTh sortKey="modelName" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px', width: '100px' }}>모델명</SortableTh>
                 {/* 4. 실장 RAM / 스토리지 */}
@@ -850,7 +850,7 @@ export const Assets: React.FC = () => {
                         </button>
                       </td>
 
-                      {/* 2. 관리번호 (고정) */}
+                      {/* 2. 자산번호 (고정) */}
                       <td style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap', position: 'sticky', left: '50px', zIndex: 2, backgroundColor: 'var(--bg-card)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <span>{a.assetNo}</span>
@@ -1181,7 +1181,7 @@ export const Assets: React.FC = () => {
                 <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '8px' }}>1. IT 실물 자산 식별 정보</div>
                 {isEditing ? (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                    <div><label style={labelStyle}>관리번호</label><input style={inputStyle} value={editForm.assetNo || ''} onChange={ef('assetNo')} /></div>
+                    <div><label style={labelStyle}>자산번호</label><input style={inputStyle} value={editForm.assetNo || ''} onChange={ef('assetNo')} /></div>
                     <div>
                       <label style={labelStyle}>모델명</label>
                       <input style={inputStyle} value={editForm.modelName || ''} onChange={ef('modelName')} />
@@ -1211,7 +1211,7 @@ export const Assets: React.FC = () => {
                   </div>
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', fontSize: '11.5px' }}>
-                    <div><span style={{ color: 'var(--text-secondary)' }}>관리번호:</span> <strong>{selectedAsset.assetNo}</strong></div>
+                    <div><span style={{ color: 'var(--text-secondary)' }}>자산번호:</span> <strong>{selectedAsset.assetNo}</strong></div>
                     <div><span style={{ color: 'var(--text-secondary)' }}>모델명:</span> <strong>{selectedAsset.modelName}</strong></div>
                     <div><span style={{ color: 'var(--text-secondary)' }}>제조사:</span> {selectedAsset.manufacturer || '-'}</div>
                     <div><span style={{ color: 'var(--text-secondary)' }}>제조번호:</span> <strong>{selectedAsset.serialNo || '-'}</strong></div>

@@ -740,7 +740,7 @@ export const AssetHistory: React.FC = () => {
                     <th style={{ whiteSpace: 'nowrap' }}>번호</th>
                     <SortableTh label="입고 고유번호" sortKey="id" currentSort={sortConfig} onSort={requestSort} />
                     <SortableTh label="입고일" sortKey="eventDate" currentSort={sortConfig} onSort={requestSort} />
-                    <SortableTh label="관리번호" sortKey="assetNo" currentSort={sortConfig} onSort={requestSort} />
+                    <SortableTh label="자산번호" sortKey="assetNo" currentSort={sortConfig} onSort={requestSort} />
                     <SortableTh label="모델명" sortKey="modelName" currentSort={sortConfig} onSort={requestSort} />
                     <SortableTh label="고객사" sortKey="customerName" currentSort={sortConfig} onSort={requestSort} />
                     <SortableTh label="현장명" sortKey="siteName" currentSort={sortConfig} onSort={requestSort} />

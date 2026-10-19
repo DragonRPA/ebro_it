@@ -223,7 +223,7 @@ export const OutboundInspections: React.FC = () => {
   const [selectedChecklistId, setSelectedChecklistId] = useState<string>(''); // 💡 마스터 등록 정비사유 ID
   const [exchangeReason, setExchangeReason] = useState<string>('');
   const [exchangeToRepairing, setExchangeToRepairing] = useState<boolean>(false); // 💡 기본값: false (수리 미전환)
-  const [exchangeSearchQuery, setExchangeSearchQuery] = useState<string>(''); // 🔍 대체 장비 관리번호 검색어
+  const [exchangeSearchQuery, setExchangeSearchQuery] = useState<string>(''); // 🔍 대체 장비 자산번호 검색어
 
   // 💡 O(1) 룩업 맵 사전 생성
   const contractMap = useMemo(() => {
@@ -1181,7 +1181,7 @@ export const OutboundInspections: React.FC = () => {
           '상차예정일': g.loadingDate || '-',
           '배차ID': g.deliveryId || '-',
           '검수상태': statusLabel,
-          '관리번호': '-',
+          '자산번호': '-',
           '모델명': g.equipmentsSummary || '-',
           '검수항목수': g.checkpoints.length,
           '검수자': '-',
@@ -1212,7 +1212,7 @@ export const OutboundInspections: React.FC = () => {
             '상차예정일': g.loadingDate || '-',
             '배차ID': g.deliveryId || '-',
             '검수상태': itemStatus,
-            '관리번호': asset?.assetNo || '-',
+            '자산번호': asset?.assetNo || '-',
             '모델명': asset?.modelName || g.equipmentsSummary || '-',
             '전체항목수': g.checkpoints.length,
             '확인항목수': checkedCount,
@@ -1493,7 +1493,7 @@ export const OutboundInspections: React.FC = () => {
                       📍 {group.siteName}
                     </div>
 
-                    {/* 포함 장비 요약 및 할당 장비 관리번호 */}
+                    {/* 포함 장비 요약 및 할당 장비 자산번호 */}
                     <div style={{ padding: '8px 10px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', marginBottom: '8px' }}>
                       <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <Layers size={13} color="var(--primary)" /> 총 {group.assets.length}대: {group.equipmentsSummary}
@@ -2085,11 +2085,11 @@ export const OutboundInspections: React.FC = () => {
               />
             </div>
 
-            {/* 🔍 [사장님 지시] 대체 장비 관리번호/시리얼 검색창 탑재 */}
+            {/* 🔍 [사장님 지시] 대체 장비 자산번호/시리얼 검색창 탑재 */}
             <div style={{ marginBottom: '16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
                 <label style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '5px' }}>
-                  <Search size={14} color="var(--primary)" /> 대체 장비 관리번호 검색
+                  <Search size={14} color="var(--primary)" /> 대체 장비 자산번호 검색
                 </label>
                 {exchangeSearchQuery && (
                   <button
@@ -2103,7 +2103,7 @@ export const OutboundInspections: React.FC = () => {
               <div style={{ position: 'relative' }}>
                 <input
                   type="text"
-                  placeholder="관리번호 (예: G19008) 또는 시리얼번호 입력시 1초 필터링..."
+                  placeholder="자산번호 (예: 26100001) 또는 시리얼번호 입력시 1초 필터링..."
                   value={exchangeSearchQuery}
                   onChange={e => setExchangeSearchQuery(e.target.value)}
                   style={{

@@ -81,20 +81,24 @@ export const AssetAcquisitionDisposal: React.FC = () => {
   // ==========================================================================
   const [acqMode, setAcqMode] = useState<'SINGLE' | 'EXCEL'>('SINGLE');
 
-  // 자동 관리번호 채번 헬퍼
-  const getNextRecommendedAssetNo = (prefix = 'KL-') => {
+  // 💡 IT 전용 자산번호 채번 헬퍼 (yymmssss: 연도2자리 + 월2자리 + 연번4자리, 헌장 1.4 준수)
+  const getNextRecommendedAssetNo = (dateStr?: string) => {
+    const targetDate = dateStr ? new Date(dateStr) : new Date();
+    const yy = String(isNaN(targetDate.getTime()) ? new Date().getFullYear() : targetDate.getFullYear()).slice(-2);
+    const mm = String((isNaN(targetDate.getTime()) ? new Date().getMonth() : targetDate.getMonth()) + 1).padStart(2, '0');
+    const yymm = `${yy}${mm}`;
+
     let maxNum = 0;
     assets.forEach(a => {
-      if (a.assetNo && a.assetNo.startsWith(prefix)) {
-        const numPart = parseInt(a.assetNo.slice(prefix.length), 10);
-        if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
-      } else if (a.assetNo && /^\d+$/.test(a.assetNo)) {
-        const numPart = parseInt(a.assetNo, 10);
+      if (!a.assetNo) return;
+      const clean = a.assetNo.trim();
+      if (clean.startsWith(yymm) && clean.length === 8 && /^\d+$/.test(clean)) {
+        const numPart = parseInt(clean.slice(4), 10);
         if (!isNaN(numPart) && numPart > maxNum) maxNum = numPart;
       }
     });
-    if (maxNum === 0) maxNum = 800;
-    return `${prefix}${String(maxNum + 1).padStart(4, '0')}`;
+
+    return `${yymm}${String(maxNum + 1).padStart(4, '0')}`;
   };
 
   // 단건 취득 폼 상태
@@ -104,13 +108,13 @@ export const AssetAcquisitionDisposal: React.FC = () => {
   const [singleManufacturer, setSingleManufacturer] = useState<string>('');
   const [singleManufactureYear, setSingleManufactureYear] = useState<string>(new Date().getFullYear().toString());
   const [singleAcqDate, setSingleAcqDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [singleAcqPrice, setSingleAcqPrice] = useState<number>(15000000);
-  const [singleDepMonths, setSingleDepMonths] = useState<number>(96); // 💡 기본값 96개월 (8년 고소작업대 표준)
+  const [singleAcqPrice, setSingleAcqPrice] = useState<number>(1500000);
+  const [singleDepMonths, setSingleDepMonths] = useState<number>(36); // 💡 IT 하드웨어 표준 내용월수 36개월 (3년)
   const [singleResidualRate, setSingleResidualRate] = useState<number>(10);
   const [singleSupplier, setSingleSupplier] = useState<string>('');
   const [singleVendorId, setSingleVendorId] = useState<string>('');
-  const [singleMonthlyRentalFee, setSingleMonthlyRentalFee] = useState<number>(400000);
-  const [singleDailyRentalFee, setSingleDailyRentalFee] = useState<number>(15000);
+  const [singleMonthlyRentalFee, setSingleMonthlyRentalFee] = useState<number>(70000);
+  const [singleDailyRentalFee, setSingleDailyRentalFee] = useState<number>(5000);
   const [singleSafetyInspectionUrl, setSingleSafetyInspectionUrl] = useState<string>('');
   const [singleMemo, setSingleMemo] = useState<string>('');
   const [isSubmittingAcq, setIsSubmittingAcq] = useState<boolean>(false);
@@ -196,16 +200,23 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     }
   }, [selectedProduct, singleModelName, assets]);
 
-  // 관리번호 초기 자동 추천
+  // 자산번호 초기 자동 추천 (취득일자 기준 yymmssss)
   useEffect(() => {
     if (!singleAssetNo) {
-      setSingleAssetNo(getNextRecommendedAssetNo('KL-'));
+      setSingleAssetNo(getNextRecommendedAssetNo(singleAcqDate));
     }
-  }, [assets]);
+  }, [assets, singleAcqDate]);
 
-  // 관리번호 파싱 헬퍼 (접두어 + 일련번호 숫자 분리)
+  // 자산번호 파싱 헬퍼 (yymmssss: 연도2+월2 4자리 접두어와 4자리 일련번호 분리)
   const parseAssetNo = (assetNoStr: string) => {
     const trimmed = (assetNoStr || '').trim();
+    if (/^\d{8}$/.test(trimmed)) {
+      return {
+        prefix: trimmed.slice(0, 4), // yymm
+        num: parseInt(trimmed.slice(4), 10), // ssss
+        digits: 4
+      };
+    }
     const match = trimmed.match(/^(.*?)(\d+)$/);
     if (match) {
       return {
@@ -217,7 +228,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     return null;
   };
 
-  // 다음 순차 관리번호 자동 채번 (DB 등록 자산 + 폼 입력 자산 중복 방어)
+  // 다음 순차 자산번호 자동 채번 (DB 등록 자산 + 폼 입력 자산 중복 방어)
   const getNextSequentialAssetNo = (baseAssetNo: string, offset: number = 1): string => {
     const usedNos = new Set<string>();
     assets.forEach(a => {
@@ -238,10 +249,10 @@ export const AssetAcquisitionDisposal: React.FC = () => {
       }
       return candidateNo;
     }
-    return getNextRecommendedAssetNo('KL-');
+    return getNextRecommendedAssetNo(singleAcqDate);
   };
 
-  // 슬롯 추가 핸들러 (동일 모델·취득가·제조년도 자동 상속 및 다음 관리번호 순차 자동 채번)
+  // 슬롯 추가 핸들러 (동일 모델·취득가·제조년도 자동 상속 및 다음 자산번호 순차 자동 채번)
   const handleAddSlot = () => {
     const baseNo = multiSlots.length > 0 ? multiSlots[multiSlots.length - 1].assetNo : singleAssetNo;
     const nextNo = getNextSequentialAssetNo(baseNo, 1);
@@ -267,7 +278,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     setMultiSlots(prev => prev.map(s => s.id === slotId ? { ...s, [field]: value } : s));
   };
 
-  // 메인 관리번호 기준 슬롯 전체 순차 재채번
+  // 메인 자산번호 기준 슬롯 전체 순차 재채번
   const handleRenumberSlotsSequentially = (customBaseNo?: string) => {
     const base = customBaseNo || singleAssetNo;
     const parsed = parseAssetNo(base);
@@ -292,9 +303,9 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     }));
   };
 
-  // 메인 관리번호 재채번 버튼 클릭 핸들러
+  // 메인 자산번호 재채번 버튼 클릭 핸들러
   const handleRegenerateMainAssetNo = () => {
-    const nextRecNo = getNextRecommendedAssetNo('KL-');
+    const nextRecNo = getNextRecommendedAssetNo(singleAcqDate);
     setSingleAssetNo(nextRecNo);
     if (multiSlots.length > 0) {
       handleRenumberSlotsSequentially(nextRecNo);
@@ -330,11 +341,11 @@ export const AssetAcquisitionDisposal: React.FC = () => {
       return;
     }
     if (!singleAssetNo.trim()) {
-      showErrorModal('기본 관리번호를 입력해 주세요.');
+      showErrorModal('기본 자산번호를 입력해 주세요.');
       return;
     }
 
-    // 💡 전체 관리번호 중복 검증 (메인 + 슬롯 상호 중복 및 기존 DB 중복 원천 차단)
+    // 💡 전체 자산번호 중복 검증 (메인 + 슬롯 상호 중복 및 기존 DB 중복 원천 차단)
     const allAssetNos = [
       { type: '메인', no: singleAssetNo.trim() },
       ...multiSlots.map((s, i) => ({ type: `추가 슬롯 #${i + 1}`, no: s.assetNo.trim() }))
@@ -343,19 +354,19 @@ export const AssetAcquisitionDisposal: React.FC = () => {
     const seenNos = new Set<string>();
     for (const item of allAssetNos) {
       if (!item.no) {
-        showErrorModal(`${item.type}의 관리번호를 입력해 주세요.`);
+        showErrorModal(`${item.type}의 자산번호를 입력해 주세요.`);
         return;
       }
       const lower = item.no.toLowerCase();
       if (seenNos.has(lower)) {
-        showErrorModal(`입력된 관리번호 중 중복 번호 ${item.no}가 존재합니다.`);
+        showErrorModal(`입력된 자산번호 중 중복 번호 ${item.no}가 존재합니다.`);
         return;
       }
       seenNos.add(lower);
 
       const existingAsset = assets.find(a => a.assetNo?.trim().toLowerCase() === lower);
       if (existingAsset) {
-        showErrorModal(`관리번호 ${item.no}는 이미 시스템에 등록되어 있습니다.`);
+        showErrorModal(`자산번호 ${item.no}는 이미 시스템에 등록되어 있습니다.`);
         return;
       }
     }
@@ -434,7 +445,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
   // 엑셀 표준 양식 다운로드
   const handleDownloadTemplate = () => {
     const headers = [
-      '관리번호',
+      '자산번호',
       '모델명',
       '제조번호(SN)',
       '제조사',
@@ -448,20 +459,22 @@ export const AssetAcquisitionDisposal: React.FC = () => {
       '일렌탈료',
       '비고'
     ];
+    const today = new Date().toISOString().split('T')[0];
+    const sampleAssetNo = getNextRecommendedAssetNo(today);
     const sampleRow = [
-      'KL-0899',
-      products[0]?.modelName || 'S-0808',
-      'SN-2024-001',
-      products[0]?.manufacturer || '시노붐',
+      sampleAssetNo,
+      products[0]?.modelName || 'ThinkPad T14 Gen 4',
+      'PF-4ABCD1',
+      products[0]?.manufacturer || 'Lenovo',
       '2024',
-      new Date().toISOString().split('T')[0],
-      18500000,
-      96, // 💡 내용월수 기본값 96개월 (8년 고소작업대 표준)
+      today,
+      1500000,
+      36, // 💡 IT 하드웨어 내용월수 기본값 36개월 (3년)
       10,
-      '한국시노붐',
-      400000,
-      15000,
-      '신규 장비 입고'
+      '대원CTS',
+      70000,
+      5000,
+      '신규 IT 장비 입고'
     ];
 
     const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
@@ -506,7 +519,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
           const manufactureYear = String(r[4] || '').trim();
           const acquisitionDate = String(r[5] || '').trim() || new Date().toISOString().split('T')[0];
           const acquisitionPrice = Number(r[6]) || 0;
-          const depreciationMonths = Number(r[7]) || 96; // 💡 기본값 96개월
+          const depreciationMonths = Number(r[7]) || 36; // 💡 IT 기본값 36개월
           const rawResidual = r[8];
           const residualValueRate = (rawResidual !== undefined && rawResidual !== '' && !isNaN(Number(rawResidual))) ? Number(rawResidual) : 10;
           const supplier = String(r[9] || '').trim();
@@ -516,11 +529,11 @@ export const AssetAcquisitionDisposal: React.FC = () => {
 
           // 유효성 검증
           if (!assetNo) {
-            errors.push({ row: rowNum, error: '관리번호가 누락되었습니다.' });
+            errors.push({ row: rowNum, error: '자산번호가 누락되었습니다.' });
           } else if (existingNos.has(assetNo.toLowerCase())) {
-            errors.push({ row: rowNum, error: `관리번호 ${assetNo}가 기존 자산과 중복됩니다.` });
+            errors.push({ row: rowNum, error: `자산번호 ${assetNo}가 기존 자산과 중복됩니다.` });
           } else if (fileNos.has(assetNo.toLowerCase())) {
-            errors.push({ row: rowNum, error: `엑셀 파일 내에서 관리번호 ${assetNo}가 중복 등장합니다.` });
+            errors.push({ row: rowNum, error: `엑셀 파일 내에서 자산번호 ${assetNo}가 중복 등장합니다.` });
           }
           fileNos.add(assetNo.toLowerCase());
 
@@ -840,7 +853,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
       const inBasket = basketAssetIdSet.has(a.id);
       return {
         'No': idx + 1,
-        '관리번호': a.assetNo || '',
+        '자산번호': a.assetNo || '',
         '모델명': a.modelName || '',
         '제조번호(SN)': a.serialNo || '',
         '제조사': a.manufacturer || '',
@@ -868,7 +881,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
       const margin = b.salePrice - b.bookValue;
       return {
         'No': idx + 1,
-        '관리번호': b.assetNo,
+        '자산번호': b.assetNo,
         '모델명': b.modelName,
         '제조번호(SN)': b.serialNo || '',
         '제조년도': b.manufactureYear ? `${b.manufactureYear}년` : '',
@@ -1290,7 +1303,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                   onClick={handleRegenerateMainAssetNo}
                   style={{ padding: '4px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
                 >
-                  <RefreshCw size={12} /> 관리번호 재채번
+                  <RefreshCw size={12} /> 자산번호 재채번
                 </button>
               </div>
 
@@ -1308,20 +1321,20 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                   >
                     {products.map(p => (
                       <option key={p.id} value={p.modelName}>
-                        {p.modelName} ({p.manufacturer || '제조사미상'} / {p.feet ? `${p.feet}ft` : '제원'})
+                        {p.modelName} ({p.manufacturer || '제조사'} / {p.category || 'IT'})
                       </option>
                     ))}
                   </select>
                 </div>
 
-                {/* 2. 관리번호 */}
+                {/* 2. 자산번호 */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>관리번호 (자산번호)</label>
+                  <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)' }}>자산번호 (yymmssss)</label>
                   <input
                     type="text"
                     value={singleAssetNo}
                     onChange={e => setSingleAssetNo(e.target.value)}
-                    placeholder="예: KL-0850"
+                    placeholder="예: 26100001"
                     style={{ padding: '8px 10px', borderRadius: '6px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-primary)', fontSize: '12.5px', fontWeight: 700 }}
                     required
                   />
@@ -1585,10 +1598,10 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                         type="button"
                         className="btn-secondary"
                         onClick={() => handleRenumberSlotsSequentially()}
-                        title="메인 관리번호 기준으로 슬롯 번호들을 순차적으로 다시 정렬합니다."
+                        title="메인 자산번호 기준으로 슬롯 번호들을 순차적으로 다시 정렬합니다."
                         style={{ padding: '4px 10px', fontSize: '11.5px', display: 'flex', alignItems: 'center', gap: '4px' }}
                       >
-                        <RefreshCw size={11} /> 관리번호 순차 재정렬
+                        <RefreshCw size={11} /> 자산번호 순차 재정렬
                       </button>
                     )}
                     <button
@@ -1612,7 +1625,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                     color: 'var(--text-muted)',
                     fontSize: '12px'
                   }}>
-                    동일 모델 장비를 여러 대 한 번에 등록하려면 우측 상단의 <strong>[+ 슬롯 추가]</strong> 버튼을 누르세요. (동일 모델·취득가 자동 상속 및 관리번호 순차 자동 채번)
+                    동일 모델 장비를 여러 대 한 번에 등록하려면 우측 상단의 <strong>[+ 슬롯 추가]</strong> 버튼을 누르세요. (동일 모델·취득가 자동 상속 및 자산번호 순차 자동 채번)
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
@@ -1630,7 +1643,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                       alignItems: 'center'
                     }}>
                       <span>순번</span>
-                      <span>채번 관리번호</span>
+                      <span>채번 자산번호</span>
                       <span>등록 모델</span>
                       <span>제조번호</span>
                       <span>제조년도</span>
@@ -1658,11 +1671,11 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                           #{sIdx + 1}
                         </span>
 
-                        {/* 2. 채번 관리번호 (배지 및 입력 필드) */}
+                        {/* 2. 채번 자산번호 (배지 및 입력 필드) */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           <input
                             type="text"
-                            placeholder="관리번호"
+                            placeholder="자산번호"
                             value={slot.assetNo}
                             onChange={e => handleUpdateSlot(slot.id, 'assetNo', e.target.value)}
                             style={{
@@ -1827,7 +1840,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                   엑셀 파일 (.xlsx, .xls)을 클릭하여 선택해 주세요
                 </div>
                 <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                  업로드 즉시 관리번호 중복 및 필수 필드 유효성 검사가 자동 실행됩니다.
+                  업로드 즉시 자산번호 중복 및 필수 필드 유효성 검사가 자동 실행됩니다.
                 </div>
                 <input
                   ref={fileInputRef}
@@ -1857,7 +1870,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                       <thead>
                         <tr style={{ backgroundColor: 'var(--bg-app)' }}>
                           <th style={{ whiteSpace: 'nowrap' }}>행</th>
-                          <th style={{ whiteSpace: 'nowrap' }}>관리번호</th>
+                          <th style={{ whiteSpace: 'nowrap' }}>자산번호</th>
                           <th style={{ whiteSpace: 'nowrap' }}>모델명</th>
                           <th style={{ whiteSpace: 'nowrap' }}>제조번호</th>
                           <th style={{ whiteSpace: 'nowrap' }}>제조사</th>
@@ -2271,7 +2284,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <label style={{ fontSize: '11.5px', fontWeight: 700, color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
-                    관리번호 / 시리얼 검색
+                    자산번호 / 시리얼 검색
                   </label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '6px', backgroundColor: 'var(--bg-app)', padding: '6px 10px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
                     <Search size={13} color="var(--text-muted)" />
@@ -2299,7 +2312,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                   >
                     <option value="YEAR_ASC">노후순 (연식 오래된순)</option>
                     <option value="BOOK_VAL_ASC">장부가 낮은순</option>
-                    <option value="ASSET_NO">관리번호순</option>
+                    <option value="ASSET_NO">자산번호순</option>
                   </select>
                 </div>
               </div>
@@ -2349,7 +2362,7 @@ export const AssetAcquisitionDisposal: React.FC = () => {
                           onChange={toggleCheckAll}
                         />
                       </th>
-                      <th style={{ whiteSpace: 'nowrap' }}>관리번호</th>
+                      <th style={{ whiteSpace: 'nowrap' }}>자산번호</th>
                       <th style={{ whiteSpace: 'nowrap' }}>모델명</th>
                       <th style={{ whiteSpace: 'nowrap' }}>연식</th>
                       <th style={{ whiteSpace: 'nowrap' }}>현재 장부가치</th>

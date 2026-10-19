@@ -210,7 +210,7 @@ export const DepreciationExecution: React.FC = () => {
 
       return {
         'No': idx + 1,
-        '관리번호': asset.assetNo,
+        '자산번호': asset.assetNo,
         '장비모델명': asset.modelName,
         '시리얼번호': asset.serialNo || '-',
         '자산상태': asset.status,

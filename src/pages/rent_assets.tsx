@@ -60,7 +60,7 @@ export const RentAssets: React.FC = () => {
   const [claimDisplayName, setClaimDisplayName] = useState<string>('');
   const [claimOccurredDate, setClaimOccurredDate] = useState<string>(new Date().toISOString().split('T')[0]);
 
-  // 활성화 탭 상태: CURRENT (임차자산 대장 & 반납 관리), NEGOTIATION (전대 임차 협의), PROFIT_LEDGER (전대 손익 원장), RECONCILIATION (임차처 거래명세서 대사)
+  // 활성화 탭 상태: CURRENT (임차자산 대장 & 반납 관리), NEGOTIATION (임차 협의), PROFIT_LEDGER (임차 손익 원장), RECONCILIATION (임차처 거래명세서 대사)
   const [activeTab, setActiveTab] = useState<'CURRENT' | 'NEGOTIATION' | 'PROFIT_LEDGER' | 'RECONCILIATION'>('CURRENT');
   const [profitLedgerSubTab, setProfitLedgerSubTab] = useState<'CONTRACT' | 'ASSET'>('CONTRACT');
 
@@ -120,7 +120,7 @@ export const RentAssets: React.FC = () => {
     return { activeRentedList, returnedList, totalMonthlyRentCost };
   }, [rentedAssets]);
 
-  // ── [전대 임차 협의] 전용 로컬 상태 ──
+  // ── [임차 협의] 전용 로컬 상태 ──
   const [selectedSubleaseId, setSelectedSubleaseId] = useState<string | null>(null);
   const [subleaseVendorId, setSubleaseVendorId] = useState<string>('');
   const [subleaseModelName, setSubleaseModelName] = useState<string>('');
@@ -136,7 +136,7 @@ export const RentAssets: React.FC = () => {
   const [subleaseFilterStatus, setSubleaseFilterStatus] = useState<'ALL' | 'INQUIRY' | 'NEGOTIATING' | 'CONTRACTED' | 'CANCELLED'>('ALL');
   const [subleaseSearchQuery, setSubleaseSearchQuery] = useState<string>('');
 
-  // 신규 전대 임차 협의 저장 핸들러
+  // 신규 임차 협의 저장 핸들러
   const handleSaveSubleaseNegotiation = async () => {
     if (!subleaseVendorId) {
       showToast('임차처(협력사)를 선택하십시오.', 'error');
@@ -283,7 +283,7 @@ export const RentAssets: React.FC = () => {
       return Math.round(((monthlyFee / 30) * days) / unit) * unit;
     };
 
-    // A. 임차처 거래명세서 행 기준으로 자사 DB 자산 대조 (오직 관리번호 기준 O(1) 매칭)
+    // A. 임차처 거래명세서 행 기준으로 자사 DB 자산 대조 (오직 자산번호 기준 O(1) 매칭)
     statementRows.forEach((row, idx) => {
       // 이미지 2 지원: 장비 임대료가 아닌 기타 수리비/세척비/도색비/운송비 등 항목
       if (row.itemType === 'REPAIR' || row.itemType === 'OTHER_FEE') {
@@ -300,11 +300,11 @@ export const RentAssets: React.FC = () => {
         return;
       }
 
-      // 1단계: 관리번호(assetNo) 정밀 O(1) 매칭 (시리얼번호/제조번호 일절 무시)
+      // 1단계: 자산번호(assetNo) 정밀 O(1) 매칭 (시리얼번호/제조번호 일절 무시)
       const rowCleanNo = cleanStr(row.assetNo);
       let matched = rowCleanNo ? rentedAssetByCleanNoMap.get(rowCleanNo) : undefined;
 
-      // 2단계: 관리번호 불일치 시 [모델명 + 임차처] 조합 2차 보조 추적
+      // 2단계: 자산번호 불일치 시 [모델명 + 임차처] 조합 2차 보조 추적
       if (!matched && row.modelName) {
         const rowCleanModel = cleanStr(row.modelName);
         matched = rentedAssets.find(a => 
@@ -579,9 +579,9 @@ export const RentAssets: React.FC = () => {
   }, [statementRows, reconcileResults]);
 
   // ==========================================
-  // 💰 [원천정보 기반 대차대조 전대 손익 원장] 계산 엔진 (탭 활성화 시에만 연산)
+  // 💰 [원천정보 기반 대차대조 임차 손익 원장] 계산 엔진 (탭 활성화 시에만 연산)
   // ==========================================
-  // 1. 계약별 전대 손익 원장 (확정 청구서 매출 vs 매입세금계산서 원가 + 운송비)
+  // 1. 계약별 임차 손익 원장 (확정 청구서 매출 vs 매입세금계산서 원가 + 운송비)
   const subleaseContracts = React.useMemo(() => {
     if (activeTab !== 'PROFIT_LEDGER') return [];
 
@@ -963,7 +963,7 @@ export const RentAssets: React.FC = () => {
       return {
         '순번': idx + 1,
         '대사 상태': item.statusLabel,
-        '관리번호': stmt?.assetNo || matched?.assetNo || '',
+        '자산번호': stmt?.assetNo || matched?.assetNo || '',
         '모델명': stmt?.modelName || matched?.modelName || '',
         '약정 기간': matched ? `${matched.rentStart || ''} ~ ${matched.rentEnd || ''}` : '',
         '약정금액': item.expectedAmount,
@@ -998,8 +998,8 @@ export const RentAssets: React.FC = () => {
   // 대사 양식 다운로드
   const handleDownloadTemplate = () => {
     const templateData = [
-      { 관리번호: 'R-001', 제조번호: 'SN-12345', 모델명: 'S-1212', 임차시작일: '2026-08-01', 임차종료일: '2026-08-31', 청구금액: 350000, 비고: '월 정기 임차료' },
-      { 관리번호: 'R-002', 제조번호: 'SN-67890', 모델명: 'Z-3422', 임차시작일: '2026-08-01', 임차종료일: '2026-08-31', 청구금액: 400000, 비고: '월 정기 임차료' }
+      { 자산번호: '26100001', 제조번호: 'SN-12345', 모델명: 'ThinkPad T14 Gen 4', 임차시작일: '2026-10-01', 임차종료일: '2026-10-31', 청구금액: 70000, 비고: '월 정기 임차료' },
+      { 자산번호: '26100002', 제조번호: 'SN-67890', 모델명: 'Dell OptiPlex 7010', 임차시작일: '2026-10-01', 임차종료일: '2026-10-31', 청구금액: 60000, 비고: '월 정기 임차료' }
     ];
     const ws = XLSX.utils.json_to_sheet(templateData);
     const wb = XLSX.utils.book_new();
@@ -1071,7 +1071,7 @@ export const RentAssets: React.FC = () => {
           settlementId: settlement.id,
           sourceType: 'EQUIPMENT_LEASE',
           sourceId: matched ? matched.id : row.assetNo,
-          itemDescription: `[1:1 매칭] ${row.modelName || row.assetNo} (관리번호: ${row.assetNo}, 기간: ${row.rentStart}~${row.rentEnd})`,
+          itemDescription: `[1:1 매칭] ${row.modelName || row.assetNo} (자산번호: ${row.assetNo}, 기간: ${row.rentStart}~${row.rentEnd})`,
           quantity: 1,
           unitPrice: row.billedAmount,
           amount: row.billedAmount,
@@ -1212,25 +1212,28 @@ export const RentAssets: React.FC = () => {
     return subleaseEnd.getTime() > leaseEnd.getTime();
   };
 
-  // 임차 자산 신규 자동 채번 헬퍼 (R-xxx 형식 순차 증가)
+  // 💡 IT 전용 임차 자산번호 자동 채번 헬퍼 (yymmssss: 연도2자리 + 월2자리 + 연번4자리)
   const generateNextRentedAssetNo = (allAssets: Asset[]): string => {
-    const rented = (allAssets || []).filter(a => a.ownerType === 'RENTED');
+    const now = new Date();
+    const yy = String(now.getFullYear()).slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const yymm = `${yy}${mm}`;
+
     let maxNum = 0;
-    for (const a of rented) {
-      if (!a.assetNo) continue;
-      const match = a.assetNo.match(/^(?:R-|RENT-|R)(\d+)$/i);
-      if (match) {
-        const val = parseInt(match[1], 10);
+    (allAssets || []).forEach(a => {
+      if (!a.assetNo) return;
+      const clean = a.assetNo.trim();
+      if (clean.startsWith(yymm) && clean.length === 8 && /^\d+$/.test(clean)) {
+        const val = parseInt(clean.slice(4), 10);
         if (!isNaN(val) && val > maxNum) {
           maxNum = val;
         }
       }
-    }
-    const nextNum = maxNum + 1;
-    return `R-${nextNum.toString().padStart(3, '0')}`;
+    });
+    return `${yymm}${String(maxNum + 1).padStart(4, '0')}`;
   };
 
-  // 관리번호 수동 입력 시 과거 반납 자산 자동 감지 및 승계
+  // 자산번호 수동 입력 시 과거 반납 자산 자동 감지 및 승계
   const handleAssetNoChange = (val: string) => {
     const trimmed = val.trim();
     const pastReturned = rentedAssets.find(a => 
@@ -1492,7 +1495,7 @@ export const RentAssets: React.FC = () => {
   const handleExportRentedAssetsExcel = () => {
     const data = filteredAssets.map((a, idx) => ({
       'No': idx + 1,
-      '관리번호': a.assetNo || '-',
+      '자산번호': a.assetNo || '-',
       '임차처 원래번호': a.vendorAssetNo || '-',
       '모델명': a.modelName || '-',
       '임차처': a.renter || '-',
@@ -1505,7 +1508,7 @@ export const RentAssets: React.FC = () => {
     exportToExcel(data, `임차자산_대장_목록_${new Date().toISOString().split('T')[0]}`, '임차자산대장');
   };
 
-  // 📥 전대 손익 원장 엑셀 내보내기
+  // 📥 임차 손익 원장 엑셀 내보내기
   const handleExportProfitLedgerExcel = () => {
     if (profitLedgerSubTab === 'CONTRACT') {
       const data = subleaseContracts.map((sc, idx) => ({
@@ -1513,7 +1516,7 @@ export const RentAssets: React.FC = () => {
         '계약번호': sc.contract.contractNo,
         '고객사명': sc.customer?.name || '고객 미지정',
         '현장명': sc.site?.name || '현장 미지정',
-        '투입 전대장비': sc.assignedRentedAssets.map(ara => `${ara.ca.assetId ? ara.match?.assetNo : ''} (${ara.match?.renter || '임차처'})`).join(', '),
+        '투입 임차장비': sc.assignedRentedAssets.map(ara => `${ara.ca.assetId ? ara.match?.assetNo : ''} (${ara.match?.renter || '임차처'})`).join(', '),
         '확정 청구액(매출, 원)': sc.confirmedRevenue,
         '매입 임차료 원가(원)': sc.confirmedCost,
         '직송 운송비 원가(원)': sc.freightCost,
@@ -1521,11 +1524,11 @@ export const RentAssets: React.FC = () => {
         '마진율(%)': `${sc.marginRate.toFixed(1)}%`,
         '대차대조 상태': '무결성 일치'
       }));
-      exportToExcel(data, `계약별_전대손익원장_${new Date().toISOString().split('T')[0]}`, '계약별전대손익');
+      exportToExcel(data, `계약별_임차손익원장_${new Date().toISOString().split('T')[0]}`, '계약별임차손익');
     } else {
       const data = assetProfitLedgers.map((apl, idx) => ({
         'No': idx + 1,
-        '관리번호': apl.asset.assetNo,
+        '자산번호': apl.asset.assetNo,
         '임차처 원래번호': apl.asset.vendorAssetNo || '-',
         '모델명': apl.asset.modelName,
         '임차처': apl.asset.renter || '미지정',
@@ -1535,7 +1538,7 @@ export const RentAssets: React.FC = () => {
         '누적 공헌이익(원)': apl.cumNetProfit,
         '수익 기여율(%)': `${apl.marginRate.toFixed(1)}%`
       }));
-      exportToExcel(data, `자산별_전대손익원장_${new Date().toISOString().split('T')[0]}`, '자산별전대손익');
+      exportToExcel(data, `자산별_임차손익원장_${new Date().toISOString().split('T')[0]}`, '자산별임차손익');
     }
   };
 
@@ -1544,7 +1547,7 @@ export const RentAssets: React.FC = () => {
     const data = filteredReconcileResults.map((r, idx) => ({
       'No': idx + 1,
       '대사상태': r.statusLabel,
-      '관리번호': r.statementRow?.assetNo || r.matchedAsset?.assetNo || '-',
+      '자산번호': r.statementRow?.assetNo || r.matchedAsset?.assetNo || '-',
       '임차처 원래번호': r.matchedAsset?.vendorAssetNo || '-',
       '모델명': r.statementRow?.modelName || r.matchedAsset?.modelName || '-',
       '임차처 월단가': r.statementRow?.unitPrice || r.statementRow?.billedAmount || 0,
@@ -1602,7 +1605,7 @@ export const RentAssets: React.FC = () => {
           <Layers size={15} /> 임차자산 대장
         </button>
 
-        {/* 💡 [사장님 지시] "전대 임차 협의" ➔ "임차 협의", "전대 손익 원장" ➔ "임차 손익 원장" 명칭 변경 및 실무자 협의 중 임시 비노출 */}
+        {/* 💡 [사장님 지시] "임차 협의", "임차 손익 원장" 명칭 단일화 및 실무자 협의 중 임시 비노출 */}
         {false && (
           <>
             <button
@@ -2022,7 +2025,7 @@ export const RentAssets: React.FC = () => {
                   type="text"
                   value={reconcileSearch}
                   onChange={e => setReconcileSearch(e.target.value)}
-                  placeholder="관리번호 / 모델명 검색"
+                  placeholder="자산번호 / 모델명 검색"
                   style={{ padding: '3px 8px', fontSize: '11.5px', width: '200px', borderRadius: '4px', border: '1px solid var(--border-color)', backgroundColor: 'var(--bg-app)', color: 'var(--text-main)' }}
                 />
                 {reconcileSearch && (
@@ -2134,7 +2137,7 @@ export const RentAssets: React.FC = () => {
                         </th>
                         <th style={{ padding: '6px 6px', whiteSpace: 'nowrap', textAlign: 'center', width: '48px' }}>상세</th>
                         <th style={{ padding: '6px 8px', whiteSpace: 'nowrap', textAlign: 'center', width: '68px' }}>상태</th>
-                        <th style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>관리번호</th>
+                        <th style={{ padding: '6px 8px', whiteSpace: 'nowrap' }}>자산번호</th>
                         <th style={{ padding: '6px 8px', whiteSpace: 'nowrap', borderRight: '1px solid var(--border-color)' }}>모델명</th>
                         
                         <th style={{ padding: '6px 8px', whiteSpace: 'nowrap', backgroundColor: 'rgba(16, 185, 129, 0.03)' }}>약정 기간</th>
@@ -2217,7 +2220,7 @@ export const RentAssets: React.FC = () => {
                               </span>
                             </td>
 
-                            {/* 관리번호 */}
+                            {/* 자산번호 */}
                             <td style={{ padding: '4px 8px', whiteSpace: 'nowrap', fontWeight: 600 }}>
                               {stmt?.assetNo || matched?.assetNo || '-'}
                             </td>
@@ -2547,7 +2550,7 @@ export const RentAssets: React.FC = () => {
       })()}
 
       {/* ========================================================================= */}
-      {/* 탭 2: 전대 임차 협의 (마스터-디테일 조달 스튜디오, 헌장 3.1, 3.2, 3.4, 3.6 준수) */}
+      {/* 탭 2: 임차 협의 (마스터-디테일 조달 스튜디오, 헌장 3.1, 3.2, 3.4, 3.6 준수) */}
       {/* ========================================================================= */}
       {activeTab === 'NEGOTIATION' && (
         <div style={{ display: 'flex', gap: '16px', minHeight: '650px', alignItems: 'flex-start' }}>
@@ -2559,7 +2562,7 @@ export const RentAssets: React.FC = () => {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ fontSize: '14px', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}>
-                <Building size={16} /> 전대 임차 협의 목록
+                <Building size={16} /> 임차 협의 목록
               </h3>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 700 }}>
                 총 {(subleaseNegotiations || []).length}건
@@ -2612,7 +2615,7 @@ export const RentAssets: React.FC = () => {
                 if (filtered.length === 0) {
                   return (
                     <div style={{ textAlign: 'center', padding: '40px 10px', color: 'var(--text-muted)', fontSize: '12px' }}>
-                      등록된 전대 임차 협의 건이 없습니다.
+                      등록된 임차 협의 건이 없습니다.
                     </div>
                   );
                 }
@@ -2731,13 +2734,13 @@ export const RentAssets: React.FC = () => {
               );
             })()}
 
-            {/* 2. 신규 전대 임차 협의 등록 폼 (헌장 3.4 상하 세로 스택) */}
+            {/* 2. 신규 임차 협의 등록 폼 (헌장 3.4 상하 세로 스택) */}
             <div style={{
               backgroundColor: 'var(--bg-body)', border: '1px solid var(--border-color)', borderRadius: '8px',
               padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px'
             }}>
               <h4 style={{ fontSize: '14px', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Plus size={15} /> 신규 전대 임차 협의 등록
+                <Plus size={15} /> 신규 임차 협의 등록
               </h4>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px' }}>
@@ -2926,7 +2929,7 @@ export const RentAssets: React.FC = () => {
                   onClick={handleSaveSubleaseNegotiation}
                   style={{ padding: '8px 20px', fontSize: '12.5px', fontWeight: 800, display: 'inline-flex', alignItems: 'center', gap: '6px' }}
                 >
-                  <Check size={14} /> 전대 임차 협의 등록
+                  <Check size={14} /> 임차 협의 등록
                 </button>
               </div>
             </div>
@@ -2935,7 +2938,7 @@ export const RentAssets: React.FC = () => {
       )}
 
       {/* ========================================================================= */}
-      {/* 탭 3: 전대 손익 원장 (대차대조) */}
+      {/* 탭 3: 임차 손익 원장 (대차대조) */}
       {/* ========================================================================= */}
       {activeTab === 'PROFIT_LEDGER' && (() => {
         const totalRev = subleaseContracts.reduce((sum, sc) => sum + sc.confirmedRevenue, 0);
@@ -2951,7 +2954,7 @@ export const RentAssets: React.FC = () => {
             {/* 대차대조 손익 KPI 카드 */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px' }}>
               <div style={{ padding: '12px 14px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>전대 확정 청구액 (매출)</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>임차 운용 매출</span>
                 <strong style={{ fontSize: '17px', color: 'var(--primary)' }}>₩{totalRev.toLocaleString()}</strong>
                 <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>확정 매출 세금계산서 기준</span>
               </div>
@@ -2969,7 +2972,7 @@ export const RentAssets: React.FC = () => {
               </div>
 
               <div style={{ padding: '12px 14px', backgroundColor: 'var(--success-light)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                <span style={{ fontSize: '11px', color: 'var(--text-main)', fontWeight: 700 }}>전대 순마진 (대차대조)</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-main)', fontWeight: 700 }}>임차 순마진 (대차대조)</span>
                 <strong style={{ fontSize: '17px', color: 'var(--success)' }}>₩{netProfit.toLocaleString()}</strong>
                 <span style={{ fontSize: '10.5px', fontWeight: 700, color: marginRate >= 20 ? 'var(--success)' : '#d97706' }}>
                   마진율: {marginRate.toFixed(1)}% ({marginRate >= 0 ? '흑자' : '적자'})
@@ -2994,7 +2997,7 @@ export const RentAssets: React.FC = () => {
                   color: profitLedgerSubTab === 'CONTRACT' ? '#ffffff' : 'var(--text-secondary)'
                 }}
               >
-                🏢 계약별 전대 손익 원장 ({subleaseContracts.length}건)
+                🏢 계약별 임차 손익 원장 ({subleaseContracts.length}건)
               </button>
               <button
                 type="button"
@@ -3031,11 +3034,11 @@ export const RentAssets: React.FC = () => {
                 gap: '6px'
               }}
             >
-              <Download size={13} /> 전대 손익 원장 엑셀 다운로드
+              <Download size={13} /> 임차 손익 원장 엑셀 다운로드
             </button>
           </div>
 
-          {/* 1. 계약별 전대 손익 원장 그리드 */}
+          {/* 1. 계약별 임차 손익 원장 그리드 */}
           {profitLedgerSubTab === 'CONTRACT' && (
             <div className="card" style={{ border: '1px solid var(--border-color)', borderRadius: '10px', overflow: 'hidden', backgroundColor: 'var(--bg-card)' }}>
               <div style={{ overflowX: 'auto' }}>
@@ -3044,7 +3047,7 @@ export const RentAssets: React.FC = () => {
                     <tr style={{ backgroundColor: 'var(--bg-card-header)', borderBottom: '2px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
                       <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>계약번호 / 현장</th>
                       <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>고객사명</th>
-                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>투입 전대장비</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>투입 임차장비</th>
                       <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>확정 청구액(매출)</th>
                       <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>매입원가(임차료)</th>
                       <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>🚚 직송 운송비</th>
@@ -3057,7 +3060,7 @@ export const RentAssets: React.FC = () => {
                     {subleaseContracts.length === 0 ? (
                       <tr>
                         <td colSpan={9} style={{ padding: '30px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                          현재 진행 중인 전대(임차) 계약이 없습니다.
+                          현재 진행 중인 임차 계약이 없습니다.
                         </td>
                       </tr>
                     ) : (
@@ -3119,8 +3122,8 @@ export const RentAssets: React.FC = () => {
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                   <thead>
                     <tr style={{ backgroundColor: 'var(--bg-card-header)', borderBottom: '2px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>관리번호</th>
-                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>임차처 관리번호</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>자산번호</th>
+                      <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>임차처 자산번호</th>
                       <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>모델명</th>
                       <th style={{ padding: '10px', whiteSpace: 'nowrap' }}>임차처</th>
                       <th style={{ padding: '10px', whiteSpace: 'nowrap', textAlign: 'right' }}>누적 렌탈 청구액</th>
@@ -3180,7 +3183,7 @@ export const RentAssets: React.FC = () => {
             borderRadius: '0 0 6px 6px'
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-              <span>전대 매출총액: <strong style={{ color: 'var(--primary)' }}>₩{totalRev.toLocaleString()}</strong></span>
+              <span>임차 매출총액: <strong style={{ color: 'var(--primary)' }}>₩{totalRev.toLocaleString()}</strong></span>
               <span>=</span>
               <span>매입 임차료: <strong style={{ color: 'var(--danger)' }}>₩{totalCost.toLocaleString()}</strong></span>
               <span>+</span>
@@ -3221,7 +3224,7 @@ export const RentAssets: React.FC = () => {
                   <Search size={13} style={{ position: 'absolute', left: '8px', top: '7px', color: 'var(--text-muted)' }} />
                   <input
                     type="text"
-                    placeholder="관리번호, 모델명, 임차처 검색"
+                    placeholder="자산번호, 모델명, 임차처 검색"
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     style={{
@@ -3305,7 +3308,7 @@ export const RentAssets: React.FC = () => {
                     <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>
                       <th style={{ padding: '7px 8px', width: '50px', textAlign: 'center', whiteSpace: 'nowrap' }}>상세</th>
                       <th style={{ padding: '7px 8px', width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>관리</th>
-                      <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>관리번호</th>
+                      <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>자산번호</th>
                       <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>모델명</th>
                       <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>임차처</th>
                       <th style={{ padding: '7px 8px', whiteSpace: 'nowrap' }}>임차 계약기간</th>
@@ -3417,7 +3420,7 @@ export const RentAssets: React.FC = () => {
                               </div>
                             </td>
 
-                            {/* 관리번호 & 임차처번호 */}
+                            {/* 자산번호 & 임차처번호 */}
                             <td style={{ padding: '6px 8px', fontWeight: 700, color: 'var(--text-main)', whiteSpace: 'nowrap' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                                 <span>{a.assetNo}</span>
@@ -3497,7 +3500,7 @@ export const RentAssets: React.FC = () => {
 
                                 {isOverdue && !isReturned && (
                                   <span className="badge badge-danger" style={{ fontSize: '9.5px', display: 'inline-flex', alignItems: 'center', gap: '2px' }}>
-                                    <AlertTriangle size={9} /> 전대 기간 초과
+                                    <AlertTriangle size={9} /> 임차 기간 초과
                                   </span>
                                 )}
 
@@ -3541,7 +3544,7 @@ export const RentAssets: React.FC = () => {
                 fontSize: '11.5px'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-                  <span>가동중 전대장비: <strong style={{ color: 'var(--primary)' }}>{activeRentedList.length}대</strong></span>
+                  <span>가동중 임차장비: <strong style={{ color: 'var(--primary)' }}>{activeRentedList.length}대</strong></span>
                   <span>|</span>
                   <span>월 총 임차료 지출: <strong style={{ color: 'var(--danger)' }}>₩{totalMonthlyRentCost.toLocaleString()}원</strong></span>
                   <span>|</span>
@@ -3746,7 +3749,7 @@ export const RentAssets: React.FC = () => {
                 </h3>
                 {selectedReconcileDetail.statementRow ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--text-main)' }}>
-                    <div><strong>관리번호:</strong> {selectedReconcileDetail.statementRow.assetNo}</div>
+                    <div><strong>자산번호:</strong> {selectedReconcileDetail.statementRow.assetNo}</div>
                     <div><strong>시리얼/제조번호:</strong> {selectedReconcileDetail.statementRow.serialNo || '미기재'}</div>
                     <div><strong>임차처 표기 모델명:</strong> {selectedReconcileDetail.statementRow.modelName || '미기재'}</div>
                     <div><strong>임차처 청구 기간:</strong> <span style={{ color: 'var(--primary)', fontWeight: '700' }}>{selectedReconcileDetail.statementRow.rentStart} ~ {selectedReconcileDetail.statementRow.rentEnd}</span></div>
@@ -3770,7 +3773,7 @@ export const RentAssets: React.FC = () => {
                 </h3>
                 {selectedReconcileDetail.matchedAsset ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '12px', color: 'var(--text-main)' }}>
-                    <div><strong>자사 관리번호:</strong> {selectedReconcileDetail.matchedAsset.assetNo}</div>
+                    <div><strong>자사 자산번호:</strong> {selectedReconcileDetail.matchedAsset.assetNo}</div>
                     <div><strong>등록 제조번호:</strong> {selectedReconcileDetail.matchedAsset.serialNo || '미기재'}</div>
                     <div><strong>등록 모델명:</strong> {selectedReconcileDetail.matchedAsset.modelName}</div>
                     <div><strong>소유 임차처:</strong> {selectedReconcileDetail.matchedAsset.renter || '미지정'}</div>
@@ -3866,7 +3869,7 @@ export const RentAssets: React.FC = () => {
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                         <thead>
                           <tr style={{ backgroundColor: 'var(--bg-card-header)', borderBottom: '1px solid var(--border-color)', textAlign: 'left', color: 'var(--text-muted)' }}>
-                            <th style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>관리번호</th>
+                            <th style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>자산번호</th>
                             <th style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>모델명</th>
                             <th style={{ padding: '6px 10px', whiteSpace: 'nowrap' }}>자사 DB 약정 정보</th>
                             <th style={{ padding: '6px 10px', whiteSpace: 'nowrap', textAlign: 'right' }}>임차처 청구액</th>
@@ -4277,7 +4280,7 @@ export const RentAssets: React.FC = () => {
         </div>
       )}
     
-      {/* 서랍형 상세 Dossier 슬라이드오버 (선택 임차 자산 제원, 전대 마진 및 감사 타임라인) */}
+      {/* 서랍형 상세 Dossier 슬라이드오버 (선택 임차 자산 제원, 임차 마진 및 감사 타임라인) */}
       {/* ========================================================================= */}
       {selectedAssetForDossier && (() => {
         const a = selectedAssetForDossier;
@@ -4287,7 +4290,7 @@ export const RentAssets: React.FC = () => {
         const assetLogs = assetInOutLogs.filter(l => l.assetId === a.id);
         const isReturned = Boolean(a.actualRentReturnDate) || a.status === 'RENTED_RETURNED';
 
-        // 전대 마진 계산
+        // 임차 마진 계산
         const custMonthlyFee = a.monthlyRentalFee || 0;
         const vendorMonthlyFee = a.monthlyRentFee || 0;
         const monthlyMargin = custMonthlyFee - vendorMonthlyFee;
@@ -4389,15 +4392,15 @@ export const RentAssets: React.FC = () => {
                 </div>
               </div>
 
-              {/* 고객사 전대 가동 및 마진 분석 */}
+              {/* 고객사 임차 가동 및 마진 분석 */}
               <div style={{ padding: '10px 12px', backgroundColor: 'var(--bg-app)', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
-                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>고객사 전대 운용 및 손익 마진</div>
+                <div style={{ fontWeight: 600, color: 'var(--text-main)', marginBottom: '6px' }}>고객사 임차 운용 및 손익 마진</div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '11.5px' }}>
                   <div><span style={{ color: 'var(--text-secondary)' }}>투입 고객사:</span> {cust ? <strong>{cust.name}</strong> : '미투입'}</div>
                   <div><span style={{ color: 'var(--text-secondary)' }}>투입 현장:</span> {site ? site.name : '-'}</div>
                   <div><span style={{ color: 'var(--text-secondary)' }}>고객 렌탈료:</span> <strong style={{ color: 'var(--primary)' }}>₩{custMonthlyFee.toLocaleString()}</strong></div>
                   <div>
-                    <span style={{ color: 'var(--text-secondary)' }}>전대 월 순마진:</span>{' '}
+                    <span style={{ color: 'var(--text-secondary)' }}>임차 월 순마진:</span>{' '}
                     <strong style={{ color: monthlyMargin >= 0 ? 'var(--success)' : 'var(--danger)' }}>
                       {monthlyMargin >= 0 ? `+₩${monthlyMargin.toLocaleString()}` : `-₩${Math.abs(monthlyMargin).toLocaleString()}`}
                     </strong>
