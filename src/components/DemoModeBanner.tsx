@@ -63,7 +63,7 @@ export const DemoModeBanner: React.FC = () => {
         }}>
           DEMO
         </span>
-        <span style={{ color: '#93c5fd', fontWeight: '700' }}>ebro_awp 시연 모드</span>
+        <span style={{ color: '#93c5fd', fontWeight: '700' }}>e-Bro IT ERP 시연 모드</span>
         <span style={{ color: 'var(--text-muted)', fontSize: '11px' }}>| 가상 시연 데이터베이스 연결됨</span>
       </div>
 

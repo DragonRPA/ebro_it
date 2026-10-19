@@ -5,28 +5,23 @@ import goldenData from './demo_golden_dataset.json';
 import { createClient } from '@supabase/supabase-js';
 
 export const DEMO_SUPABASE_CONFIG = {
-  url: 'https://idfecoovqkjopgbezcpo.supabase.co',
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkZmVjb292cWtqb3BnYmV6Y3BvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2MzEzODUsImV4cCI6MjEwNTIwNzM4NX0.FnKGWqvA5IZJCqfnjyNU-3W_TljunBVqcse_0V-39No',
-  projectRef: 'idfecoovqkjopgbezcpo'
+  url: 'https://uvmhqwpkmzxrrlkeguul.supabase.co',
+  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2bWhxd3BrbXp4cnJsa2VndXVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2MzIyNjgsImV4cCI6MjEwNTIwODI2OH0.vqPtbWpsMEVDnZqzVqzB1onKd-pL5T53qsRB3-IIjZU',
+  projectRef: 'uvmhqwpkmzxrrlkeguul'
 };
 
-/** 실운영 프로덕션 도메인 판별 (기연리프트 등 실제 운영사 도메인) */
+/** 실운영 프로덕션 도메인 판별 (e-Bro IT 전용 도메인) */
 export function isProductionDomain(): boolean {
   if (typeof window === 'undefined') return false;
   const hostname = window.location.hostname.toLowerCase();
   
-  // demo가 포함된 도메인은 절대 프로덕션 도메인이 아님
-  if (hostname.includes('demo')) return false;
-
-  // 실운영 도메인 (기연리프트 메인, Vercel 기본 주소 등)
+  // it-demo.ebro.run 및 IT 관련 도메인은 정식 서비스 모드로 동작 (AWP 가짜 데모 배너 배제)
   return (
-    hostname === 'ebro.run' ||
-    hostname === 'giyuenlift.ebro.run' ||
-    hostname === 'giyeun-lift.vercel.app' ||
-    hostname === 'giyuen-lift.vercel.app' ||
-    hostname === 'ebro_awp.vercel.app' ||
-    hostname === 'ebro-awp.vercel.app' ||
-    (hostname.endsWith('.ebro.run') && !hostname.includes('demo'))
+    hostname === 'it-demo.ebro.run' ||
+    hostname === 'it.ebro.run' ||
+    hostname === 'ebroit.vercel.app' ||
+    hostname === 'ebro-it.vercel.app' ||
+    (hostname.endsWith('.ebro.run') && !hostname.includes('awp-demo'))
   );
 }
 
