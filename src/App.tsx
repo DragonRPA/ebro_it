@@ -1085,11 +1085,11 @@ const App: React.FC = () => {
                     onError={(e) => { (e.currentTarget as HTMLElement).style.display = 'none'; }}
                   />
                   <h1 style={{ fontSize: '24px', fontWeight: '800', color: 'var(--primary)', letterSpacing: '-0.5px', margin: 0 }}>
-                    {isDemoMode() ? '(주)e-Bro렌탈' : (currentTenant?.displayName || currentTenant?.tradeName || currentTenant?.corporateName || '기연리프트')}
+                    {currentTenant?.displayName || currentTenant?.tradeName || currentTenant?.corporateName || '(주)이브로아이티'}
                   </h1>
                 </div>
                 <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '4px', fontWeight: '600', letterSpacing: '0.3px' }}>
-                  {isDemoMode() ? 'e-Bro AWP 고소작업대 ERP' : 'e-Bro ERP System'}
+                  e-Bro IT 하드웨어 렌탈 ERP
                 </p>
               </>
             )}
@@ -1785,7 +1785,7 @@ const App: React.FC = () => {
                         lineHeight: 1.15,
                       }}
                     >
-                      {currentTenant?.displayName || currentTenant?.tradeName || currentTenant?.corporateName || (isDemoMode() ? '(주)e-Bro렌탈' : '기연리프트')}
+                      {currentTenant?.displayName || currentTenant?.tradeName || currentTenant?.corporateName || '(주)이브로아이티'}
                     </span>
                     {currentTenant && (() => {
                       const subInfo = getTenantSubscriptionInfo(currentTenant);

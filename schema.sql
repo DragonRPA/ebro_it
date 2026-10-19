@@ -22,6 +22,7 @@ DROP TABLE IF EXISTS billing_invoices CASCADE;
 DROP TABLE IF EXISTS billings CASCADE;
 DROP TABLE IF EXISTS bank_matching_rules CASCADE;
 DROP TABLE IF EXISTS bank_transactions CASCADE;
+DROP VIEW IF EXISTS bank_account_initial_balances CASCADE;
 DROP TABLE IF EXISTS bank_account_initial_balances CASCADE;
 DROP TABLE IF EXISTS cash_flow_snapshots CASCADE;
 DROP TABLE IF EXISTS prepaid_transactions CASCADE;
@@ -34,7 +35,9 @@ DROP TABLE IF EXISTS delinquency_action_logs CASCADE;
 DROP TABLE IF EXISTS depreciation_logs CASCADE;
 DROP TABLE IF EXISTS outbound_inspections CASCADE;
 
+DROP VIEW IF EXISTS asset_in_out_logs CASCADE;
 DROP TABLE IF EXISTS asset_in_out_logs CASCADE;
+DROP VIEW IF EXISTS v_awp_shared_memories_compat CASCADE;
 
 DROP TABLE IF EXISTS repair_consumables CASCADE;
 DROP TABLE IF EXISTS repairs CASCADE;
