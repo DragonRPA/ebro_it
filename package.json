@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
+    "purge": "node scripts/auto_purge_all_vercel.cjs",
     "devops:central-migrate": "node scripts/devops/migrate_data_to_central.cjs",
     "devops:tenants-inspect": "node scripts/devops/sync_tenant_schemas.cjs"
   },

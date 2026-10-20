@@ -1,9 +1,10 @@
-﻿const { execSync } = require('child_process');
+const { execSync } = require('child_process');
 
 const PROJECT_POLICIES = [
-  { name: 'space-consult-assist', keep: 3 }, // 3일 전 최종 빌드된 최신 3개만 보존
-  { name: 'homepage', keep: 5 },             // 최신 5개만 보존
-  { name: 'giyuen-lift', keep: 10 }          // 헌장 6.3 준수 (최근 10개 보존)
+  { name: 'ebro_it', keep: 12 },             // 헌장 6.3 준수 (최근 12개 보존)
+  { name: 'ebro_awp', keep: 12 },            // 헌장 6.3 준수 (최근 12개 보존)
+  { name: 'space-consult-assist', keep: 5 }, // 최신 5개 보존
+  { name: 'homepage', keep: 5 }              // 최신 5개 보존
 ];
 
 function purgeProjectDeployments(projectName, maxKeep) {
@@ -16,8 +17,8 @@ function purgeProjectDeployments(projectName, maxKeep) {
 
   while (true) {
     const cmd = nextToken
-      ? `npx.cmd vercel list ${projectName} --limit 100 -F json --next ${nextToken}`
-      : `npx.cmd vercel list ${projectName} --limit 100 -F json`;
+      ? `cmd /c npx.cmd vercel list ${projectName} --limit 100 -F json --next ${nextToken}`
+      : `cmd /c npx.cmd vercel list ${projectName} --limit 100 -F json`;
 
     try {
       const output = execSync(cmd, { encoding: 'utf-8' });
@@ -41,12 +42,30 @@ function purgeProjectDeployments(projectName, maxKeep) {
 
   console.log(`📊 [${projectName}] 총 ${allDeployments.length}개 배포 슬롯 발견.`);
 
-  if (allDeployments.length <= maxKeep) {
-    console.log(`✅ [${projectName}] 배포 슬롯이 ${allDeployments.length}개로 보존 한도(${maxKeep}개) 이하입니다. 정리 불필요.`);
-    return 0;
+  // 1. Error / Canceled 슬롯 즉시 100% 무조건 삭제 (헌장 6.3)
+  const errorDeployments = allDeployments.filter(d => d.state === 'ERROR' || d.state === 'CANCELED');
+  let errorDeletedCount = 0;
+  for (const errDep of errorDeployments) {
+    const target = errDep.url || errDep.id;
+    try {
+      console.log(`  🚨 [ERROR/CANCELED 슬롯 즉시 삭제] ${target} (${errDep.state})`);
+      execSync(`cmd /c npx.cmd vercel remove ${target} --safe --yes`, { stdio: 'ignore' });
+      errorDeletedCount++;
+    } catch (e) {
+      console.warn(`  ⚠️ 에러 슬롯 삭제 실패: ${target}`);
+    }
   }
 
-  const toRemove = allDeployments.slice(maxKeep);
+  // 2. 정상(READY 등) 배포 슬롯 최신순 정렬 및 슬롯 한도 관리
+  const readyDeployments = allDeployments.filter(d => d.state !== 'ERROR' && d.state !== 'CANCELED');
+  readyDeployments.sort((a, b) => b.createdAt - a.createdAt);
+
+  if (readyDeployments.length <= maxKeep) {
+    console.log(`✅ [${projectName}] 유효 배포 슬롯이 ${readyDeployments.length}개로 보존 한도(${maxKeep}개) 이하입니다. 정리 불필요.`);
+    return errorDeletedCount;
+  }
+
+  const toRemove = readyDeployments.slice(maxKeep);
   console.log(`⚠️ 보존 한도(${maxKeep}개) 초과! 과거 배포 총 ${toRemove.length}개를 안전하게 삭제(Purge)합니다.`);
 
   let deletedCount = 0;
@@ -56,7 +75,7 @@ function purgeProjectDeployments(projectName, maxKeep) {
     try {
       console.log(`[${i + 1}/${toRemove.length}] 🗑️ 과거 배포 삭제: ${target} (${dep.state})`);
       // --safe 옵션으로 활성 프로덕션 도메인/별칭 연결 건은 절대 삭제되지 않음
-      execSync(`npx.cmd vercel remove ${target} --safe --yes`, { stdio: 'ignore' });
+      execSync(`cmd /c npx.cmd vercel remove ${target} --safe --yes`, { stdio: 'ignore' });
       deletedCount++;
     } catch (err) {
       console.warn(`  ⚠️ 삭제 스킵 또는 실패: ${target}`);
@@ -64,11 +83,11 @@ function purgeProjectDeployments(projectName, maxKeep) {
   }
 
   console.log(`✅ [${projectName}] 과거 배포 슬롯 ${deletedCount}개 정리 완료!`);
-  return deletedCount;
+  return errorDeletedCount + deletedCount;
 }
 
 function runAll() {
-  console.log(`🚀 [Vercel Deployment Storage 청정화] 3대 프로젝트 일괄 정리 시작...`);
+  console.log(`🚀 [Vercel Deployment Storage 청정화] 전사 4대 프로젝트 일괄 정리 시작...`);
   let totalDeleted = 0;
 
   for (const policy of PROJECT_POLICIES) {
