@@ -220,6 +220,8 @@ export const SmartDispatch4: React.FC = () => {
   const [deliveryMethod, setDeliveryMethod] = useState<ITDeliveryMethod>('DIRECT_INSTALL');
   const [deliveryNotes, setDeliveryNotes] = useState('');
   const [orderMemo, setOrderMemo] = useState('');
+  const [activeMainTab, setActiveMainTab] = useState<'FORM' | 'RECENT'>('FORM');
+  const [openSwIdx, setOpenSwIdx] = useState<number | null>(null);
 
   // ── 처리 상태 ──
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -656,26 +658,40 @@ export const SmartDispatch4: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Z-구텐버그 단일 컬럼 스크롤 본문 ── */}
-      <div className="dispatch4-single-scroll">
-        <form onSubmit={handleSubmitOrder} className="flex flex-col gap-6 max-w-7xl mx-auto w-full pb-28">
+      {/* ── 메인 상단 탭 (등록 서식 vs 최근 출고 대장) ── */}
+      <div className="dispatch4-main-tabs">
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('FORM')}
+          className={`dispatch4-tab-item ${activeMainTab === 'FORM' ? 'active' : 'inactive'}`}
+        >
+          <Package className="w-4 h-4" />
+          <span>출고 요청 등록</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveMainTab('RECENT')}
+          className={`dispatch4-tab-item ${activeMainTab === 'RECENT' ? 'active' : 'inactive'}`}
+        >
+          <FileText className="w-4 h-4" />
+          <span>최근 출고 대장 ({recentOutboundDeliveries.length})</span>
+        </button>
+      </div>
+
+      {/* ── 탭 1: 출고 요청 등록 (초고밀도 무스크롤 폼) ── */}
+      {activeMainTab === 'FORM' && (
+        <form onSubmit={handleSubmitOrder} className="dispatch4-compact-form">
 
           {/* ═══════════════════════════════════════════════════════════════════
-              [Step 1: 고객사, 설치장소, 담당자 지정] (좌상단 Scope)
+              [Card 1: 고객사, 설치처, 수령담당자, 배송희망 (4-열 통합 Scope)]
              ═══════════════════════════════════════════════════════════════════ */}
-          <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
-              <span className="w-6 h-6 rounded-full bg-indigo-600/30 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/40">1</span>
-              <h2 className="text-sm font-bold text-slate-100">고객사 및 설치장소·담당자 지정</h2>
-              <span className="text-xs text-slate-400 ml-auto">* 필수 입력 항목</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* 1-1. 고객사 검색 및 선택 */}
-              <div className="flex flex-col gap-1.5 relative">
-                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
+          <div className="dispatch4-compact-card">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              {/* 1열: 고객사 검색 & 선택 */}
+              <div className="flex flex-col gap-1 relative">
+                <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
                   <Building2 className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>고객사 검색 *</span>
+                  <span>고객사 *</span>
                 </label>
                 <div className="relative">
                   <input
@@ -686,50 +702,37 @@ export const SmartDispatch4: React.FC = () => {
                       setIsCustomerDropdownOpen(true);
                     }}
                     onFocus={() => setIsCustomerDropdownOpen(true)}
-                    placeholder="고객사명 또는 사업자번호 검색..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    placeholder="고객사명 검색..."
+                    className="dispatch4-input-sm w-full"
                   />
-                  <Search className="w-4 h-4 text-slate-400 absolute right-2.5 top-2.5 pointer-events-none" />
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute right-2 top-2 pointer-events-none" />
                 </div>
 
-                {/* 고객사 자동완성 드롭다운 */}
                 {isCustomerDropdownOpen && filteredCustomers.length > 0 && (
-                  <div className="absolute top-[58px] left-0 right-0 z-50 bg-slate-950 border border-slate-700 rounded-lg shadow-2xl max-h-56 overflow-y-auto">
+                  <div className="absolute top-[48px] left-0 right-0 z-50 bg-slate-950 border border-slate-700 rounded-lg shadow-2xl max-h-52 overflow-y-auto">
                     {filteredCustomers.map(c => (
                       <div
                         key={c.id}
                         onClick={() => handleSelectCustomer(c)}
-                        className="px-3 py-2 hover:bg-indigo-950/60 cursor-pointer border-b border-slate-800/80 last:border-b-0 flex items-center justify-between"
+                        className="px-2.5 py-1.5 hover:bg-indigo-950/60 cursor-pointer border-b border-slate-800/80 last:border-b-0 flex items-center justify-between text-xs"
                       >
                         <div className="flex flex-col">
-                          <span className="text-xs font-bold text-slate-100">{c.name}</span>
-                          <span className="text-[11px] text-slate-400">
-                            대표: {c.representative || '-'} | 사업자: {c.bizRegNo || '-'}
-                          </span>
+                          <span className="font-bold text-slate-100">{c.name}</span>
+                          <span className="text-[10px] text-slate-400">{c.bizRegNo || '-'}</span>
                         </div>
-                        {selectedCustomerId === c.id && (
-                          <Check className="w-4 h-4 text-indigo-400 flex-shrink-0" />
-                        )}
+                        {selectedCustomerId === c.id && <Check className="w-3.5 h-3.5 text-indigo-400" />}
                       </div>
                     ))}
                   </div>
                 )}
 
                 {selectedCustomer && (
-                  <div className="p-2.5 bg-indigo-950/20 border border-indigo-900/40 rounded-lg flex items-center justify-between mt-1">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-bold text-indigo-300">{selectedCustomer.name}</span>
-                      <span className="text-[11px] text-slate-400">
-                        대표: {selectedCustomer.representative || '-'} ({selectedCustomer.repContact || '-'})
-                      </span>
-                    </div>
+                  <div className="flex items-center justify-between text-[11px] bg-indigo-950/40 border border-indigo-800/50 rounded px-2 py-0.5 mt-0.5">
+                    <span className="font-bold text-indigo-300 truncate">{selectedCustomer.name}</span>
                     <button
                       type="button"
-                      onClick={() => {
-                        setSelectedCustomerId('');
-                        setCustomerSearchQuery('');
-                      }}
-                      className="text-[11px] text-slate-400 hover:text-white px-2 py-0.5 rounded bg-slate-800 border border-slate-700"
+                      onClick={() => { setSelectedCustomerId(''); setCustomerSearchQuery(''); }}
+                      className="text-[10px] text-slate-400 hover:text-white ml-1 underline"
                     >
                       변경
                     </button>
@@ -737,20 +740,20 @@ export const SmartDispatch4: React.FC = () => {
                 )}
               </div>
 
-              {/* 1-2. 고객 설치장소 (CustomerSite) 선택 */}
-              <div className="flex flex-col gap-1.5">
+              {/* 2열: 설치 장소 (CustomerSite) */}
+              <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
+                  <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
                     <MapPin className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>설치/납품 장소 *</span>
+                    <span>설치/납품처 *</span>
                   </label>
                   {selectedCustomer && (
                     <button
                       type="button"
                       onClick={() => handleSelectSite(isNewSiteMode ? (customerSites[0]?.id || '') : 'NEW')}
-                      className="text-[11px] text-indigo-400 hover:underline font-semibold"
+                      className="text-[10px] text-indigo-400 hover:underline font-semibold"
                     >
-                      {isNewSiteMode ? '기존 설치처 선택' : '+ 신규 설치처 직접입력'}
+                      {isNewSiteMode ? '목록선택' : '+직접입력'}
                     </button>
                   )}
                 </div>
@@ -759,260 +762,285 @@ export const SmartDispatch4: React.FC = () => {
                   <select
                     value={selectedSiteId}
                     onChange={e => handleSelectSite(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                    className="dispatch4-select-sm w-full"
                   >
                     {customerSites.map(s => (
                       <option key={s.id} value={s.id}>
-                        {s.name} ({s.address || '주소 미등록'})
+                        {s.name} ({s.address?.slice(0, 18) || '주소미등록'}...)
                       </option>
                     ))}
-                    <option value="NEW">+ [신규 설치처 직접 입력]</option>
+                    <option value="NEW">+ [신규 설치처 직접입력]</option>
                   </select>
                 ) : (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-1">
                     <input
                       type="text"
                       value={newSiteName}
                       onChange={e => setNewSiteName(e.target.value)}
-                      placeholder="설치처 명칭 (예: 판교 사옥 5층 개발실)"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                      placeholder="설치처명 (예: 판교 5층 연구소)"
+                      className="dispatch4-input-sm w-full"
                     />
                     <input
                       type="text"
                       value={newSiteAddress}
                       onChange={e => setNewSiteAddress(e.target.value)}
-                      placeholder="도로명 주소 (예: 경기 성남시 분당구 판교역로 166)"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                    />
-                    <input
-                      type="text"
-                      value={newSiteAddressDetail}
-                      onChange={e => setNewSiteAddressDetail(e.target.value)}
-                      placeholder="상세 위치 (동/층/호수/전산실 번호 등)"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                      placeholder="주소 및 상세위치..."
+                      className="dispatch4-input-sm w-full"
                     />
                   </div>
                 )}
 
-                {/* 화물 엘리베이터 & 보안 출입 사전등록 플래그 */}
-                <div className="flex items-center gap-4 mt-1">
-                  <label className="flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer">
+                <div className="flex items-center gap-3 text-[10px] text-slate-400 mt-0.5">
+                  <label className="flex items-center gap-1 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={newSiteHasFreightElevator}
                       onChange={e => setNewSiteHasFreightElevator(e.target.checked)}
                       className="rounded border-slate-700 text-indigo-600 focus:ring-0"
                     />
-                    <span>화물 엘리베이터 있음</span>
+                    <span>화물EL</span>
                   </label>
-                  <label className="flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer">
+                  <label className="flex items-center gap-1 cursor-pointer">
                     <input
                       type="checkbox"
                       checked={newSiteRequiresSecurityPass}
                       onChange={e => setNewSiteRequiresSecurityPass(e.target.checked)}
                       className="rounded border-slate-700 text-indigo-600 focus:ring-0"
                     />
-                    <span>보안 출입 사전등록 필요</span>
+                    <span>보안사전등록</span>
                   </label>
                 </div>
               </div>
 
-              {/* 1-3. 수령 담당자 선택 및 확인 */}
-              <div className="flex flex-col gap-1.5">
+              {/* 3열: 현장 수령 담당자 */}
+              <div className="flex flex-col gap-1">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
+                  <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
                     <User className="w-3.5 h-3.5 text-indigo-400" />
-                    <span>현장 수령 담당자 *</span>
+                    <span>현장 담당자 *</span>
                   </label>
                   {customerContacts.length > 0 && (
                     <select
                       value={selectedContactId}
                       onChange={e => handleSelectContact(e.target.value)}
-                      className="text-[11px] bg-slate-800 border border-slate-700 rounded px-2 py-0.5 text-slate-200"
+                      className="text-[10px] bg-slate-800 border border-slate-700 rounded px-1.5 py-0.5 text-slate-200"
                     >
                       <option value="">담당자 선택...</option>
                       {customerContacts.map(c => (
                         <option key={c.id} value={c.id}>
-                          {c.name} ({c.position || '직급미상'} / {c.contact || '연락처없음'})
+                          {c.name} ({c.position || '직급미상'})
                         </option>
                       ))}
-                      <option value="NEW">+ 직접 입력</option>
+                      <option value="NEW">+직접입력</option>
                     </select>
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   <input
                     type="text"
                     value={contactName}
                     onChange={e => setContactName(e.target.value)}
-                    placeholder="담당자 성명 *"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    placeholder="성명 *"
+                    className="dispatch4-input-sm w-full"
                   />
                   <input
                     type="text"
                     value={contactPosition}
                     onChange={e => setContactPosition(e.target.value)}
-                    placeholder="직급 / 부서"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    placeholder="직급/부서"
+                    className="dispatch4-input-sm w-full"
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-1.5">
                   <input
                     type="text"
                     value={contactPhone}
                     onChange={e => setContactPhone(e.target.value)}
                     placeholder="휴대폰 연락처 *"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="dispatch4-input-sm w-full"
                   />
                   <input
                     type="email"
                     value={contactEmail}
                     onChange={e => setContactEmail(e.target.value)}
                     placeholder="이메일 주소"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="dispatch4-input-sm w-full"
                   />
                 </div>
               </div>
-            </div>
-          </section>
 
+              {/* 4열: 배송 희망 일시 & 수단 */}
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-indigo-400" />
+                  <span>배송 희망일시 & 수단 *</span>
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <input
+                    type="date"
+                    value={scheduledDate}
+                    onChange={e => setScheduledDate(e.target.value)}
+                    className="dispatch4-input-sm w-full"
+                  />
+                  <select
+                    value={timeSlot}
+                    onChange={e => setTimeSlot(e.target.value as any)}
+                    className="dispatch4-select-sm w-full"
+                  >
+                    <option value="MORNING">오전 (09~12시)</option>
+                    <option value="AFTERNOON">오후 (13~18시)</option>
+                    <option value="EXACT">지정 시간</option>
+                    <option value="ASAP">긴급 (ASAP)</option>
+                  </select>
+                </div>
+                {timeSlot === 'EXACT' && (
+                  <input
+                    type="time"
+                    value={exactTime}
+                    onChange={e => setExactTime(e.target.value)}
+                    className="dispatch4-input-sm w-full mt-0.5"
+                  />
+                )}
+                <select
+                  value={deliveryMethod}
+                  onChange={e => setDeliveryMethod(e.target.value as ITDeliveryMethod)}
+                  className="dispatch4-select-sm w-full mt-0.5"
+                >
+                  {IT_DELIVERY_METHODS.map(m => (
+                    <option key={m} value={m}>
+                      {IT_DELIVERY_METHOD_LABELS[m]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
 
           {/* ═══════════════════════════════════════════════════════════════════
-              [Step 2: 요청 출고 모델, 수량, 단가 및 스펙조정(VGA, RAM, SSD)]
+              [Card 2: 출고 품목 및 하드웨어/SW 스펙 (고밀도 인라인 2행)]
              ═══════════════════════════════════════════════════════════════════ */}
-          <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <span className="w-6 h-6 rounded-full bg-indigo-600/30 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/40">2</span>
-                <h2 className="text-sm font-bold text-slate-100">요청 출고 모델 및 하드웨어 스펙 조정 (VGA, RAM, SSD)</h2>
+          <div className="dispatch4-compact-card">
+            <div className="dispatch4-compact-header">
+              <div className="dispatch4-compact-header-title">
+                <Package className="w-4 h-4 text-indigo-400" />
+                <span>출고 모델 및 스펙 설정 ({lineItems.length}종 / 총 {totalUnits}대)</span>
               </div>
               <button
                 type="button"
                 onClick={handleAddLineItem}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white transition shadow-sm"
+                className="dispatch4-add-model-btn"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>출고 모델 추가</span>
               </button>
             </div>
 
-            <div className="flex flex-col gap-5">
+            <div className="flex flex-col gap-2">
               {lineItems.map((item, idx) => (
-                <div
-                  key={item.id}
-                  className="p-4 bg-slate-950/70 border border-slate-800 rounded-xl flex flex-col gap-4 relative"
-                >
-                  {/* 상단 품목 헤더 & 모델 기본 정보 */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
-                      <Package className="w-3.5 h-3.5" />
-                      <span>출고 품목 #{idx + 1}</span>
+                <div key={item.id} className="dispatch4-line-item-row">
+                  {/* 1행: 품목 번호, 카탈로그 선택, 모델명, 수량, 월단가, SW버튼, 삭제 */}
+                  <div className="dispatch4-item-line-1">
+                    <span className="w-6 h-6 rounded bg-indigo-900/50 text-indigo-300 text-[11px] font-bold flex items-center justify-center border border-indigo-700/60 flex-shrink-0">
+                      #{idx + 1}
                     </span>
+
+                    {/* 카탈로그 드롭다운 */}
+                    <select
+                      value={item.modelName}
+                      onChange={e => handleSelectProduct(idx, e.target.value)}
+                      className="dispatch4-select-sm flex-1 min-w-[200px]"
+                    >
+                      <option value="">-- [선택] IT 렌탈 카탈로그 --</option>
+                      {products.map(p => (
+                        <option key={p.id} value={p.modelName}>
+                          [{p.category || '기타'}] {p.modelName} {p.manufacturer ? `(${p.manufacturer})` : ''} - {p.spec || ''}
+                        </option>
+                      ))}
+                    </select>
+
+                    {/* 직접입력 모델명 */}
+                    <input
+                      type="text"
+                      value={item.modelName}
+                      onChange={e => handleUpdateItemField(idx, 'modelName', e.target.value)}
+                      placeholder="또는 직접 모델명 입력..."
+                      className="dispatch4-input-sm w-44"
+                    />
+
+                    {/* 수량 Stepper */}
+                    <div className="flex items-center flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateItemField(idx, 'qty', Math.max(1, (item.qty || 1) - 1))}
+                        className="px-2 h-[30px] bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 rounded-l text-xs"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min="1"
+                        value={item.qty}
+                        onChange={e => handleUpdateItemField(idx, 'qty', Math.max(1, parseInt(e.target.value, 10) || 1))}
+                        className="w-12 h-[30px] bg-slate-900 border-y border-slate-700 text-center text-xs text-white font-bold focus:outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleUpdateItemField(idx, 'qty', (item.qty || 1) + 1)}
+                        className="px-2 h-[30px] bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 rounded-r text-xs"
+                      >
+                        +
+                      </button>
+                    </div>
+
+                    {/* 월 렌탈료 */}
+                    <div className="relative w-36 flex-shrink-0">
+                      <input
+                        type="number"
+                        value={item.monthlyRate === 0 ? '0' : (item.monthlyRate || '')}
+                        onChange={e => {
+                          const m = parseInt(e.target.value, 10) || 0;
+                          handleUpdateItemField(idx, 'monthlyRate', m);
+                          handleUpdateItemField(idx, 'dailyRate', Math.round(m / 30));
+                        }}
+                        placeholder="월단가"
+                        className="dispatch4-input-sm w-full pl-5 font-bold text-amber-300"
+                      />
+                      <span className="absolute left-2 top-1.5 text-[11px] text-slate-400">₩</span>
+                    </div>
+
+                    {/* SW 설정 버튼 (모달 오픈) */}
+                    <button
+                      type="button"
+                      onClick={() => setOpenSwIdx(idx)}
+                      className="h-[30px] px-2.5 rounded bg-emerald-950/70 border border-emerald-700 text-emerald-300 hover:bg-emerald-900 text-xs font-semibold flex items-center gap-1 flex-shrink-0"
+                    >
+                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <span>SW설치 ({item.swList.length}종)</span>
+                    </button>
+
+                    {/* 삭제 버튼 */}
                     {lineItems.length > 1 && (
                       <button
                         type="button"
                         onClick={() => handleRemoveLineItem(idx)}
-                        className="text-xs text-rose-400 hover:text-rose-300 flex items-center gap-1"
+                        className="h-[30px] px-2 text-rose-400 hover:text-rose-300 hover:bg-rose-950/50 rounded border border-rose-900/50 text-xs flex items-center gap-1 flex-shrink-0"
+                        title="품목 삭제"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>삭제</span>
                       </button>
                     )}
                   </div>
 
-                  {/* 2-1. 모델 선택, 수량, 월/일 단가 */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                    <div className="flex flex-col gap-1 md:col-span-2">
-                      <label className="text-[11px] font-semibold text-slate-300">
-                        출고 모델 선택 (IT 제품 카탈로그) *
-                      </label>
-                      <div className="flex gap-2">
-                        <select
-                          value={item.modelName}
-                          onChange={e => handleSelectProduct(idx, e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                        >
-                          <option value="">-- [선택] IT 렌탈 제품 카탈로그 --</option>
-                          {products.map(p => (
-                            <option key={p.id} value={p.modelName}>
-                              [{p.category || '기타'}] {p.modelName} {p.manufacturer ? `(${p.manufacturer})` : ''} - {p.spec || ''}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="text"
-                          value={item.modelName}
-                          onChange={e => handleUpdateItemField(idx, 'modelName', e.target.value)}
-                          placeholder="또는 직접 모델명 입력..."
-                          className="w-1/2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[11px] font-semibold text-slate-300">
-                        요청 수량 (대) *
-                      </label>
-                      <div className="flex items-center">
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateItemField(idx, 'qty', Math.max(1, (item.qty || 1) - 1))}
-                          className="px-2.5 py-2 bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 rounded-l-lg text-xs"
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.qty}
-                          onChange={e => handleUpdateItemField(idx, 'qty', Math.max(1, parseInt(e.target.value, 10) || 1))}
-                          className="w-full bg-slate-900 border-y border-slate-700 py-2 text-center text-xs text-white font-bold focus:outline-none"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => handleUpdateItemField(idx, 'qty', (item.qty || 1) + 1)}
-                          className="px-2.5 py-2 bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 rounded-r-lg text-xs"
-                        >
-                          +
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1">
-                      <label className="text-[11px] font-semibold text-slate-300 flex items-center justify-between">
-                        <span>월 렌탈료 단가 (원/월)</span>
-                        <span className="text-[10px] text-slate-400">일: ₩{Number(item.dailyRate || 0).toLocaleString()}</span>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="number"
-                          value={item.monthlyRate === 0 ? '0' : (item.monthlyRate || '')}
-                          onChange={e => {
-                            const m = parseInt(e.target.value, 10) || 0;
-                            handleUpdateItemField(idx, 'monthlyRate', m);
-                            handleUpdateItemField(idx, 'dailyRate', Math.round(m / 30));
-                          }}
-                          placeholder="월단가 (예: 60,000)"
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-6 pr-3 py-2 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-500"
-                        />
-                        <span className="absolute left-2.5 top-2 text-xs text-slate-400">₩</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 2-2. 하드웨어 스펙 조정 세부 그리드 (VGA, RAM, SSD) */}
-                  <div className="p-3.5 bg-slate-900/90 border border-slate-800 rounded-xl grid grid-cols-1 md:grid-cols-3 gap-3.5">
-                    {/* [VGA 그래픽카드 조정] */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
-                        <Cpu className="w-3.5 h-3.5" />
-                        <span>VGA (그래픽카드) 조정</span>
-                      </label>
+                  {/* 2행: 스펙조정 5열 바 (VGA / RAM / SSD / OS / 부속품메모) */}
+                  <div className="dispatch4-item-line-2">
+                    {/* VGA */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-emerald-400 whitespace-nowrap">VGA:</span>
                       <select
                         value={item.vga}
                         onChange={e => handleUpdateItemField(idx, 'vga', e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500"
+                        className="dispatch4-select-sm w-full"
                       >
                         {VGA_OPTIONS.map(opt => (
                           <option key={opt} value={opt}>{opt}</option>
@@ -1023,22 +1051,19 @@ export const SmartDispatch4: React.FC = () => {
                           type="text"
                           value={item.vgaCustom || ''}
                           onChange={e => handleUpdateItemField(idx, 'vgaCustom', e.target.value)}
-                          placeholder="요청 그래픽카드 스펙 입력..."
-                          className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-xs text-white"
+                          placeholder="VGA직접입력"
+                          className="dispatch4-input-sm w-24"
                         />
                       )}
                     </div>
 
-                    {/* [RAM 메모리 조정] */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[11px] font-bold text-sky-400 flex items-center gap-1">
-                        <Layers className="w-3.5 h-3.5" />
-                        <span>RAM (메모리) 증설</span>
-                      </label>
+                    {/* RAM */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-sky-400 whitespace-nowrap">RAM:</span>
                       <select
                         value={item.ram}
                         onChange={e => handleUpdateItemField(idx, 'ram', e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                        className="dispatch4-select-sm w-full"
                       >
                         {RAM_OPTIONS.map(opt => (
                           <option key={opt} value={opt}>{opt}</option>
@@ -1049,22 +1074,19 @@ export const SmartDispatch4: React.FC = () => {
                           type="text"
                           value={item.ramCustom || ''}
                           onChange={e => handleUpdateItemField(idx, 'ramCustom', e.target.value)}
-                          placeholder="메모리 규격 및 용량 직접 입력..."
-                          className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-xs text-white"
+                          placeholder="RAM직접입력"
+                          className="dispatch4-input-sm w-24"
                         />
                       )}
                     </div>
 
-                    {/* [SSD / 스토리지 조정] */}
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[11px] font-bold text-amber-400 flex items-center gap-1">
-                        <HardDrive className="w-3.5 h-3.5" />
-                        <span>SSD / 저장장치 증설</span>
-                      </label>
+                    {/* SSD */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-amber-400 whitespace-nowrap">SSD:</span>
                       <select
                         value={item.ssd}
                         onChange={e => handleUpdateItemField(idx, 'ssd', e.target.value)}
-                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                        className="dispatch4-select-sm w-full"
                       >
                         {SSD_OPTIONS.map(opt => (
                           <option key={opt} value={opt}>{opt}</option>
@@ -1075,318 +1097,114 @@ export const SmartDispatch4: React.FC = () => {
                           type="text"
                           value={item.ssdCustom || ''}
                           onChange={e => handleUpdateItemField(idx, 'ssdCustom', e.target.value)}
-                          placeholder="스토리지 규격 및 용량 직접 입력..."
-                          className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-xs text-white"
+                          placeholder="SSD직접입력"
+                          className="dispatch4-input-sm w-24"
                         />
                       )}
                     </div>
-                  </div>
 
-                  {/* 2-3. 하드웨어 부속품 메모 */}
-                  <div className="flex flex-col gap-1">
-                    <label className="text-[11px] font-semibold text-slate-400">
-                      부속품 및 하드웨어 특이사항 (케이블, 모니터암, C타입 독, 랙 레일킷 등)
-                    </label>
-                    <input
-                      type="text"
-                      value={item.customSpecNote}
-                      onChange={e => handleUpdateItemField(idx, 'customSpecNote', e.target.value)}
-                      placeholder="예: 2m HDMI 케이블 2개, C타입 100W PD 도킹스테이션 동봉 요청"
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                    />
+                    {/* OS */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-bold text-purple-400 whitespace-nowrap">OS:</span>
+                      <select
+                        value={item.os}
+                        onChange={e => handleUpdateItemField(idx, 'os', e.target.value)}
+                        className="dispatch4-select-sm w-full"
+                      >
+                        {OS_OPTIONS.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 부속품 및 특이사항 */}
+                    <div className="flex items-center gap-1">
+                      <span className="text-[10px] font-semibold text-slate-400 whitespace-nowrap">부속품:</span>
+                      <input
+                        type="text"
+                        value={item.customSpecNote}
+                        onChange={e => handleUpdateItemField(idx, 'customSpecNote', e.target.value)}
+                        placeholder="케이블, 도킹, 거치대 등..."
+                        className="dispatch4-input-sm w-full"
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
-          </section>
-
-
-          {/* ═══════════════════════════════════════════════════════════════════
-              [Step 3: SW 설치 요구사항 (OS, 필수 프로그램, 계정 세팅)]
-             ═══════════════════════════════════════════════════════════════════ */}
-          <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
-              <span className="w-6 h-6 rounded-full bg-indigo-600/30 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/40">3</span>
-              <h2 className="text-sm font-bold text-slate-100">소프트웨어(SW) 설치 요구사항 및 OS 세팅</h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* 3-1. 기본 OS 선택 */}
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
-                  <Laptop className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>운영체제 (OS) 선택 *</span>
-                </label>
-                <div className="flex flex-col gap-1.5">
-                  {OS_OPTIONS.map(osOpt => {
-                    const isSelected = lineItems[0]?.os === osOpt;
-                    return (
-                      <label
-                        key={osOpt}
-                        onClick={() => {
-                          lineItems.forEach((_, idx) => handleUpdateItemField(idx, 'os', osOpt));
-                        }}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs cursor-pointer transition ${
-                          isSelected
-                            ? 'bg-indigo-950/60 border-indigo-500 text-indigo-200 font-bold'
-                            : 'bg-slate-950 border-slate-800 text-slate-300 hover:bg-slate-800'
-                        }`}
-                      >
-                        <input
-                          type="radio"
-                          name="global_os"
-                          checked={isSelected}
-                          onChange={() => {}}
-                          className="text-indigo-600 focus:ring-0"
-                        />
-                        <span>{osOpt}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 3-2. 필수 설치 소프트웨어 체크리스트 */}
-              <div className="flex flex-col gap-2 md:col-span-2">
-                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
-                  <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>필수 설치 소프트웨어 (사전 인스톨 항목 다중 선택)</span>
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {SW_PRESETS.map(sw => {
-                    const isChecked = lineItems[0]?.swList.includes(sw.name);
-                    return (
-                      <label
-                        key={sw.id}
-                        onClick={() => {
-                          lineItems.forEach((_, idx) => handleToggleSw(idx, sw.name));
-                        }}
-                        className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg border text-xs cursor-pointer transition ${
-                          isChecked
-                            ? 'bg-emerald-950/40 border-emerald-500/80 text-emerald-200 font-bold'
-                            : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => {}}
-                          className="rounded border-slate-700 text-emerald-500 focus:ring-0"
-                        />
-                        <span className="truncate">{sw.name}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-
-                {/* 3-3. 계정 및 세팅 메모 */}
-                <div className="flex flex-col gap-1 mt-2">
-                  <label className="text-[11px] font-semibold text-slate-300">
-                    계정 설정 / 사내 도메인(Active Directory) 조인 / 파티션 분할 요청
-                  </label>
-                  <input
-                    type="text"
-                    value={lineItems[0]?.customSwNote || ''}
-                    onChange={e => {
-                      const val = e.target.value;
-                      lineItems.forEach((_, idx) => handleUpdateItemField(idx, 'customSwNote', val));
-                    }}
-                    placeholder="예: 계정명: user / 비밀번호: 1234, C드라이브 200GB + D드라이브 분할, 사내 인트라넷 보안인증서 적용"
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
-                  />
-                </div>
-              </div>
-            </div>
-          </section>
-
+          </div>
 
           {/* ═══════════════════════════════════════════════════════════════════
-              [Step 4: 출고 배송 요청 일시 및 물류 인프라 지정]
+              [Card 3: 전달 특이사항 및 현장 메모 (1행 컴팩트)]
              ═══════════════════════════════════════════════════════════════════ */}
-          <section className="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-sm">
-            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-slate-800">
-              <span className="w-6 h-6 rounded-full bg-indigo-600/30 text-indigo-400 font-bold text-xs flex items-center justify-center border border-indigo-500/40">4</span>
-              <h2 className="text-sm font-bold text-slate-100">출고 배송 요청 일시 및 배송/설치 지정</h2>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-              {/* 4-1. 배송 희망 일자 */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>배송 희망일자 *</span>
-                </label>
-                <input
-                  type="date"
-                  value={scheduledDate}
-                  onChange={e => setScheduledDate(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                />
-              </div>
-
-              {/* 4-2. 희망 시간대 */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>배송/도착 희망 시간대 *</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTimeSlot('MORNING')}
-                    className={`py-2 px-3 text-xs font-semibold rounded-lg border transition ${
-                      timeSlot === 'MORNING'
-                        ? 'bg-indigo-950/70 border-indigo-500 text-indigo-200'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'
-                    }`}
-                  >
-                    오전 (09~12시)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTimeSlot('AFTERNOON')}
-                    className={`py-2 px-3 text-xs font-semibold rounded-lg border transition ${
-                      timeSlot === 'AFTERNOON'
-                        ? 'bg-indigo-950/70 border-indigo-500 text-indigo-200'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'
-                    }`}
-                  >
-                    오후 (13~18시)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTimeSlot('EXACT')}
-                    className={`py-2 px-3 text-xs font-semibold rounded-lg border transition ${
-                      timeSlot === 'EXACT'
-                        ? 'bg-indigo-950/70 border-indigo-500 text-indigo-200'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'
-                    }`}
-                  >
-                    지정 시간
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTimeSlot('ASAP')}
-                    className={`py-2 px-3 text-xs font-semibold rounded-lg border transition ${
-                      timeSlot === 'ASAP'
-                        ? 'bg-rose-950/60 border-rose-500 text-rose-300'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:bg-slate-800'
-                    }`}
-                  >
-                    긴급 (ASAP)
-                  </button>
-                </div>
-                {timeSlot === 'EXACT' && (
-                  <input
-                    type="time"
-                    value={exactTime}
-                    onChange={e => setExactTime(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white mt-1"
-                  />
-                )}
-              </div>
-
-              {/* 4-3. 배송 수단 */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs font-semibold text-slate-300 flex items-center gap-1">
-                  <Truck className="w-3.5 h-3.5 text-indigo-400" />
-                  <span>배송 및 물류 수단 *</span>
-                </label>
-                <select
-                  value={deliveryMethod}
-                  onChange={e => setDeliveryMethod(e.target.value as ITDeliveryMethod)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                >
-                  {IT_DELIVERY_METHODS.map(m => (
-                    <option key={m} value={m}>
-                      {IT_DELIVERY_METHOD_LABELS[m]}
-                    </option>
-                  ))}
-                </select>
-                <span className="text-[11px] text-slate-400 mt-1">
-                  * 직영 차량(스타렉스/탑차) 및 전담 엔지니어가 직접 방문하여 설치 세팅을 진행합니다.
-                </span>
-              </div>
-            </div>
-
-            {/* 4-4. 물류/인프라 및 엔지니어 전달 특이사항 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-3 border-t border-slate-800/80">
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-300">
-                  현장 반입 / 주차 / 엘리베이터 안내
-                </label>
+          <div className="dispatch4-compact-card">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-slate-300 whitespace-nowrap">현장 반입/주차:</span>
                 <input
                   type="text"
                   value={deliveryNotes}
                   onChange={e => setDeliveryNotes(e.target.value)}
-                  placeholder="예: 지하 2층 화물용 엘리베이터 진입 가능 (차고 제한 2.3m), 1층 로비 경비실 확인증 수령"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  placeholder="예: 지하 2층 화물EL 진입 가능, 1층 경비실 확인증 수령"
+                  className="dispatch4-input-sm w-full"
                 />
               </div>
-
-              <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold text-slate-300">
-                  기타 출고 요청 특이사항 메모
-                </label>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-slate-300 whitespace-nowrap">출고 특이사항:</span>
                 <input
                   type="text"
                   value={orderMemo}
                   onChange={e => setOrderMemo(e.target.value)}
                   placeholder="예: 대표님 최종 구두승인건, 익월 10일 첫 청구서 일괄 발행"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="dispatch4-input-sm w-full"
                 />
               </div>
             </div>
-          </section>
-
+          </div>
 
           {/* ═══════════════════════════════════════════════════════════════════
-              [Step 5: 우하단 Terminal Action Bar & 검증 완료] (헌장 3.5 Z-동선)
+              [Card 4: 우하단 플로팅 터미널 바 & 저장 버튼] (헌장 3.5 Z-동선)
              ═══════════════════════════════════════════════════════════════════ */}
-          <div className="sticky bottom-0 z-40 bg-slate-900/95 backdrop-blur border border-slate-800 rounded-xl p-4 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-6 text-xs text-slate-300 w-full md:w-auto">
-              <div className="flex flex-col">
-                <span className="text-[10px] text-slate-400">선택 고객사 / 설치처</span>
-                <span className="font-bold text-white truncate max-w-xs">
-                  {selectedCustomer ? selectedCustomer.name : (customerSearchQuery || '고객사 미선택')} / {isNewSiteMode ? (newSiteName || '신규') : (selectedSite?.name || '설치처 미선택')}
+          <div className="dispatch4-bottom-terminal">
+            <div className="flex flex-wrap items-center gap-4 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-slate-400">고객/설치:</span>
+                <span className="font-bold text-white max-w-[200px] truncate">
+                  {selectedCustomer ? selectedCustomer.name : '고객사 미선택'}
                 </span>
               </div>
 
-              <div className="flex flex-col">
-                <span className="text-[10px] text-slate-400">출고 규모</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-slate-400">규모:</span>
                 <span className="font-bold text-indigo-300">
-                  {totalItemCount}개 품목 / 총 {totalUnits}대
+                  {totalItemCount}종 / 총 {totalUnits}대
                 </span>
               </div>
 
-              <div className="flex flex-col">
-                <span className="text-[10px] text-slate-400">예상 월 렌탈료 합계 (공급가+세)</span>
-                <span className="font-extrabold text-amber-400 text-sm">
-                  ₩{totalMonthlyFee.toLocaleString()}
-                  <span className="text-xs font-normal text-slate-400 ml-1">
-                    (+VAT ₩{totalVat.toLocaleString()})
-                  </span>
-                </span>
-              </div>
-
-              <div className="flex flex-col">
-                <span className="text-[10px] text-slate-400">배송 희망일시</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-slate-400">배송일시:</span>
                 <span className="font-bold text-emerald-400">
                   {scheduledDate} ({timeSlot === 'EXACT' ? exactTime : timeSlot === 'MORNING' ? '오전' : timeSlot === 'AFTERNOON' ? '오후' : '긴급'})
                 </span>
               </div>
+
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-slate-400">예상 월렌탈료:</span>
+                <span className="font-extrabold text-amber-400 text-sm">
+                  ₩{totalMonthlyFee.toLocaleString()}
+                </span>
+                <span className="text-[10px] text-slate-400">
+                  (+VAT ₩{totalVat.toLocaleString()})
+                </span>
+              </div>
             </div>
 
-            <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+            <div className="flex items-center gap-2">
               <button
                 type="submit"
                 disabled={isSubmitting || !canSave}
                 data-mid="btn-save-outbound-request"
-                className={`flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-bold text-sm text-white shadow-lg transition flex-shrink-0 ${
-                  isSubmitting || !canSave
-                    ? 'bg-slate-700 cursor-not-allowed text-slate-400'
-                    : 'bg-indigo-600 hover:bg-indigo-500 shadow-indigo-600/30'
-                }`}
+                className="dispatch4-btn-save"
               >
                 <Save className="w-4 h-4" />
                 <span>{isSubmitting ? '출고 요청 저장 중...' : '출고 요청 저장'}</span>
@@ -1394,17 +1212,16 @@ export const SmartDispatch4: React.FC = () => {
             </div>
           </div>
         </form>
+      )}
 
-
-        {/* ═══════════════════════════════════════════════════════════════════
-            [하단 섹션: 최근 출고 요청 대장 (Recent Outbound Deliveries)]
-           ═══════════════════════════════════════════════════════════════════ */}
-        <section className="max-w-7xl mx-auto w-full mt-4 pb-12">
-          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-800">
-              <div className="flex items-center gap-2">
+      {/* ── 탭 2: 최근 출고 요청 대장 (15건) ── */}
+      {activeMainTab === 'RECENT' && (
+        <section className="dispatch4-compact-form">
+          <div className="dispatch4-compact-card">
+            <div className="dispatch4-compact-header">
+              <div className="dispatch4-compact-header-title">
                 <FileText className="w-4 h-4 text-indigo-400" />
-                <h3 className="text-xs font-bold text-slate-200">최근 출고 요청 대장 (최근 15건)</h3>
+                <span>최근 출고 요청 대장 ({recentOutboundDeliveries.length}건)</span>
               </div>
               <span className="text-[11px] text-slate-400">
                 실제 DB 연동 완료된 출고 대기 및 배차 상태
@@ -1416,35 +1233,43 @@ export const SmartDispatch4: React.FC = () => {
                 <thead>
                   <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
                     <th className="py-2 px-3 font-semibold whitespace-nowrap">의뢰번호 / 요청일자</th>
-                    <th className="py-2 px-3 font-semibold whitespace-nowrap">고객사 및 설치처</th>
-                    <th className="py-2 px-3 font-semibold whitespace-nowrap">출고 품목 및 스펙 요약</th>
-                    <th className="py-2 px-3 font-semibold whitespace-nowrap">배송 희망일시 / 수단</th>
+                    <th className="py-2 px-3 font-semibold whitespace-nowrap">거래처 / 현장</th>
+                    <th className="py-2 px-3 font-semibold whitespace-nowrap">설치처 / 배송지</th>
+                    <th className="py-2 px-3 font-semibold">출고 품목 및 하드웨어/SW 스펙</th>
+                    <th className="py-2 px-3 font-semibold whitespace-nowrap">배송일정 / 수단</th>
                     <th className="py-2 px-3 font-semibold whitespace-nowrap">상태</th>
-                    <th className="py-2 px-3 font-semibold whitespace-nowrap text-center">상세</th>
+                    <th className="py-2 px-3 font-semibold whitespace-nowrap text-center">관리</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {recentOutboundDeliveries.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-500">
-                        등록된 출고 요청 내역이 없습니다.
+                      <td colSpan={7} className="py-8 text-center text-slate-500">
+                        등록된 최근 출고 요청 내역이 없습니다.
                       </td>
                     </tr>
                   ) : (
                     recentOutboundDeliveries.map(del => {
-                      // cargoItems 파싱
                       let itemsList: any[] = [];
                       try {
                         if (del.cargoItems) itemsList = JSON.parse(del.cargoItems);
-                      } catch (e) {
-                        itemsList = [];
-                      }
+                      } catch (e) { itemsList = []; }
+
+                      const linkedContract = contracts.find(c => c.id === del.contractId);
+                      const linkedCustomer = customers.find(c => c.id === linkedContract?.customerId);
+                      const linkedSite = sites.find(s => s.id === linkedContract?.siteId);
+                      const displayCustomer = linkedCustomer?.name || del.destinationAddress?.split('(')[0] || '고객사';
+                      const displaySite = linkedSite?.name || del.destinationAddress || '-';
 
                       return (
                         <tr key={del.id} className="hover:bg-slate-800/40 transition">
-                          <td className="py-2.5 px-3 font-mono text-[11px] text-slate-400 whitespace-nowrap">
-                            <span className="text-slate-200 font-bold block">{del.id.slice(0, 8)}</span>
-                            {del.requestDate || del.createdAt?.slice(0, 10)}
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className="font-mono text-indigo-300 font-bold block">#{del.id.slice(0, 8)}</span>
+                            <span className="text-[11px] text-slate-500 block">{del.createdAt?.slice(0, 10) || '-'}</span>
+                          </td>
+                          <td className="py-2.5 px-3 whitespace-nowrap">
+                            <span className="font-bold text-slate-100 block">{displayCustomer}</span>
+                            <span className="text-[11px] text-slate-400 block">{displaySite.split('(')[0]}</span>
                           </td>
                           <td className="py-2.5 px-3 whitespace-nowrap">
                             <span className="text-slate-200 font-semibold block">{del.destinationAddress?.split('(')[0] || '고객사'}</span>
@@ -1510,7 +1335,85 @@ export const SmartDispatch4: React.FC = () => {
             </div>
           </div>
         </section>
-      </div>
+      )}
+
+      {/* ── 품목별 SW 설정 모달 (openSwIdx !== null) ── */}
+      {openSwIdx !== null && lineItems[openSwIdx] && (
+        <div className="dispatch4-sw-modal-backdrop" onClick={() => setOpenSwIdx(null)}>
+          <div className="dispatch4-sw-modal-card" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <h3 className="text-sm font-bold text-white">
+                  품목 #{openSwIdx + 1} ({lineItems[openSwIdx].modelName || '모델명미지정'}) SW 설치 요구사항
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenSwIdx(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <div>
+                <label className="text-xs font-bold text-slate-200 block mb-1.5">
+                  필수 설치 소프트웨어 선택 (다중 선택)
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {SW_PRESETS.map(sw => {
+                    const isChecked = lineItems[openSwIdx].swList.includes(sw.name);
+                    return (
+                      <label
+                        key={sw.id}
+                        onClick={() => handleToggleSw(openSwIdx, sw.name)}
+                        className={`flex items-center gap-2 px-2.5 py-1.5 rounded border text-xs cursor-pointer transition ${
+                          isChecked
+                            ? 'bg-emerald-950/60 border-emerald-500 text-emerald-200 font-bold'
+                            : 'bg-slate-900 border-slate-700 text-slate-400 hover:bg-slate-800'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}}
+                          className="rounded border-slate-700 text-emerald-500 focus:ring-0"
+                        />
+                        <span className="truncate">{sw.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-slate-300">
+                  계정 설정 / 도메인 조인 / 드라이브 파티션 요청
+                </label>
+                <input
+                  type="text"
+                  value={lineItems[openSwIdx].customSwNote || ''}
+                  onChange={e => handleUpdateItemField(openSwIdx, 'customSwNote', e.target.value)}
+                  placeholder="예: 계정 user/비번 1234, C드라이브 200GB 분할"
+                  className="dispatch4-input-sm w-full"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setOpenSwIdx(null)}
+                className="dispatch4-btn-primary"
+              >
+                설정 완료
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── 완료 알림 모달 ── */}
       {successResultModal && successResultModal.isOpen && (
