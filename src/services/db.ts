@@ -5855,6 +5855,7 @@ const FK_RULES_MAP: Record<string, { targetTable: string; targetProp: string | n
 export const isSystemDeveloperUser = (u: any): boolean => {
   if (!u) return false;
   const id = String(u.id || '').trim();
+  if (isDemoMode() && id === 'u-admin') return false;
   const loginId = String(u.loginId || '').trim().toLowerCase();
   return id === 'u-1' || id === 'sys-admin' || loginId === 'admin';
 };
