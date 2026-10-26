@@ -1807,3 +1807,24 @@ button.modal-close:hover {
 :root:not([data-theme='dark']) .sidebar-nav button:hover:not([style*="background-color: var(--primary)"]):not([style*="background: var(--primary)"]) {
   background-color: rgba(0, 0, 0, 0.04) !important;
 }
+
+
+/* 📱 모바일 웹앱(.mobile-app-root) 상하 스크롤 개방 및 좌우 스크롤 차단 표준 */
+html:has(.mobile-app-root),
+body:has(.mobile-app-root),
+#root:has(.mobile-app-root) {
+  height: auto !important;
+  min-height: 100dvh !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mobile-app-root {
+  width: 100% !important;
+  max-width: 100% !important;
+  min-height: 100dvh !important;
+  overflow-x: hidden !important;
+  overflow-y: visible !important;
+}
