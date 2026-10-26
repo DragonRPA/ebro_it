@@ -92,11 +92,10 @@ export const MobileDispatchOrderCreate: React.FC<MobileDispatchOrderCreateProps>
   const selectedSite = useMemo(() => sites.find(s => s.id === selectedSiteId), [sites, selectedSiteId]);
   const isOptionsDiff = useMemo(() => isOptionsChangedFromSite(selectedSite, paidOptions, protection), [selectedSite, paidOptions, protection]);
   
-  // 납품/회수 일시 (기본값: 내일 08:00)
+  // 납품/회수 일시 (기본값: 오늘 08:00)
   const tomorrow = useMemo(() => {
     const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split('T')[0];
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, []);
 
   const [deliveryDate, setDeliveryDate] = useState(tomorrow);

@@ -208,13 +208,12 @@ export const SmartDispatch4: React.FC = () => {
   const [lineItems, setLineItems] = useState<OutboundLineItem[]>([createDefaultLineItem(1)]);
 
   // ── [Step 3: 출고 배송 요청 일시 및 물류] ──
-  const tomorrowStr = useMemo(() => {
+  const todayStr = useMemo(() => {
     const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().slice(0, 10);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, []);
 
-  const [scheduledDate, setScheduledDate] = useState(tomorrowStr);
+  const [scheduledDate, setScheduledDate] = useState(todayStr);
   const [timeSlot, setTimeSlot] = useState<'MORNING' | 'AFTERNOON' | 'EXACT' | 'ASAP'>('MORNING');
   const [exactTime, setExactTime] = useState('10:00');
   const [deliveryMethod, setDeliveryMethod] = useState<ITDeliveryMethod>('DIRECT_INSTALL');
@@ -449,7 +448,7 @@ export const SmartDispatch4: React.FC = () => {
     setContactEmail('');
     setContactPosition('');
     setLineItems([createDefaultLineItem(1)]);
-    setScheduledDate(tomorrowStr);
+    setScheduledDate(todayStr);
     setTimeSlot('MORNING');
     setExactTime('10:00');
     setDeliveryMethod('DIRECT_INSTALL');
