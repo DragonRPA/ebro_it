@@ -13,6 +13,7 @@ export type MobileTabType =
   | 'dispatch' 
   | 'inspection'
   | 'inbound_register'
+  | 'inbound_defect_claim'
   | 'sublease'
   | 'customers'
   | 'delinquency'
@@ -61,6 +62,7 @@ export const MobileBottomNav: React.FC<MobileBottomNavProps> = ({
     assignment: 'dispatch_assign',
     inspection: 'outbound_inspections',
     inbound_register: 'daily_inout',
+    inbound_defect_claim: 'receivables',
     delinquency: 'delinquency',
     sublease: 'rent_asset',
     dispatch: 'delivery',

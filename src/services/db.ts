@@ -1901,6 +1901,60 @@ export interface Billing {
 }
 
 
+export interface InboundClaimDefectItem {
+  id: string;
+  checkitemId?: string;
+  category: string;
+  symptomName: string;
+  estimatedCost: number;
+  agreedCost?: number;
+  photos: string[];
+  memo?: string;
+}
+
+export type ClaimNegotiationStatus = 'PENDING_NEGOTIATION' | 'SENT_TO_CUSTOMER' | 'AGREED';
+
+export interface InboundDefectClaimMeta {
+  kind: 'INBOUND_DEFECT_CLAIM_V1';
+  receivableId: string;
+  repairId?: string;
+  assetId?: string;
+  assetNo: string;
+  modelName?: string;
+  ownerType?: 'OWN' | 'RENTED';
+  vendorName?: string;
+  customerId?: string;
+  customerName: string;
+  siteId?: string;
+  siteName: string;
+  siteAddress?: string;
+  contractId?: string;
+  contractNo?: string;
+  outboundDate?: string;
+  inboundDate: string;
+  billingDay?: number;
+  salespersonId?: string;
+  salespersonName?: string;
+  customerContactName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
+  registeredById?: string;
+  registeredByName?: string;
+  registeredAt: string;
+  inspectorMemo?: string;
+  displayName?: string;
+  initialEstimatedAmount: number;
+  agreedAmount: number;
+  negotiationStatus: ClaimNegotiationStatus;
+  sentAt?: string;
+  sentChannel?: 'EMAIL' | 'KAKAO_SHARE' | 'PDF_DOWNLOAD';
+  sentToEmail?: string;
+  agreedAt?: string;
+  agreedBy?: string;
+  negotiationMemo?: string;
+  defectItems: InboundClaimDefectItem[];
+}
+
 /** 외상미수금 대장 — 운송료·수리비·청소비·타사구상금 분할 청산 관리 */
 export interface Receivable {
   id: string;
@@ -1917,6 +1971,7 @@ export interface Receivable {
   repairId?: string;           // 수리비 연동 시 repairs.id
   vendorName?: string;         // 타사 구상금인 경우 임차처명
   assetNo?: string;            // 대상 장비번호
+  claimMeta?: InboundDefectClaimMeta;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { db, supabase, isSystemDeveloperUser, PAYMENT_REVERSAL_ENABLED, isActivePayment, isActiveDepositLink, Tenant, TenantWorkplace, TenantYard, TenantBusinessType, TenantBankAccount, OFFICIAL_STAMP_BASE64, User, Department, MenuPermission, createMenuPermission, CustomRole, RolePermission, Customer, CustomerContact, CustomerSite, SiteMaster, Product, Asset, Consumable, ConsumableLog, ConsumableLot, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingType, BillingDetail, CustomStatementItem, Receivable, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, OfficialMailConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, TransportNegotiation, SubleaseNegotiation, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, EquipmentManual, StandardOption, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart, SaleContractTerms, StocktakingAudit, StocktakingAuditItem, CollectedPart, PrintStation, PrintQueueItem, logPrivacyAccess, ErrorReport, ErrorReportAttachment, ErrorReportStatus, ErrorReportSeverity, ErrorReportCategory, ApprovalRule, RuleConsensus, ApprovalPayload, MonthlyIncomeStatement, DepositStatus, DEPOSIT_STATUS_LABELS } from '../services/db';
+import { db, supabase, isSystemDeveloperUser, PAYMENT_REVERSAL_ENABLED, isActivePayment, isActiveDepositLink, Tenant, TenantWorkplace, TenantYard, TenantBusinessType, TenantBankAccount, OFFICIAL_STAMP_BASE64, User, Department, MenuPermission, createMenuPermission, CustomRole, RolePermission, Customer, CustomerContact, CustomerSite, SiteMaster, Product, Asset, Consumable, ConsumableLog, ConsumableLot, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingType, BillingDetail, CustomStatementItem, Receivable, InboundClaimDefectItem, ClaimNegotiationStatus, InboundDefectClaimMeta, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, OfficialMailConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, TransportNegotiation, SubleaseNegotiation, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, EquipmentManual, StandardOption, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart, SaleContractTerms, StocktakingAudit, StocktakingAuditItem, CollectedPart, PrintStation, PrintQueueItem, logPrivacyAccess, ErrorReport, ErrorReportAttachment, ErrorReportStatus, ErrorReportSeverity, ErrorReportCategory, ApprovalRule, RuleConsensus, ApprovalPayload, MonthlyIncomeStatement, DepositStatus, DEPOSIT_STATUS_LABELS } from '../services/db';
+import { resolveReceivableClaimMeta, saveLocalClaimMetaCache, lookupRecentInboundInfoByAsset } from '../utils/inboundDefectClaimHelper';
 import { useApproval } from '../hooks/useApproval';
 import { enqueuePrintJob as serviceEnqueuePrintJob, registerPrintStation as serviceRegisterPrintStation, deletePrintStation as serviceDeletePrintStation, retryPrintJob as serviceRetryPrintJob, cancelPrintJob as serviceCancelPrintJob } from '../services/printQueueService';
 import { ErrorModal } from '../components/ErrorModal';
@@ -124,7 +125,7 @@ interface AppContextType {
   switchUser: (userId: string) => void;
   hasPermission: (menuId: string, action: 'view' | 'save') => boolean;
   showErrorModal: (message: string, title?: string, type?: 'system' | 'business') => void;
-  showNoticeModal: (message: string, title?: string) => void;
+  showNoticeModal: (messageOrObj: string | { title?: string; message: string }, title?: string) => void;
   showPrintSuccessModal: (params: {
     docType?: string;
     docTitle: string;
@@ -394,6 +395,43 @@ interface AppContextType {
   approveBilling: (billingId: string) => Promise<void>; // UNPAID → REQUESTED (거래명세서 발송)
   cancelBilling: (billingId: string, refund?: boolean) => Promise<void>; // 환불=true, 비환불=false(기본)
   addReceivable: (data: Omit<Receivable, 'id' | 'createdAt' | 'updatedAt'>) => string;
+  registerInboundDefectClaimReceivable: (payload: {
+    existingReceivableId?: string;
+    repairId?: string;
+    assetId?: string;
+    assetNo: string;
+    modelName?: string;
+    ownerType?: 'OWN' | 'RENTED';
+    vendorName?: string;
+    customerId?: string;
+    customerName: string;
+    siteId?: string;
+    siteName: string;
+    siteAddress?: string;
+    contractId?: string;
+    contractNo?: string;
+    outboundDate?: string;
+    inboundDate: string;
+    billingDay?: number;
+    salespersonId?: string;
+    salespersonName?: string;
+    customerContactName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    inspectorMemo?: string;
+    defectItems: InboundClaimDefectItem[];
+    negotiationMemo?: string;
+  }) => Promise<string>;
+  updateReceivableClaimNegotiation: (payload: {
+    receivableId: string;
+    agreedAmount: number;
+    negotiationStatus: ClaimNegotiationStatus;
+    defectItems?: InboundClaimDefectItem[];
+    negotiationMemo?: string;
+    displayName?: string;
+    sentChannel?: 'EMAIL' | 'KAKAO_SHARE' | 'PDF_DOWNLOAD';
+    sentToEmail?: string;
+  }) => Promise<void>;
   generateStandaloneBillingForReceivable: (receivableId: string, reason: string) => Promise<string>;
   linkReceivableToBilling: (billingId: string, receivableId: string, amount: number, displayName?: string) => Promise<void>;
   receivePayment: (billingId: string, data: {
@@ -915,11 +953,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const showNoticeModal = (message: string, title: string = '업무 처리 안내') => {
+  const showNoticeModal = (messageOrObj: string | { title?: string; message: string }, title: string = '업무 처리 안내') => {
+    const resolvedMessage = typeof messageOrObj === 'string' ? messageOrObj : (messageOrObj?.message || '');
+    const resolvedTitle = typeof messageOrObj === 'string' ? title : (messageOrObj?.title || title);
     setErrorModal({
       isOpen: true,
-      title,
-      message,
+      title: resolvedTitle,
+      message: resolvedMessage,
       type: 'business'
     });
   };
@@ -11350,6 +11390,417 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     setErrorReports([...db.errorReports]);
   };
 
+  const registerInboundDefectClaimReceivable = async (payload: {
+    existingReceivableId?: string;
+    repairId?: string;
+    assetId?: string;
+    assetNo: string;
+    modelName?: string;
+    ownerType?: 'OWN' | 'RENTED';
+    vendorName?: string;
+    customerId?: string;
+    customerName: string;
+    siteId?: string;
+    siteName: string;
+    siteAddress?: string;
+    contractId?: string;
+    contractNo?: string;
+    outboundDate?: string;
+    inboundDate: string;
+    billingDay?: number;
+    salespersonId?: string;
+    salespersonName?: string;
+    customerContactName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    inspectorMemo?: string;
+    defectItems: InboundClaimDefectItem[];
+    negotiationMemo?: string;
+  }): Promise<string> => {
+    const now = new Date().toISOString();
+    const sanitizedDefectItems: InboundClaimDefectItem[] = (payload.defectItems || []).map((item, idx) => ({
+      id: item.id || `DEF-${idx + 1}`,
+      checkitemId: item.checkitemId || undefined,
+      category: (item.category || '입고불량').trim(),
+      symptomName: (item.symptomName || `불량 증상 ${idx + 1}`).trim(),
+      estimatedCost: Math.max(0, Math.round(Number(item.estimatedCost) || 0)),
+      agreedCost: Math.max(
+        0,
+        Math.round(Number(item.agreedCost !== undefined ? item.agreedCost : item.estimatedCost) || 0)
+      ),
+      photos: Array.isArray(item.photos) ? item.photos.filter(Boolean).slice(0, 2) : [],
+      memo: (item.memo || '').trim()
+    }));
+
+    if (sanitizedDefectItems.length === 0) {
+      throw new Error('최소 1개 이상의 불량 증상을 입력해 주십시오.');
+    }
+
+    const initialEstimatedAmount = sanitizedDefectItems.reduce(
+      (sum, item) => sum + (item.estimatedCost || 0),
+      0
+    );
+    const allPhotos = sanitizedDefectItems.flatMap(item => item.photos || []);
+
+    const existingRcv = payload.existingReceivableId
+      ? db.receivables.find(r => r.id === payload.existingReceivableId)
+      : undefined;
+    const receivableId = existingRcv ? existingRcv.id : db.generateNextId('RCV', db.receivables);
+    const existingRepair = existingRcv?.repairId
+      ? db.repairs.find(r => r.id === existingRcv.repairId)
+      : undefined;
+    const repairId = existingRepair ? existingRepair.id : db.generateNextId('RPR', db.repairs);
+
+    const autoLookup = lookupRecentInboundInfoByAsset(payload.assetNo, {
+      assets: db.assets,
+      assetInOutLogs: db.assetInOutLogs,
+      contractAssets: db.contractAssets,
+      contracts: db.contracts,
+      deliveries: db.deliveries,
+      repairs: db.repairs,
+      customers: db.customers,
+      sites: db.sites,
+      users: db.users,
+      vendors: db.vendors
+    });
+
+    const resolvedInspectorMemo = (payload.inspectorMemo ?? payload.negotiationMemo ?? '').trim();
+    const displayName = `[수리비 청구] ${payload.assetNo} 입고 파손·불량 수리비 (${sanitizedDefectItems.length}건)`;
+
+    const claimMeta: InboundDefectClaimMeta = {
+      kind: 'INBOUND_DEFECT_CLAIM_V1',
+      receivableId,
+      repairId,
+      assetId: payload.assetId || autoLookup?.assetId,
+      assetNo: payload.assetNo,
+      modelName: payload.modelName || autoLookup?.modelName || '',
+      ownerType: payload.ownerType || autoLookup?.ownerType || 'OWN',
+      vendorName: payload.vendorName || autoLookup?.vendorName || undefined,
+      customerId: payload.customerId || autoLookup?.customerId,
+      customerName: payload.customerName || autoLookup?.customerName || '미지정 고객',
+      siteId: payload.siteId || autoLookup?.siteId,
+      siteName: payload.siteName || autoLookup?.siteName || '미지정 현장',
+      siteAddress: payload.siteAddress || autoLookup?.siteAddress || '',
+      contractId: payload.contractId || autoLookup?.contractId,
+      contractNo: payload.contractNo || autoLookup?.contractNo,
+      outboundDate: payload.outboundDate || autoLookup?.outboundDate || undefined,
+      inboundDate: payload.inboundDate || autoLookup?.inboundDate || now.slice(0, 10),
+      billingDay: payload.billingDay || autoLookup?.billingDay,
+      salespersonId: payload.salespersonId || autoLookup?.salespersonId,
+      salespersonName: payload.salespersonName || autoLookup?.salespersonName,
+      customerContactName: payload.customerContactName || autoLookup?.customerContactName || undefined,
+      customerPhone: payload.customerPhone || autoLookup?.customerPhone || undefined,
+      customerEmail: payload.customerEmail || autoLookup?.customerEmail || undefined,
+      registeredById: currentUser?.id,
+      registeredByName: currentUser?.name || '출고팀',
+      registeredAt: existingRcv?.createdAt || now,
+      inspectorMemo: resolvedInspectorMemo,
+      displayName,
+      initialEstimatedAmount,
+      agreedAmount: initialEstimatedAmount,
+      negotiationStatus: 'PENDING_NEGOTIATION',
+      negotiationMemo: payload.negotiationMemo || '',
+      defectItems: sanitizedDefectItems
+    };
+
+    const symptomSummaryText = sanitizedDefectItems
+      .map(d => `${d.symptomName}(₩${(d.estimatedCost || 0).toLocaleString()})`)
+      .join(', ');
+
+    const internalDescription = `[입고불량 수리비] ${payload.assetNo} (${claimMeta.customerName} / ${claimMeta.siteName}) - ${symptomSummaryText}`;
+
+    if (existingRepair) {
+      db.updateRow<Repair>('repairs', repairId, {
+        assetId: payload.assetId || existingRepair.assetId,
+        assetNo: payload.assetNo,
+        modelName: payload.modelName || existingRepair.modelName,
+        contractId: payload.contractId || existingRepair.contractId,
+        customerId: payload.customerId || existingRepair.customerId,
+        customerName: payload.customerName || existingRepair.customerName,
+        siteId: payload.siteId || existingRepair.siteId,
+        siteName: payload.siteName || existingRepair.siteName,
+        issueCategory: sanitizedDefectItems[0]?.category || '입고불량',
+        issueDescription: internalDescription,
+        billableType: 'BILLABLE',
+        billableAmount: initialEstimatedAmount,
+        billableToCustomer: true,
+        isCustomerFault: true,
+        evidenceImages: allPhotos,
+        defectsJson: JSON.stringify(claimMeta),
+        memo: payload.negotiationMemo || existingRepair.memo,
+        updatedAt: now
+      } as any);
+    } else {
+      db.insertRow<Repair>('repairs', {
+        id: repairId,
+        ticketNo: repairId,
+        workCategory: 'YARD_INTERNAL',
+        workLocation: 'YARD',
+        stockSource: 'YARD_STOCK',
+        source: 'INBOUND_INSPECTION',
+        repairType: 'INTERNAL',
+        priority: 'URGENT',
+        assetId: payload.assetId || undefined,
+        assetNo: payload.assetNo,
+        modelName: payload.modelName || undefined,
+        contractId: payload.contractId || undefined,
+        customerId: payload.customerId || undefined,
+        customerName: payload.customerName || undefined,
+        siteId: payload.siteId || undefined,
+        siteName: payload.siteName || undefined,
+        reporterName: currentUser?.name || '출고팀',
+        issueCategory: sanitizedDefectItems[0]?.category || '입고불량',
+        degradationScore: 0,
+        issueDescription: internalDescription,
+        requestDate: payload.inboundDate || now.slice(0, 10),
+        status: 'REQUESTED',
+        partsUsed: [],
+        collectedParts: [],
+        consumables: [],
+        timelineLogs: [],
+        timelineEvents: [],
+        billableType: 'BILLABLE',
+        billableAmount: initialEstimatedAmount,
+        billableToCustomer: true,
+        totalCost: initialEstimatedAmount,
+        costTotal: initialEstimatedAmount,
+        isCustomerFault: true,
+        isWaived: false,
+        waivedAmount: 0,
+        evidenceImages: allPhotos,
+        defectsJson: JSON.stringify(claimMeta),
+        memo: payload.negotiationMemo || '',
+        createdAt: now,
+        updatedAt: now
+      } as any);
+    }
+
+    const finalTotalAmount = Math.max(existingRcv?.billedAmount || 0, initialEstimatedAmount);
+    if (existingRcv) {
+      db.updateRow<Receivable>('receivables', receivableId, {
+        contractId: payload.contractId || existingRcv.contractId,
+        customerId: payload.customerId || existingRcv.customerId,
+        assetNo: payload.assetNo,
+        type: 'REPAIR',
+        totalAmount: finalTotalAmount,
+        internalDescription,
+        displayName,
+        occurredDate: payload.inboundDate || existingRcv.occurredDate || now.slice(0, 10),
+        repairId,
+        claimMeta,
+        updatedAt: now
+      });
+    } else {
+      db.insertRow<Receivable>('receivables', {
+        id: receivableId,
+        contractId: payload.contractId || undefined,
+        customerId: payload.customerId || undefined,
+        assetNo: payload.assetNo,
+        type: 'REPAIR',
+        totalAmount: finalTotalAmount,
+        billedAmount: 0,
+        internalDescription,
+        displayName,
+        occurredDate: payload.inboundDate || now.slice(0, 10),
+        status: 'PENDING',
+        repairId,
+        claimMeta,
+        createdAt: now,
+        updatedAt: now
+      });
+    }
+
+    saveLocalClaimMetaCache(receivableId, claimMeta);
+
+    await issueHandoverTask({
+      category: 'CLAIM_DAMAGE_BILLING',
+      title: `[입고불량 수리비 협상·전달] ${payload.customerName} (${payload.siteName}) - ${payload.assetNo}`,
+      content: `입고 불량 증상 ${sanitizedDefectItems.length}건(예상 수리비 ₩${initialEstimatedAmount.toLocaleString()})이 등록되었습니다. 내역서를 고객에게 전달하고 수리비를 합의해 주십시오.`,
+      priority: 'HIGH',
+      targetDept: 'SALES',
+      assignedUserId: payload.salespersonId || undefined,
+      dueDate: now.slice(0, 10),
+      actionUrl: '/receivables',
+      entityType: 'RECEIVABLE',
+      entityId: receivableId,
+      senderId: currentUser?.id,
+      senderName: currentUser?.name || '출고팀'
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+    return receivableId;
+  };
+
+  const updateReceivableClaimNegotiation = async (payload: {
+    receivableId: string;
+    agreedAmount: number;
+    negotiationStatus: ClaimNegotiationStatus;
+    defectItems?: InboundClaimDefectItem[];
+    negotiationMemo?: string;
+    displayName?: string;
+    sentChannel?: 'EMAIL' | 'KAKAO_SHARE' | 'PDF_DOWNLOAD';
+    sentToEmail?: string;
+  }): Promise<void> => {
+    const rcv = db.receivables.find(r => r.id === payload.receivableId);
+    if (!rcv) {
+      throw new Error('대상 외상미수금 청구건을 찾을 수 없습니다.');
+    }
+
+    const now = new Date().toISOString();
+    const currentMeta = resolveReceivableClaimMeta(rcv, {
+      repairs: db.repairs,
+      assets: db.assets,
+      customers: db.customers,
+      sites: db.sites,
+      contracts: db.contracts,
+      contractAssets: db.contractAssets,
+      users: db.users,
+      vendors: db.vendors
+    });
+
+    const newTotalAmount = Math.max(
+      rcv.billedAmount || 0,
+      Math.round(Number(payload.agreedAmount) || 0)
+    );
+
+    const updatedDefectItems: InboundClaimDefectItem[] = (
+      payload.defectItems ||
+      currentMeta?.defectItems ||
+      []
+    ).map((item, idx) => ({
+      ...item,
+      id: item.id || `DEF-${idx + 1}`,
+      photos: Array.isArray(item.photos) ? item.photos.filter(Boolean).slice(0, 2) : [],
+      estimatedCost: Math.max(0, Math.round(Number(item.estimatedCost) || 0)),
+      agreedCost:
+        item.agreedCost !== undefined
+          ? Math.max(0, Math.round(Number(item.agreedCost) || 0))
+          : Math.max(0, Math.round(Number(item.estimatedCost) || 0))
+    }));
+
+    const updatedDisplayName =
+      payload.displayName?.trim()
+        ? payload.displayName.trim()
+        : payload.negotiationStatus === 'AGREED'
+          ? `[수리비 합의완료] ${currentMeta?.assetNo || rcv.assetNo || ''} 입고 파손·불량 수리비 (${updatedDefectItems.length}건)`
+          : rcv.displayName;
+
+    const updatedMeta: InboundDefectClaimMeta = {
+      ...currentMeta,
+      kind: 'INBOUND_DEFECT_CLAIM_V1',
+      receivableId: rcv.id,
+      repairId: rcv.repairId || currentMeta?.repairId,
+      assetId: currentMeta?.assetId,
+      assetNo: rcv.assetNo || currentMeta?.assetNo || '',
+      modelName: currentMeta?.modelName || '',
+      ownerType: currentMeta?.ownerType,
+      vendorName: currentMeta?.vendorName,
+      customerId: rcv.customerId || currentMeta?.customerId,
+      customerName: currentMeta?.customerName || '미지정 고객',
+      siteId: currentMeta?.siteId,
+      siteName: currentMeta?.siteName || '미지정 현장',
+      siteAddress: currentMeta?.siteAddress,
+      contractId: rcv.contractId || currentMeta?.contractId,
+      contractNo: currentMeta?.contractNo,
+      outboundDate: currentMeta?.outboundDate,
+      inboundDate: currentMeta?.inboundDate || rcv.occurredDate,
+      billingDay: currentMeta?.billingDay,
+      salespersonId: currentMeta?.salespersonId,
+      salespersonName: currentMeta?.salespersonName,
+      customerContactName: currentMeta?.customerContactName,
+      customerPhone: currentMeta?.customerPhone,
+      customerEmail: currentMeta?.customerEmail,
+      registeredById: currentMeta?.registeredById,
+      registeredByName: currentMeta?.registeredByName,
+      registeredAt: currentMeta?.registeredAt || rcv.createdAt,
+      inspectorMemo: currentMeta?.inspectorMemo,
+      displayName: updatedDisplayName,
+      initialEstimatedAmount:
+        currentMeta?.initialEstimatedAmount !== undefined
+          ? currentMeta.initialEstimatedAmount
+          : rcv.totalAmount,
+      agreedAmount: newTotalAmount,
+      negotiationStatus: payload.negotiationStatus,
+      sentAt: payload.sentChannel ? now : currentMeta?.sentAt,
+      sentChannel: payload.sentChannel || currentMeta?.sentChannel,
+      sentToEmail: payload.sentToEmail || currentMeta?.sentToEmail,
+      agreedAt: payload.negotiationStatus === 'AGREED' ? now : currentMeta?.agreedAt,
+      agreedBy:
+        payload.negotiationStatus === 'AGREED'
+          ? currentUser?.name || '영업담당자'
+          : currentMeta?.agreedBy,
+      negotiationMemo:
+        payload.negotiationMemo !== undefined
+          ? payload.negotiationMemo
+          : currentMeta?.negotiationMemo || '',
+      defectItems: updatedDefectItems
+    };
+
+    if (rcv.repairId) {
+      const existingRepair = db.repairs.find(r => r.id === rcv.repairId);
+      if (existingRepair) {
+        db.updateRow<Repair>('repairs', rcv.repairId, {
+          billableAmount: newTotalAmount,
+          defectsJson: JSON.stringify(updatedMeta),
+          memo: updatedMeta.negotiationMemo || updatedMeta.inspectorMemo || existingRepair.memo,
+          updatedAt: now
+        } as any);
+      }
+    }
+
+    db.updateRow<Receivable>('receivables', rcv.id, {
+      totalAmount: newTotalAmount,
+      displayName: updatedDisplayName,
+      claimMeta: updatedMeta,
+      status:
+        newTotalAmount <= (rcv.billedAmount || 0) && newTotalAmount > 0
+          ? 'CLEARED'
+          : (rcv.billedAmount || 0) > 0
+            ? 'PARTIAL'
+            : 'PENDING',
+      updatedAt: now
+    });
+
+    saveLocalClaimMetaCache(rcv.id, updatedMeta);
+
+    if (payload.negotiationStatus === 'AGREED') {
+      await clearHandoverTasks({
+        entityId: rcv.id,
+        category: 'CLAIM_DAMAGE_BILLING',
+        completedByUserId: currentUser?.id,
+        completedByName: currentUser?.name || '영업담당자',
+        completionAction: '입고 불량 수리비 고객 최종 합의 완료'
+      });
+      if (rcv.repairId) {
+        await clearHandoverTasks({
+          entityId: rcv.repairId,
+          category: 'CLAIM_DAMAGE_BILLING',
+          completedByUserId: currentUser?.id,
+          completedByName: currentUser?.name || '영업담당자',
+          completionAction: '입고 불량 수리비 고객 최종 합의 완료'
+        });
+      }
+
+      await issueHandoverTask({
+        category: 'BILLABLE_REPAIR_BILLING',
+        title: `[당월 청구 반영] ${updatedMeta.customerName} (${updatedMeta.siteName}) - ${updatedMeta.assetNo} 합의 수리비 ₩${newTotalAmount.toLocaleString()}`,
+        content: `고객과 최종 합의된 입고 파손·불량 수리비(₩${newTotalAmount.toLocaleString()})가 외상미수금 대장에 확정되었습니다. 당월 청구 업무 시 포함하여 진행해 주십시오.`,
+        priority: 'HIGH',
+        targetDept: 'ACCOUNTING',
+        dueDate: now.slice(0, 10),
+        actionUrl: '/billings',
+        entityType: 'RECEIVABLE',
+        entityId: rcv.id,
+        senderId: currentUser?.id,
+        senderName: currentUser?.name || '영업담당자'
+      });
+    }
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
   const contextValue: AppContextType = {
     db,
     fetchRuleForEvent,
@@ -11384,7 +11835,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, syncContractBillingMilestones, splitBillingAbsoluteAmount, regenerateBilling, saveCustomStatementForBilling, removeCustomStatementForBilling, toggleTenantCustomBillingStatement, approveBilling, cancelBilling, receivePayment, cancelPayment, cancelAllPaymentsForBilling,
       confirmContractDepositPayment, offsetDepositForBilling, settleContractDepositAndComplete,
       saveBankDeposit, deleteBankDeposit,
-      addReceivable, generateStandaloneBillingForReceivable, linkReceivableToBilling,
+      addReceivable, registerInboundDefectClaimReceivable, updateReceivableClaimNegotiation, generateStandaloneBillingForReceivable, linkReceivableToBilling,
       uploadBankTransactions, matchTransactionManual, batchAutoMatchTransactions, unmatchTransaction, saveMatchingRule, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
       registerRepair, updateRepairStatus,

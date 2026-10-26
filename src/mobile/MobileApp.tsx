@@ -16,6 +16,7 @@ import { MobileAssetSearch } from './pages/MobileAssetSearch';
 import { MobileDispatchOrderCreate } from './pages/MobileDispatchOrderCreate';
 import { MobileMyContracts } from './pages/MobileMyContracts';
 import { MobileInboundRegister } from './pages/MobileInboundRegister';
+import { MobileInboundDefectClaim } from './pages/MobileInboundDefectClaim';
 import { MobileSubleaseManage } from './pages/MobileSubleaseManage';
 import { MobileCustomerManage } from './pages/MobileCustomerManage';
 import { MobileDelinquencyManage } from './pages/MobileDelinquencyManage';
@@ -379,6 +380,11 @@ export const MobileApp: React.FC<MobileAppProps> = ({ onSwitchToPc: _onSwitchToP
           <MobileInboundRegister 
             onSuccess={() => handleTabChange('inspection')}
             onBack={() => handleTabChange('home')}
+          />
+        ) : activeTab === 'inbound_defect_claim' ? (
+          <MobileInboundDefectClaim
+            onNavigate={handleTabChange}
+            initialViewMode={deptMode === 'SALES' ? 'NEGOTIATE' : 'REGISTER'}
           />
         ) : activeTab === 'vehicle_log' ? (
           <MobileVehicleLog onBack={() => handleTabChange('home')} />

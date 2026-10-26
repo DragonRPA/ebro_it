@@ -1,16 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { db, Receivable } from '../services/db';
-import { Plus, Search, DollarSign, Calendar, FileText, CheckCircle, AlertTriangle, RotateCcw, Download, X } from 'lucide-react';
+import { db, Receivable, InboundClaimDefectItem, InboundDefectClaimMeta } from '../services/db';
+import { Plus, Search, DollarSign, Calendar, FileText, CheckCircle, AlertTriangle, RotateCcw, Download, X, Mail, Share2 } from 'lucide-react';
 import { exportToExcel } from '../services/excel';
 import { matchHangul, createHangulMatcher, sortCustomersByName } from '../utils/hangulSearch';
 import { SortableTh } from '../components/SortableTh';
 import { useSortableData } from '../hooks/useSortableData';
+import { resolveReceivableClaimMeta } from '../utils/inboundDefectClaimHelper';
+import { downloadRepairClaimPdf, sendRepairClaimPdfEmail, shareRepairClaimPdfMobile } from '../utils/repairClaimPdfBuilder';
 
 export const Receivables: React.FC = () => {
   const {
-    receivables, contracts, customers, sites,
-    addReceivable, generateStandaloneBillingForReceivable, hasPermission, showErrorModal
+    receivables, contracts, contractAssets, customers, sites, repairs, assets, users, vendors,
+    addReceivable, updateReceivableClaimNegotiation, generateStandaloneBillingForReceivable, hasPermission, showErrorModal
   } = useApp();
 
   // 토스트 알림 상태 (헌장 5.2: 브라우저 alert/confirm 전면 퇴출)
@@ -53,7 +55,41 @@ export const Receivables: React.FC = () => {
   const [formDisplayName, setFormDisplayName] = useState('');
   const [formOccurredDate, setFormOccurredDate] = useState(new Date().toISOString().split('T')[0]);
 
-  // ── 🗺️ O(1) 고속 조회용 인덱스 맵 (Precomputed Lookup Maps) ──
+  // 수리비 청구 상세 · PDF 전달 · 협상 합의 모달 상태
+  const [selectedClaimRcv, setSelectedClaimRcv] = useState<Receivable | null>(null);
+  const [claimEditItems, setClaimEditItems] = useState<InboundClaimDefectItem[]>([]);
+  const [claimEditTotalAmount, setClaimEditTotalAmount] = useState<number>(0);
+  const [claimEditMemo, setClaimEditMemo] = useState<string>('');
+  const [claimEditDisplayName, setClaimEditDisplayName] = useState<string>('');
+  const [claimEmailTo, setClaimEmailTo] = useState<string>('');
+  const [claimEmailCc, setClaimEmailCc] = useState<string>('');
+  const [claimEmailMsg, setClaimEmailMsg] = useState<string>('');
+  const [showClaimEmailBox, setShowClaimEmailBox] = useState<boolean>(false);
+  const [isClaimBusy, setIsClaimBusy] = useState<boolean>(false);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+
+  const handleOpenClaimModal = (rcv: Receivable) => {
+    const meta = resolveReceivableClaimMeta(rcv, { repairs, assets, customers, sites, contracts, contractAssets, users, vendors });
+    if (!meta) return;
+    setSelectedClaimRcv(rcv);
+    setClaimEditItems(
+      (meta.defectItems || []).map(it => ({
+        ...it,
+        agreedCost: it.agreedCost !== undefined ? it.agreedCost : it.estimatedCost
+      }))
+    );
+    setClaimEditTotalAmount(meta.agreedAmount !== undefined ? meta.agreedAmount : rcv.totalAmount);
+    setClaimEditMemo(meta.negotiationMemo || '');
+    setClaimEditDisplayName(rcv.displayName || meta.displayName || `[수리비 청구] ${meta.assetNo} 입고 파손·불량 수리비`);
+    const cust = rcv.customerId ? customers.find(c => c.id === rcv.customerId) : undefined;
+    setClaimEmailTo(meta.sentToEmail || meta.customerEmail || (cust as any)?.taxEmail || (cust as any)?.email || (cust as any)?.taxInvoiceEmail || '');
+    setClaimEmailCc('');
+    setClaimEmailMsg('');
+    setShowClaimEmailBox(false);
+    setPreviewPhotoUrl(null);
+  };
+
+  // ── 🗺️ O(1) 고속 조회용 인덱스 맵 ──
   const customerMap = useMemo(() => {
     const map = new Map<string, typeof customers[0]>();
     customers.forEach(c => map.set(c.id, c));
@@ -450,7 +486,7 @@ export const Receivables: React.FC = () => {
 
       return {
         // ① 식별 및 분류
-        'No': idx + 1,
+        '순번': idx + 1,
         '구상/미수 구분': r.type === 'VENDOR_CLAIM' ? '타사구상금' :
                          r.type === 'TRANSPORT' ? '운송료' :
                          r.type === 'REPAIR' ? '수리비' :
@@ -562,7 +598,7 @@ export const Receivables: React.FC = () => {
   return (
     <div data-hs-observe="receivables" style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: '12px' }}>
       
-      {/* ── 1. 상단 헤더 & 슬림 인라인 요약 바 (Gutenberg Z-Pattern) ── */}
+      {/* ── 1. 상단 헤더 & 슬림 인라인 요약 바 ── */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px', paddingBottom: '8px', borderBottom: '1px solid var(--border-color)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -787,26 +823,44 @@ export const Receivables: React.FC = () => {
                 const cu = actualCustId ? customerMap.get(actualCustId) : undefined;
                 const s = c?.siteId ? siteMap.get(c.siteId) : null;
                 const remaining = r.totalAmount - r.billedAmount;
+                const claimMeta = r.type === 'REPAIR'
+                  ? resolveReceivableClaimMeta(r, { repairs, assets, customers, sites, contracts, contractAssets, users, vendors })
+                  : null;
+                const claimPhotoCount = claimMeta
+                  ? (claimMeta.defectItems || []).reduce((acc, it) => acc + (it.photos?.length || 0), 0)
+                  : 0;
 
                 return (
                   <tr key={r.id}>
                     <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      {r.status !== 'CLEARED' ? (
-                        <button
-                          type="button"
-                          className="btn-secondary"
-                          style={{ fontSize: '11px', padding: '2px 8px', color: 'var(--primary)', fontWeight: 600 }}
-                          onClick={() => handleStandaloneIssue(r.id)}
-                        >
-                          단독 청구
-                        </button>
-                      ) : (
-                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>-</span>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                        {claimMeta && (
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ fontSize: '11px', padding: '2px 8px', color: '#2563eb', borderColor: 'rgba(37, 99, 235, 0.35)', fontWeight: 700 }}
+                            onClick={() => handleOpenClaimModal(r)}
+                          >
+                            수리비 협상·PDF
+                          </button>
+                        )}
+                        {r.status !== 'CLEARED' ? (
+                          <button
+                            type="button"
+                            className="btn-secondary"
+                            style={{ fontSize: '11px', padding: '2px 8px', color: 'var(--primary)', fontWeight: 600 }}
+                            onClick={() => handleStandaloneIssue(r.id)}
+                          >
+                            단독 청구
+                          </button>
+                        ) : !claimMeta ? (
+                          <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>-</span>
+                        ) : null}
+                      </div>
                     </td>
                     <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{r.occurredDate}</td>
                     <td style={{ whiteSpace: 'nowrap' }}>
-                      <strong style={{ color: 'var(--text-primary)' }}>{cu?.name || '고객 미지정'}</strong>
+                      <strong style={{ color: 'var(--text-primary)' }}>{cu?.name || claimMeta?.customerName || '고객 미지정'}</strong>
                       {cu?.transactionStatus === 'BLOCKED' && (
                         <span style={{ marginLeft: '6px', padding: '1px 5px', fontSize: '10px', backgroundColor: 'var(--danger-light)', color: 'var(--danger)', borderRadius: '3px', fontWeight: 800 }}>
                           출고제한
@@ -819,24 +873,68 @@ export const Receivables: React.FC = () => {
                           <span style={{ color: 'var(--primary)', fontWeight: 600 }}>{c.contractNo}</span>
                           {s && <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>{s.name}</span>}
                         </div>
+                      ) : claimMeta?.siteName ? (
+                        <span style={{ fontSize: '11px', color: 'var(--text-secondary)', fontWeight: 600 }}>{claimMeta.siteName}</span>
                       ) : (
                         <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>-</span>
                       )}
                     </td>
                     <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>
-                      <span className={`badge ${
-                        r.type === 'REPAIR' ? 'badge-danger' :
-                        r.type === 'TRANSPORT' ? 'badge-info' :
-                        r.type === 'CLEANING' ? 'badge-warning' :
-                        r.type === 'VENDOR_CLAIM' ? 'badge-warning' : 'badge-secondary'
-                      }`} style={{ fontSize: '10.5px', backgroundColor: r.type === 'VENDOR_CLAIM' ? '#f59e0b' : undefined, color: r.type === 'VENDOR_CLAIM' ? '#ffffff' : undefined }}>
-                        {r.type === 'TRANSPORT' ? '운송료' :
-                         r.type === 'REPAIR' ? '수리비' :
-                         r.type === 'CLEANING' ? '청소비' :
-                         r.type === 'VENDOR_CLAIM' ? '타사구상금' : '기타'}
-                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                        <span className={`badge ${
+                          r.type === 'REPAIR' ? 'badge-danger' :
+                          r.type === 'TRANSPORT' ? 'badge-info' :
+                          r.type === 'CLEANING' ? 'badge-warning' :
+                          r.type === 'VENDOR_CLAIM' ? 'badge-warning' : 'badge-secondary'
+                        }`} style={{ fontSize: '10.5px', backgroundColor: r.type === 'VENDOR_CLAIM' ? '#f59e0b' : undefined, color: r.type === 'VENDOR_CLAIM' ? '#ffffff' : undefined }}>
+                          {r.type === 'TRANSPORT' ? '운송료' :
+                           r.type === 'REPAIR' ? '수리비' :
+                           r.type === 'CLEANING' ? '청소비' :
+                           r.type === 'VENDOR_CLAIM' ? '타사구상금' : '기타'}
+                        </span>
+                        {claimMeta && (
+                          <span style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            padding: '1px 6px',
+                            borderRadius: '4px',
+                            backgroundColor: claimMeta.negotiationStatus === 'AGREED' ? 'rgba(16, 185, 129, 0.15)' : claimMeta.negotiationStatus === 'SENT_TO_CUSTOMER' ? 'rgba(14, 165, 233, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                            color: claimMeta.negotiationStatus === 'AGREED' ? '#10b981' : claimMeta.negotiationStatus === 'SENT_TO_CUSTOMER' ? '#0ea5e9' : '#f59e0b',
+                            border: `1px solid ${claimMeta.negotiationStatus === 'AGREED' ? 'rgba(16, 185, 129, 0.35)' : claimMeta.negotiationStatus === 'SENT_TO_CUSTOMER' ? 'rgba(14, 165, 233, 0.35)' : 'rgba(245, 158, 11, 0.35)'}`
+                          }}>
+                            {claimMeta.negotiationStatus === 'AGREED' ? '합의완료' : claimMeta.negotiationStatus === 'SENT_TO_CUSTOMER' ? '고객전달' : '협상대기'}
+                          </span>
+                        )}
+                      </div>
                     </td>
-                    <td style={{ whiteSpace: 'nowrap' }}>{r.internalDescription}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {(r.assetNo || claimMeta?.assetNo) && (
+                        <span style={{ marginRight: '6px', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'rgba(37, 99, 235, 0.15)', color: '#3b82f6', fontWeight: 700, fontSize: '10.5px' }}>
+                          #{r.assetNo || claimMeta?.assetNo}{claimMeta?.modelName ? ` (${claimMeta.modelName})` : ''}
+                        </span>
+                      )}
+                      {claimMeta?.ownerType === 'RENTED' && claimMeta?.vendorName && (
+                        <span style={{ marginRight: '6px', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'rgba(168, 85, 247, 0.15)', color: '#a855f7', fontWeight: 700, fontSize: '10px' }}>
+                          임차:{claimMeta.vendorName}
+                        </span>
+                      )}
+                      {claimPhotoCount > 0 && (
+                        <span style={{ marginRight: '6px', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'rgba(16, 185, 129, 0.15)', color: '#10b981', fontWeight: 700, fontSize: '10px' }}>
+                          사진 {claimPhotoCount}장
+                        </span>
+                      )}
+                      {claimMeta?.registeredByName && (
+                        <span style={{ marginRight: '6px', padding: '1px 6px', borderRadius: '4px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600, fontSize: '10px' }}>
+                          검수:{claimMeta.registeredByName}
+                        </span>
+                      )}
+                      <span>{r.internalDescription}</span>
+                      {claimMeta?.inspectorMemo && (
+                        <span style={{ marginLeft: '6px', fontSize: '10.5px', color: '#f59e0b', fontWeight: 600 }}>
+                          [출고팀메모: {claimMeta.inspectorMemo}]
+                        </span>
+                      )}
+                    </td>
                     <td style={{ whiteSpace: 'nowrap', color: 'var(--text-muted)' }}>{r.displayName || '-'}</td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap', fontWeight: 600 }}>
                       {r.totalAmount.toLocaleString()}원
@@ -1119,7 +1217,7 @@ export const Receivables: React.FC = () => {
                         <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '3px' }}>
                           계약번호: <strong style={{ color: 'var(--text-primary)' }}>{selectedC.contractNo}</strong> | 
                           기간: <strong>{selectedC.startDate} ~ {selectedC.endDate || '미정'}</strong> | 
-                          청구마감: <strong>매월 {selectedC.billingDay}일</strong>
+                          계산서 마감: <strong>매월 {selectedC.billingDay}일</strong>
                         </div>
                       </div>
                       <button
@@ -1232,6 +1330,455 @@ export const Receivables: React.FC = () => {
           </div>
         </div>
       )}
+      {/* 수리비 청구 상세 · PDF 문서 조립/전달 · 수리비 협상 합의 모달 */}
+      {selectedClaimRcv && (() => {
+        const baseMeta = resolveReceivableClaimMeta(selectedClaimRcv, { repairs, assets, customers, sites, contracts, contractAssets, users, vendors });
+        if (!baseMeta) return null;
+        const draftMeta: InboundDefectClaimMeta = {
+          ...baseMeta,
+          agreedAmount: claimEditTotalAmount,
+          negotiationMemo: claimEditMemo,
+          defectItems: claimEditItems,
+          displayName: claimEditDisplayName
+        };
+        const isSublease = baseMeta.ownerType === 'RENTED' || !!baseMeta.vendorName;
+        return (
+          <div style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}>
+            <div style={{
+              backgroundColor: 'var(--bg-card)',
+              color: 'var(--text-primary)',
+              borderRadius: '12px',
+              border: '1px solid var(--border-color)',
+              maxWidth: '860px',
+              width: '100%',
+              maxHeight: '92vh',
+              overflowY: 'auto',
+              padding: '22px',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.5)'
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-color)', paddingBottom: '12px', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <FileText size={18} color="var(--primary)" />
+                  <h3 style={{ margin: 0, fontSize: '16.5px', fontWeight: 800 }}>
+                    입고 불량 수리비 내역서 (문서 전달 및 고객 협상 합의)
+                  </h3>
+                  {isSublease ? (
+                    <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 800, backgroundColor: 'rgba(139, 92, 246, 0.16)', color: '#a78bfa', border: '1px solid rgba(139, 92, 246, 0.4)' }}>
+                      임차처: {baseMeta.vendorName || '외부임차'}
+                    </span>
+                  ) : (
+                    <span style={{ padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 700, backgroundColor: 'rgba(16, 185, 129, 0.12)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                      자사보유
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSelectedClaimRcv(null)}
+                  style={{ background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '20px', cursor: 'pointer', padding: '4px' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* 1. 영업사원 협상용 통합 컨텍스트 (자산·계약·연락처·검수자 정보) */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px', padding: '12px', borderRadius: '8px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', marginBottom: '12px', fontSize: '12px' }}>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10.5px', fontWeight: 700 }}>관리번호 · 모델명</div>
+                  <div style={{ fontWeight: 800, color: 'var(--primary)', marginTop: '2px' }}>
+                    {baseMeta.assetNo || '-'} {baseMeta.modelName ? `(${baseMeta.modelName})` : ''}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10.5px', fontWeight: 700 }}>고객사 · 마감일</div>
+                  <div style={{ fontWeight: 700, marginTop: '2px' }}>
+                    {baseMeta.customerName}
+                    {baseMeta.billingDay ? <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--primary)', fontWeight: 800 }}>({baseMeta.billingDay})</span> : null}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10.5px', fontWeight: 700 }}>현장명 · 계약번호</div>
+                  <div style={{ fontWeight: 700, marginTop: '2px' }}>
+                    {baseMeta.siteName || '-'}
+                    {baseMeta.contractId ? <span style={{ marginLeft: '6px', fontSize: '10.5px', color: 'var(--text-muted)', fontFamily: 'monospace' }}>[{baseMeta.contractId}]</span> : null}
+                  </div>
+                  {baseMeta.siteAddress && (
+                    <div style={{ fontSize: '10.5px', color: 'var(--text-secondary)', marginTop: '1px' }}>{baseMeta.siteAddress}</div>
+                  )}
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10.5px', fontWeight: 700 }}>대여 기간 (출고일 ~ 입고일)</div>
+                  <div style={{ fontWeight: 700, marginTop: '2px', fontFamily: 'monospace' }}>
+                    {baseMeta.outboundDate ? `${baseMeta.outboundDate} ~ ` : ''}{baseMeta.inboundDate}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10.5px', fontWeight: 700 }}>고객·현장 담당자 연락처</div>
+                  <div style={{ fontWeight: 700, marginTop: '2px' }}>
+                    {baseMeta.customerContactName || '-'}
+                    {baseMeta.customerPhone ? (
+                      <a href={`tel:${baseMeta.customerPhone}`} style={{ marginLeft: '6px', color: 'var(--primary)', textDecoration: 'underline', fontFamily: 'monospace' }}>
+                        {baseMeta.customerPhone}
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10.5px', fontWeight: 700 }}>고객 이메일</div>
+                  <div style={{ fontWeight: 700, marginTop: '2px', wordBreak: 'break-all' }}>
+                    {baseMeta.customerEmail || '-'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10.5px', fontWeight: 700 }}>담당 영업사원</div>
+                  <div style={{ fontWeight: 700, marginTop: '2px' }}>
+                    {baseMeta.salespersonName || '-'}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: '10.5px', fontWeight: 700 }}>출고팀 검수·등록자</div>
+                  <div style={{ fontWeight: 700, marginTop: '2px' }}>
+                    {baseMeta.registeredByName || '-'}
+                    {baseMeta.registeredAt ? <span style={{ marginLeft: '5px', fontSize: '10.5px', color: 'var(--text-muted)' }}>({baseMeta.registeredAt.slice(0, 16).replace('T', ' ')})</span> : null}
+                  </div>
+                </div>
+              </div>
+
+              {/* 출고팀 현장 전달 메모 배너 */}
+              {baseMeta.inspectorMemo && (
+                <div style={{ padding: '10px 12px', borderRadius: '8px', backgroundColor: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.35)', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+                  <span style={{ padding: '2px 7px', borderRadius: '4px', backgroundColor: '#d97706', color: '#fff', fontSize: '10.5px', fontWeight: 800, flexShrink: 0 }}>
+                    출고팀 전달 메모
+                  </span>
+                  <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{baseMeta.inspectorMemo}</span>
+                </div>
+              )}
+
+              {/* 2. 1개의 문서 조립 및 전달 버튼 바 */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(37, 99, 235, 0.08)', border: '1px solid rgba(37, 99, 235, 0.25)', marginBottom: '14px' }}>
+                <div style={{ fontSize: '12px', fontWeight: 700 }}>
+                  불량 증상 {claimEditItems.length}건 및 촬영 사진을 내역서 문서로 생성하여 고객에게 전달합니다.
+                </div>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <button
+                    type="button"
+                    disabled={isClaimBusy}
+                    className="btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}
+                    onClick={async () => {
+                      setIsClaimBusy(true);
+                      try {
+                        const res = await shareRepairClaimPdfMobile(draftMeta);
+                        showToast(`'${res.fileName}' 파일이 준비되었습니다.`);
+                      } catch (err: any) {
+                        showErrorModal(err?.message || '문서 공유/생성 실패');
+                      } finally {
+                        setIsClaimBusy(false);
+                      }
+                    }}
+                  >
+                    <Share2 size={13} /> 모바일·카톡 공유
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isClaimBusy}
+                    className="btn-secondary"
+                    style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}
+                    onClick={() => setShowClaimEmailBox(prev => !prev)}
+                  >
+                    <Mail size={13} /> 이메일 발송
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isClaimBusy}
+                    className="btn-primary"
+                    style={{ padding: '6px 12px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '5px' }}
+                    onClick={async () => {
+                      setIsClaimBusy(true);
+                      try {
+                        const fileName = await downloadRepairClaimPdf(draftMeta);
+                        showToast(`'${fileName}' 다운로드 완료`);
+                      } catch (err: any) {
+                        showErrorModal(err?.message || '문서 다운로드 실패');
+                      } finally {
+                        setIsClaimBusy(false);
+                      }
+                    }}
+                  >
+                    <Download size={13} /> 내역서 다운로드
+                  </button>
+                </div>
+              </div>
+
+              {showClaimEmailBox && (
+                <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', marginBottom: '14px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--primary)' }}>수리비 내역서 첨부 이메일 발송</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>수신자 이메일</label>
+                      <input type="email" value={claimEmailTo} onChange={e => setClaimEmailTo(e.target.value)} placeholder="customer@example.com" style={{ padding: '6px 10px', fontSize: '12px' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>참조 이메일</label>
+                      <input type="email" value={claimEmailCc} onChange={e => setClaimEmailCc(e.target.value)} placeholder="cc@example.com" style={{ padding: '6px 10px', fontSize: '12px' }} />
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>고객 전달 메시지</label>
+                    <input type="text" value={claimEmailMsg} onChange={e => setClaimEmailMsg(e.target.value)} placeholder="첨부된 입고 수리비 내역서 확인 부탁드립니다." style={{ padding: '6px 10px', fontSize: '12px' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                    <button type="button" className="btn-secondary" style={{ padding: '5px 12px', fontSize: '12px' }} onClick={() => setShowClaimEmailBox(false)}>닫기</button>
+                    <button
+                      type="button"
+                      disabled={isClaimBusy}
+                      className="btn-primary"
+                      style={{ padding: '5px 14px', fontSize: '12px', fontWeight: 700 }}
+                      onClick={async () => {
+                        setIsClaimBusy(true);
+                        try {
+                          const res = await sendRepairClaimPdfEmail(draftMeta, {
+                            toEmail: claimEmailTo,
+                            ccEmail: claimEmailCc,
+                            customMessage: claimEmailMsg
+                          });
+                          if (!res.success) {
+                            showErrorModal(res.error || '이메일 발송 실패');
+                            return;
+                          }
+                          await updateReceivableClaimNegotiation({
+                            receivableId: selectedClaimRcv.id,
+                            agreedAmount: claimEditTotalAmount,
+                            negotiationStatus: baseMeta.negotiationStatus === 'AGREED' ? 'AGREED' : 'SENT_TO_CUSTOMER',
+                            defectItems: claimEditItems,
+                            negotiationMemo: claimEditMemo,
+                            sentChannel: 'EMAIL',
+                            sentToEmail: claimEmailTo,
+                            displayName: claimEditDisplayName
+                          });
+                          showToast('고객 이메일로 수리비 내역서가 발송되었습니다.');
+                          setShowClaimEmailBox(false);
+                        } catch (err: any) {
+                          showErrorModal(err?.message || '이메일 발송 실패');
+                        } finally {
+                          setIsClaimBusy(false);
+                        }
+                      }}
+                    >
+                      첨부 발송 실행
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. 증상별 상세 내역, 촬영 사진(클릭 시 확대) 및 수리비 퀵 조정 */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '14px' }}>
+                {claimEditItems.map((item, idx) => {
+                  const currentCost = item.agreedCost !== undefined ? item.agreedCost : item.estimatedCost;
+                  const applyItemCost = (val: number) => {
+                    const cleanVal = Math.max(0, Math.round(val || 0));
+                    const next = claimEditItems.map(it => it.id === item.id ? { ...it, agreedCost: cleanVal } : it);
+                    setClaimEditItems(next);
+                    setClaimEditTotalAmount(next.reduce((s, it) => s + (it.agreedCost !== undefined ? it.agreedCost : it.estimatedCost), 0));
+                  };
+                  return (
+                    <div key={item.id} style={{ padding: '12px', borderRadius: '8px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <span style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: 'var(--primary)', color: '#fff', fontSize: '11px', fontWeight: 700 }}>증상 {idx + 1}</span>
+                          <span style={{ padding: '2px 8px', borderRadius: '4px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', fontSize: '11px', fontWeight: 700 }}>{item.category}</span>
+                          <strong style={{ fontSize: '13px' }}>{item.symptomName}</strong>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '12px' }}>
+                          <span style={{ color: 'var(--text-muted)', fontSize: '11.5px' }}>출고팀 예상: ₩{(item.estimatedCost || 0).toLocaleString()}</span>
+                          <button type="button" className="btn-secondary" style={{ padding: '2px 6px', fontSize: '10.5px', fontWeight: 700 }} onClick={() => applyItemCost(item.estimatedCost || 0)}>전액인정</button>
+                          <button type="button" className="btn-secondary" style={{ padding: '2px 6px', fontSize: '10.5px', fontWeight: 700 }} onClick={() => applyItemCost(Math.round((item.estimatedCost || 0) * 0.5))}>50%감액</button>
+                          <button type="button" className="btn-secondary" style={{ padding: '2px 6px', fontSize: '10.5px', fontWeight: 700 }} onClick={() => applyItemCost(0)}>무상(0원)</button>
+                          <button type="button" className="btn-secondary" style={{ padding: '2px 6px', fontSize: '10.5px', fontWeight: 700 }} onClick={() => applyItemCost(currentCost + 10000)}>+1만</button>
+                          <button type="button" className="btn-secondary" style={{ padding: '2px 6px', fontSize: '10.5px', fontWeight: 700 }} onClick={() => applyItemCost(currentCost + 30000)}>+3만</button>
+                          <button type="button" className="btn-secondary" style={{ padding: '2px 6px', fontSize: '10.5px', fontWeight: 700 }} onClick={() => applyItemCost(currentCost + 50000)}>+5만</button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <span style={{ fontWeight: 700, fontSize: '11.5px' }}>합의액:</span>
+                            <input
+                              type="number"
+                              value={currentCost}
+                              onChange={e => applyItemCost(Number(e.target.value) || 0)}
+                              style={{ width: '105px', padding: '4px 8px', fontSize: '12px', fontWeight: 700, textAlign: 'right' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      {item.memo && <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>출고팀 증상 메모: {item.memo}</div>}
+                      {item.photos && item.photos.length > 0 && (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px', marginTop: '4px' }}>
+                          {item.photos.slice(0, 2).map((url, pIdx) => (
+                            <div
+                              key={pIdx}
+                              onClick={() => setPreviewPhotoUrl(url)}
+                              title="클릭하여 원본 사진 확대"
+                              style={{ height: '145px', borderRadius: '6px', overflow: 'hidden', border: '1px solid var(--border-color)', backgroundColor: '#000', position: 'relative', cursor: 'zoom-in' }}
+                            >
+                              <img src={url} alt={`증빙사진 ${pIdx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                              <span style={{ position: 'absolute', bottom: '6px', right: '6px', padding: '2px 7px', borderRadius: '4px', backgroundColor: 'rgba(0,0,0,0.75)', color: '#fff', fontSize: '10.5px', fontWeight: 700 }}>
+                                사진 {pIdx + 1} (클릭 확대)
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 4. 최종 합의 금액 조정, 명세서 표기명 및 확정 */}
+              <div style={{ padding: '14px', borderRadius: '8px', backgroundColor: 'var(--bg-app)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.4fr 1.6fr', gap: '10px', alignItems: 'end' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>최초 예상 수리비 합계</label>
+                    <div style={{ padding: '7px 10px', borderRadius: '6px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', fontWeight: 700, fontSize: '13px' }}>
+                      ₩{(baseMeta.initialEstimatedAmount || 0).toLocaleString()}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--danger)' }}>최종 합의 수리비 총액 (원)</label>
+                    <input
+                      type="number"
+                      value={claimEditTotalAmount}
+                      onChange={e => setClaimEditTotalAmount(Math.max(0, Math.round(Number(e.target.value) || 0)))}
+                      style={{ padding: '7px 10px', fontSize: '13px', fontWeight: 800, color: 'var(--danger)' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>명세서 청구 항목 표기명</label>
+                    <input
+                      type="text"
+                      value={claimEditDisplayName}
+                      onChange={e => setClaimEditDisplayName(e.target.value)}
+                      placeholder="[입고파손수리비] 관리번호 증상명"
+                      style={{ padding: '7px 10px', fontSize: '12px' }}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <label style={{ fontSize: '11px', fontWeight: 700, color: 'var(--text-muted)' }}>영업사원 협상 및 조정 사유 메모</label>
+                    <input
+                      type="text"
+                      value={claimEditMemo}
+                      onChange={e => setClaimEditMemo(e.target.value)}
+                      placeholder="고객 협의 조정 사유 입력"
+                      style={{ padding: '7px 10px', fontSize: '12px' }}
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', paddingTop: '8px', borderTop: '1px solid var(--border-color)' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    style={{ padding: '6px 14px', fontSize: '12px' }}
+                    onClick={() => setSelectedClaimRcv(null)}
+                  >
+                    닫기
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isClaimBusy}
+                    className="btn-secondary"
+                    style={{ padding: '6px 14px', fontSize: '12px', fontWeight: 700 }}
+                    onClick={async () => {
+                      setIsClaimBusy(true);
+                      try {
+                        await updateReceivableClaimNegotiation({
+                          receivableId: selectedClaimRcv.id,
+                          agreedAmount: claimEditTotalAmount,
+                          negotiationStatus: baseMeta.negotiationStatus === 'SENT_TO_CUSTOMER' ? 'SENT_TO_CUSTOMER' : 'PENDING_NEGOTIATION',
+                          defectItems: claimEditItems,
+                          negotiationMemo: claimEditMemo,
+                          displayName: claimEditDisplayName
+                        });
+                        showToast('수리비 조정 금액 및 메모가 임시 저장되었습니다.');
+                        setSelectedClaimRcv(null);
+                      } catch (err: any) {
+                        showErrorModal(err?.message || '저장 실패');
+                      } finally {
+                        setIsClaimBusy(false);
+                      }
+                    }}
+                  >
+                    조정 금액 저장 (협상중)
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isClaimBusy}
+                    className="btn-primary"
+                    style={{ padding: '6px 16px', fontSize: '12px', fontWeight: 800, backgroundColor: '#059669', borderColor: '#059669' }}
+                    onClick={async () => {
+                      setIsClaimBusy(true);
+                      try {
+                        await updateReceivableClaimNegotiation({
+                          receivableId: selectedClaimRcv.id,
+                          agreedAmount: claimEditTotalAmount,
+                          negotiationStatus: 'AGREED',
+                          defectItems: claimEditItems,
+                          negotiationMemo: claimEditMemo,
+                          displayName: claimEditDisplayName
+                        });
+                        showToast(`최종 합의 수리비(₩${claimEditTotalAmount.toLocaleString()})가 확정되어 당월 청구 대상에 반영되었습니다.`);
+                        setSelectedClaimRcv(null);
+                      } catch (err: any) {
+                        showErrorModal(err?.message || '최종 합의 처리 실패');
+                      } finally {
+                        setIsClaimBusy(false);
+                      }
+                    }}
+                  >
+                    <CheckCircle size={13} /> 최종 합의 완료 (당월 청구 연동)
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* 촬영 사진 원본 확대 라이트박스 */}
+            {previewPhotoUrl && (
+              <div
+                onClick={() => setPreviewPhotoUrl(null)}
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  backgroundColor: 'rgba(0, 0, 0, 0.88)',
+                  zIndex: 10001,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  padding: '24px',
+                  cursor: 'zoom-out'
+                }}
+              >
+                <img
+                  src={previewPhotoUrl}
+                  alt="불량 증빙 원본 사진"
+                  style={{ maxWidth: '92vw', maxHeight: '84vh', objectFit: 'contain', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.2)' }}
+                />
+                <div style={{ marginTop: '12px', color: '#fff', fontSize: '13px', fontWeight: 700 }}>
+                  화면을 클릭하면 닫힙니다
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {toastMessage && (
         <div style={{
           position: 'fixed',
