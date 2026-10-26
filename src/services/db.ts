@@ -1451,8 +1451,20 @@ export interface Asset {
   memo?: string;
   safetyInspectionUrl?: string;
   preDeliveryChecklistUrl?: string;
+  assetNature?: 'PHYSICAL' | 'VIRTUAL';
   createdAt: string;
   updatedAt: string;
+}
+
+/** 실물/가상 자산 판별 헬퍼 (assetNature 컬럼, 자산번호 '가상' 표기, memo 내 '가상' 여부 통합 판정) */
+export function isVirtualAsset(a?: Partial<Asset> | null): boolean {
+  if (!a) return false;
+  if (a.assetNature === 'VIRTUAL') return true;
+  if ((a as any).isVirtual === true) return true;
+  if (a.assetNo && String(a.assetNo).includes('가상')) return true;
+  if ((a as any).managementNo && String((a as any).managementNo).includes('가상')) return true;
+  if (a.assetNature === 'PHYSICAL') return false;
+  return Boolean(a.memo && String(a.memo).includes('가상'));
 }
 
 /**
