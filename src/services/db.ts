@@ -1394,7 +1394,7 @@ export interface Asset {
   manufacturer?: string;
   manufactureYear?: string; // 제조년도 (예: 2024)
   ownerType: 'OWNED' | 'RENTED'; // 당사자산 / 임차자산
-  status: 'AVAILABLE' | 'ASSIGNED' | 'RENTED' | 'REPAIRING' | 'RENTED_RETURNED' | 'SOLD' | 'LOST' | 'DISPOSED';
+  status: 'AVAILABLE' | 'ASSIGNED' | 'OUTBOUND_INSPECTION' | 'AWAITING_TRANSPORT' | 'RENTED' | 'REPAIRING' | 'RENTED_RETURNED' | 'SOLD' | 'LOST' | 'DISPOSED';
 
   // IT 실물 자산 실장 하드웨어 커스텀 스펙 (확장/업그레이드)
   ramConfig?: string; // 예: "16GB (8GB*2)", "32GB (온보드 16GB + 슬롯1 16GB)"
@@ -1679,7 +1679,7 @@ export interface ContractAsset {
   contractId: string;
   assetId?: string;
   expectedModel?: string;
-  status?: 'RENTED' | 'RETURNED' | 'ASSIGNED' | 'SOLD' | string;
+  status?: 'RENTED' | 'RETURNED' | 'ASSIGNED' | 'OUTBOUND_INSPECTION' | 'AWAITING_TRANSPORT' | 'SOLD' | string;
   actualReturnDate?: string;
   inRegisteredAt?: string;   // 💡 전산 입고 처리 일시 (ISO String)
   monthlyRentalFee: number;
@@ -1687,6 +1687,7 @@ export interface ContractAsset {
   salePrice?: number; // 💡 자산 매각 계약 시 매각 공급가액
   startDate: string;
   endDate: string;
+  firstStartDate?: string; // 💡 최초개시일 (현장 최초 투입일)
   predecessorContractId?: string;
   predecessorContractAssetId?: string;
   createdAt: string;
@@ -2046,7 +2047,10 @@ export interface Delivery {
   siteMasterId?: string; // 🏛️ 헌장 1.5 Strict N:M 물리 현장 단일 진실 원천 ID
   assetIds?: string; // 대상 장비 ID 목록 (콤마 구분)
   type: 'OUTBOUND' | 'INBOUND' | 'EXCHANGE' | 'MOVEMENT' | 'RETURN'; // OUTBOUND: 출고, INBOUND: 회수, EXCHANGE: 단일 교환(왕복) 배차
-  dispatchCategory?: '출고' | '입고' | '반납' | '정비' | '이동' | '교환'; // 배차 세부 유형
+  dispatchCategory?: '출고' | '입고' | '반납' | '정비' | '이동' | '교환' | '경유/합짐'; // 배차 세부 유형
+  bundleGroupId?: string | null; // 🔗 경유/합짐 묶음 배차 그룹 ID
+  bundleOrder?: number | null; // 🔢 묶음 내 처리(방문) 순서 (1, 2, 3...)
+  originalDispatchCategory?: '출고' | '입고' | '반납' | '정비' | '이동' | '교환' | null; // 묶기 전 원래 배차구분 백업
   status: DeliveryStatus; // 배차 4단계 진행상태 (PENDING: 배차전, DISPATCHED: 배차완료, DELIVERED: 운송완료, CANCELLED: 배차취소)
   requestDate: string;
   scheduledDate?: string;

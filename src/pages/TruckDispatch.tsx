@@ -2707,7 +2707,8 @@ export const TruckDispatch: React.FC = () => {
     setSelectedDelivery(d);
     setIsEditUnlocked(false); // 💡 새로 선택 시 기본 잠금(readOnly) 적용!
 
-    let defaultCat: '출고' | '입고' | '반납' | '정비' | '이동' | '교환' = d.dispatchCategory || (d.type === 'EXCHANGE' ? '교환' : d.type === 'OUTBOUND' ? '출고' : d.type === 'RETURN' || d.type === 'INBOUND' ? '반납' : '출고');
+    const rawCat = d.dispatchCategory === '경유/합짐' ? (d.originalDispatchCategory || '출고') : d.dispatchCategory;
+    let defaultCat: '출고' | '입고' | '반납' | '정비' | '이동' | '교환' = rawCat || (d.type === 'EXCHANGE' ? '교환' : d.type === 'OUTBOUND' ? '출고' : d.type === 'RETURN' || d.type === 'INBOUND' ? '반납' : '출고');
     setDispatchCategory(defaultCat);
 
     setLoadingDate(d.loadingDate || todayStr);
