@@ -6293,22 +6293,11 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     );
 
     if (remainingSourceCAs.length === 0) {
-      if (isSameDayImmediateMove) {
-        const anyOtherCAsInSource = db.contractAssets.filter(ca => ca.contractId === sourceContract.id && ca.id !== sourceCA.id);
-        if (anyOtherCAsInSource.length === 0) {
-          db.updateRow<Contract>('contracts', sourceContract.id, {
-            status: 'CANCELLED',
-            endDate: relocationDate,
-            updatedAt: nowIso
-          });
-        }
-      } else {
-        db.updateRow<Contract>('contracts', sourceContract.id, {
-          status: 'COMPLETED',
-          endDate: sourceEndDate,
-          updatedAt: nowIso
-        });
-      }
+      db.updateRow<Contract>('contracts', sourceContract.id, {
+        status: 'COMPLETED',
+        endDate: isSameDayImmediateMove ? relocationDate : sourceEndDate,
+        updatedAt: nowIso
+      });
     } else {
       const maxRemainingEndDate = remainingSourceCAs.map(ca => ca.endDate).filter(Boolean).sort().pop();
       if (maxRemainingEndDate && sourceContract.endDate !== maxRemainingEndDate) {
@@ -6344,7 +6333,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       destinationContract = db.insertRow<Contract>('contracts', {
         contractNo: newContractNo,
         customerId: sourceContract.customerId,
-        customerName: sourceContract.customerName,
         contactId: sourceContract.contactId,
         siteId: targetSiteId,
         startDate: relocationStartDate,
@@ -6353,10 +6341,8 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         statementClosingDay: sourceContract.statementClosingDay,
         paymentDueDay: sourceContract.paymentDueDay,
         paymentDueMonthOffset: sourceContract.paymentDueMonthOffset,
-        freightBillingStandard: sourceContract.freightBillingStandard,
         lateInterestRate: sourceContract.lateInterestRate || 0,
         salespersonId: sourceContract.salespersonId,
-        salespersonName: sourceContract.salespersonName,
         status: 'ACTIVE',
         predecessorContractId: sourceContract.id,
         predecessorContractNo: sourceContract.contractNo,
