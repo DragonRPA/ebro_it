@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { db, supabase, isSystemDeveloperUser, PAYMENT_REVERSAL_ENABLED, isActivePayment, isActiveDepositLink, Tenant, TenantWorkplace, TenantYard, TenantBusinessType, TenantBankAccount, OFFICIAL_STAMP_BASE64, User, Department, MenuPermission, createMenuPermission, CustomRole, RolePermission, Customer, CustomerContact, CustomerSite, SiteMaster, Product, Asset, Consumable, ConsumableLog, ConsumableLot, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingType, BillingDetail, CustomStatementItem, Receivable, InboundClaimDefectItem, ClaimNegotiationStatus, InboundDefectClaimMeta, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, OfficialMailConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, TransportNegotiation, SubleaseNegotiation, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, EquipmentManual, StandardOption, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart, SaleContractTerms, StocktakingAudit, StocktakingAuditItem, CollectedPart, PrintStation, PrintQueueItem, logPrivacyAccess, ErrorReport, ErrorReportAttachment, ErrorReportStatus, ErrorReportSeverity, ErrorReportCategory, ApprovalRule, RuleConsensus, ApprovalPayload, MonthlyIncomeStatement, SalesJournal, AsRouteEventType, AsPartsSourcingType, AsRouteLog } from '../services/db';
-import { recordAsRouteStep } from '../services/asRouteTrackingService';
+import { db, supabase, isSystemDeveloperUser, PAYMENT_REVERSAL_ENABLED, isActivePayment, isActiveDepositLink, Tenant, TenantWorkplace, TenantYard, TenantBusinessType, TenantBankAccount, OFFICIAL_STAMP_BASE64, User, Department, MenuPermission, createMenuPermission, CustomRole, RolePermission, Customer, CustomerContact, CustomerSite, SiteMaster, Product, Asset, Consumable, ConsumableLog, ConsumableLot, ConsumablePurchaseRequest, MechanicConsumableStock, Contract, ContractAsset, ContractHistory, Delivery, Billing, BillingType, BillingDetail, CustomStatementItem, Receivable, InboundClaimDefectItem, ClaimNegotiationStatus, InboundDefectClaimMeta, Payment, PaymentDepositLink, Repair, RepairConsumable, Todo, BankTransaction, BankMatchingRule, BankAccountInitialBalance, AssetInOutLog, OfficialMailConfig, Vendor, CashFlowSnapshot, OutboundInspection, TransportCompany, TransportDriver, TransportNegotiation, SubleaseNegotiation, DepreciationLog, PurchaseSettlement, PurchaseSettlementItem, SettlementPaymentLog, ExternalLease, PurchaseSettlementType, PurchaseSettlementStatus, findCustomerByNormalizedName, AnnualLeaveQuota, LeaveUsage, OvertimeRecord, PayrollClosing, InspectionChecklistItem, EquipmentManual, StandardOption, InboundDefectDetail, PrepaidTransaction, DelinquencyActionLog, LegalNoticeLog, LegalNoticeTemplate, calculateAssetDepreciation, FieldAsTicket, FieldAsPartUsed, FieldAsCollectedPart, CorporateVehicle, VehicleOperationLog, VehicleFuelLog, RepairPartUsed, RepairCollectedPart, SaleContractTerms, StocktakingAudit, StocktakingAuditItem, CollectedPart, PrintStation, PrintQueueItem, logPrivacyAccess, ErrorReport, ErrorReportAttachment, ErrorReportStatus, ErrorReportSeverity, ErrorReportCategory, ApprovalRule, RuleConsensus, ApprovalPayload, MonthlyIncomeStatement, DepositStatus, DEPOSIT_STATUS_LABELS } from '../services/db';
 import { resolveReceivableClaimMeta, saveLocalClaimMetaCache, lookupRecentInboundInfoByAsset } from '../utils/inboundDefectClaimHelper';
 import { useApproval } from '../hooks/useApproval';
 import { enqueuePrintJob as serviceEnqueuePrintJob, registerPrintStation as serviceRegisterPrintStation, deletePrintStation as serviceDeletePrintStation, retryPrintJob as serviceRetryPrintJob, cancelPrintJob as serviceCancelPrintJob } from '../services/printQueueService';
@@ -9,7 +8,7 @@ import { PrintSuccessModal } from '../components/PrintSuccessModal';
 import { getAllSystemMenuIds, normalizeMenuId } from '../config/menu_config';
 import { getRoleTemplatePermission } from '../config/role_templates';
 import { broadcastWorkNotification } from '../utils/workNotificationService';
-import { issueHandoverTask, clearHandoverTasks, findActiveTasksForUser, checkAndIssuePackageResendTask, reconcileCompletedTodosInDb } from '../utils/taskHandoverPipeline';
+import { issueHandoverTask, clearHandoverTasks, findActiveTasksForUser, checkAndIssuePackageResendTask } from '../utils/taskHandoverPipeline';
 import { resolveSiteDetailedAddress } from '../utils/nativeLauncher';
 import { emailService } from '../services/email';
 import { sortCustomersByName } from '../utils/hangulSearch';
@@ -17,9 +16,7 @@ import { getDomainMode } from '../utils/domainRouter';
 import { fetchCentralTenants, saveCentralTenant, deleteCentralTenant, fetchCentralEquipmentManuals } from '../services/centralDb';
 import { hashPassword, verifyPassword, encryptSecret, decryptSecret, signSessionUser, verifySessionUser, parseSessionUser, safeJsonParse, maskSalaryForRole } from '../utils/cryptoVault';
 import { isCurrentDeviceAuthorizedForDeveloper } from '../utils/hardwareVault';
-import { calculatePaidOptionBillingItems, mergeOptionPricesIntoSpecs } from '../types/siteOption';
 import { isDemoMode, DEMO_DEFAULT_ADMIN_USER } from '../services/demoMode';
-import { syncTenantPolicyToAgent } from '../services/agentService';
 
 export interface AssetSaleItem {
   assetId: string;
@@ -47,12 +44,10 @@ export interface SmartDispatchData {
   customerName: string;
   siteName: string;
   siteAddress: string;
-  salespersonId?: string;
   salespersonName?: string;
   salespersonPhone?: string;
   siteContactName: string;
   siteContactPhone: string;
-  siteContactPosition?: string;
   siteContactEmail: string;
   billingContactName: string;
   billingContactPhone: string;
@@ -60,20 +55,34 @@ export interface SmartDispatchData {
   taxBillEmail: string;
   loadingTime: string;
   unloadingTime: string;
-  equipments: { modelName: string; qty: number; monthlyRate?: number; dailyRate?: number; monthlyRentalFee?: number; dailyRentalFee?: number }[];
+  equipments: {
+    modelName: string;
+    qty: number;
+    monthlyRate?: number;
+    dailyRate?: number;
+    monthlyRent?: number;
+    dailyRent?: number;
+    monthlyRentalFee?: number;
+    dailyRentalFee?: number;
+    unitPrice?: number;
+    vga?: string;
+    ram?: string;
+    ssd?: string;
+    os?: string;
+    swList?: string[];
+    customSpecNote?: string;
+    customSwNote?: string;
+  }[];
   paidOptions?: string;
-  paidOptionPrices?: Record<string, number>; // 🌟 출고 요청 시 1회성 변경 유상옵션 단가 (현장 기본 단가는 마스터 기본 단가 유지)
-  paidOptionUnits?: Record<string, '월' | '대' | '건' | '수량'>; // 🌟 출고 요청 시 1회성 변경 유상옵션 청구조건
-  paidOptionQtys?: Record<string, number>; // 🌟 출고 요청 시 유상옵션 수량 (1대당 수량 또는 직접 수량)
   protection?: string;
   attachments?: string;
-  checkedSpecs?: Record<string, any>;
+  checkedSpecs?: Record<string, boolean>;
   saveOptionsToSite?: boolean; // 🌟 옵션 변경 시 현장 마스터 저장 여부 (false: 이번 출고만 1회성 적용, true: 현장 마스터 갱신)
   isSetAsCustomerDefault?: boolean;
   applyToAllSites?: boolean;
   closingDay?: string;
   paymentDay?: string;
-  siteMasterId?: string; // 🌟 물리 현장 ID (헌장 1.5 Strict N:M)
+  siteMasterId?: string; // 🌟 물리 현장(SiteMaster) ID (헌장 1.5 Strict N:M)
   note: string;
   rawText?: string;
 }
@@ -238,9 +247,6 @@ interface AppContextType {
   deleteStandardOption: (id: string) => Promise<void>;
   monthlyIncomeStatements: MonthlyIncomeStatement[];
   saveMonthlyIncomeStatement: (stmt: MonthlyIncomeStatement) => Promise<MonthlyIncomeStatement>;
-  salesJournals: SalesJournal[];
-  saveSalesJournal: (journal: Omit<SalesJournal, 'id' | 'createdAt'> & { id?: string }) => Promise<SalesJournal>;
-  deleteSalesJournal: (id: string) => Promise<void>;
   
   // Asset Mutators
   changeAssetStatus: (assetId: string, status: Asset['status'], extraData?: Partial<Asset>) => Promise<void>;
@@ -286,21 +292,13 @@ interface AppContextType {
   clearEvidenceFileUrls: (ids: string[]) => Promise<void>;  // Storage 삭제 후 DB URL 초기화
   updateEvidenceFileUrls: (updates: { id: string; url: string }[]) => Promise<void>; // Storage 삭제 후 Drive URL로 교체
   
-  // AS 기사 차량별 이동재고
-  mechanicConsumableStocks: MechanicConsumableStock[];
-  transferConsumableToMechanic: (mechanicId: string, consumableId: string, quantity: number, memo?: string) => Promise<void>;
-  returnConsumableToHq: (mechanicId: string, consumableId: string, quantity: number, memo?: string, isDefective?: boolean, disposition?: 'REBUILD' | 'SCRAP' | 'VENDOR_WARRANTY') => Promise<void>;
-  transferConsumableBetweenMechanics: (fromMechanicId: string, toMechanicId: string, consumableId: string, quantity: number, memo?: string) => Promise<void>;
-
-  // 재고실사 & 고품 관리
+  // 재고실사(Stocktaking Audit)
   stocktakingAudits: StocktakingAudit[];
   stocktakingAuditItems: StocktakingAuditItem[];
-  collectedParts: CollectedPart[];
-  createStocktakingAudit: (targetType: 'HQ' | 'VEHICLE', mechanicId?: string, memo?: string) => Promise<StocktakingAudit>;
+  createStocktakingAudit: (targetType?: 'HQ' | 'VEHICLE', mechanicId?: string, memo?: string) => Promise<StocktakingAudit>;
   updateStocktakingItem: (auditId: string, itemId: string, actualQty: number, diffReason?: StocktakingAuditItem['diffReason'], note?: string) => Promise<void>;
   confirmStocktakingAudit: (auditId: string) => Promise<void>;
   cancelStocktakingAudit: (auditId: string) => Promise<void>;
-  processCollectedPart: (partId: string, actionStatus: 'IN_PROCESS' | 'COMPLETED', actionMemo?: string) => Promise<void>;
 
   // 현장 AS 관리
   fieldAsTickets: FieldAsTicket[];
@@ -326,31 +324,13 @@ interface AppContextType {
     degradationScore?: number;
     durationMinutes?: number;
     spentManHours?: number;
-    assetId?: string;
-    assetNo?: string;
-    modelName?: string;
-    visitDate?: string;
   }) => Promise<void>;
   createRevisitAsTicket: (parentTicketId: string, revisitDate: string, revisitReason: string, mechanicId?: string) => Promise<FieldAsTicket>;
   importBandAsHistory: (records: any[]) => Promise<number>;
   logFieldAsTimelineEvent: (ticketId: string, eventType: 'CALL_MADE' | 'TRANSIT_START' | 'ARRIVED' | 'COMPLETED', detail?: string) => Promise<void>;
-  recordAsRouteEvent: (params: {
-    eventType: AsRouteEventType;
-    ticketId?: string;
-    nextTicketId?: string;
-    nextSiteCustomName?: string;
-    sourcingType?: AsPartsSourcingType;
-    sourcingTargetName?: string;
-    partName?: string;
-    revisitDate?: string;
-    memo?: string;
-    mechanicId?: string;
-    mechanicName?: string;
-  }) => Promise<AsRouteLog>;
   
   // Contract Mutators
-  createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => Promise<Contract>;
-  rescindContract: (params: { contractId: string; reason: string; freightOption: 'NONE' | 'CUSTOMER' | 'OURS'; customerFreightAmount?: number }) => Promise<void>;
+  createContract: (contractData: Omit<Contract, 'id' | 'createdAt' | 'updatedAt' | 'contractNo'>, assetsList: { assetId?: string; expectedModel?: string; monthlyRentalFee: number; dailyRentalFee: number }[]) => Promise<void>;
   extendContract: (contractId: string, newEndDate: string, description: string) => Promise<void> | void;
   shortenContract: (contractId: string, newEndDate: string, description: string) => Promise<void> | void;
   succeedContract: (contractId: string, successorCustomerId: string, successorContactId: string, successorSiteId: string, successionDate: string, description: string, selectedAssetIds?: string[]) => Promise<void> | void;
@@ -378,33 +358,13 @@ interface AppContextType {
     reason?: string;
   }) => Promise<void>;
   
-  // 장비 할당 및 출고전 교체 / 할당 취소 / 출고요청 취소
+  // 장비 할당 및 출고전 교체 / 할당 취소
   assignAssetToContract: (contractAssetId: string, assetId: string) => Promise<void>;
   batchAssignAssetsToContract: (pairs: { contractAssetId: string; assetId: string }[]) => Promise<void>;
   unassignAssetFromContract: (contractAssetId: string) => Promise<void>;
   batchUnassignAssetsFromContract: (contractAssetIds: string[]) => Promise<void>;
   exchangeOutboundAsset: (contractAssetId: string, oldAssetId: string, newAssetId: string, reason?: string, markOldAsRepairing?: boolean, customPenaltyScore?: number) => Promise<void>;
   saveSmartDispatch: (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => Promise<{ success: boolean; requiresConfirm?: boolean; missingFields?: string[]; errorMessage?: string; contractId?: string; contractNo?: string }>;
-  cancelOutboundRequest: (deliveryId: string, cancelReason?: string) => Promise<{ success: boolean; errorMessage?: string }>;
-  deleteCancelledOutboundRequests: (deliveryIds?: string[]) => Promise<{ success: boolean; deletedCount: number; errorMessage?: string }>;
-  updateOutboundRequestPricing: (params: {
-    deliveryId: string;
-    allowCompletedModify?: boolean;
-    equipments?: { contractAssetIds?: string[]; modelName: string; qty: number; monthlyRate: number; dailyRate: number }[];
-    equipmentRates?: { modelName: string; monthlyRate: number; dailyRate: number }[];
-    paidOptions?: string;
-    protection?: string;
-    attachments?: string;
-    checkedSpecs?: Record<string, any>;
-    paidOptionPrices?: Record<string, number>;
-    paidOptionUnits?: Record<string, '월' | '대' | '건' | '수량'>;
-    paidOptionQtys?: Record<string, number>;
-    loadingDate?: string;
-    loadingTimeSlot?: string;
-    unloadingDate?: string;
-    unloadingTimeSlot?: string;
-    reason?: string;
-  }) => Promise<{ success: boolean; errorMessage?: string }>;
   saveSmartReturn: (data: SmartReturnData) => Promise<any>;
   
   // Todos & Executive Directives
@@ -432,13 +392,13 @@ interface AppContextType {
   saveCustomStatementForBilling: (billingId: string, data: { reason: string; items: CustomStatementItem[]; originalSummary?: string; approvalStatus?: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED'; approvalRequestId?: string }) => Promise<void>;
   removeCustomStatementForBilling: (billingId: string) => Promise<void>;
   toggleTenantCustomBillingStatement: (tenantId: string, enabled: boolean) => Promise<void>;
-  toggleTenantContractTradeOutbound: (tenantId: string, enabled: boolean) => Promise<void>;
   splitBillingAbsoluteAmount: (billingId: string, splitAmount: number) => Promise<string>;
   approveBilling: (billingId: string) => Promise<void>; // UNPAID → REQUESTED (거래명세서 발송)
   cancelBilling: (billingId: string, refund?: boolean) => Promise<void>; // 환불=true, 비환불=false(기본)
   addReceivable: (data: Omit<Receivable, 'id' | 'createdAt' | 'updatedAt'>) => string;
   registerInboundDefectClaimReceivable: (payload: {
     existingReceivableId?: string;
+    repairId?: string;
     assetId?: string;
     assetNo: string;
     modelName?: string;
@@ -484,6 +444,15 @@ interface AppContextType {
   }) => Promise<void> | void;
   cancelPayment: (paymentId: string) => Promise<void>;  // 수납 취소 + PDL 연쇄 삭제 + Billing 롤백 + 선수금 환원
   cancelAllPaymentsForBilling: (billingId: string) => Promise<void>; // 청구서 전체 수납 일괄 취소 및 롤백
+  // 🛡️ IT 렌탈 보증금(가수금) 라이프사이클 및 상계/반환
+  confirmContractDepositPayment: (contractId: string, paidAmount: number, paidDate: string, bankTransactionId?: string, memo?: string) => Promise<void>;
+  offsetDepositForBilling: (billingId: string, contractId: string, offsetAmount: number, offsetDate: string, memo?: string) => Promise<void>;
+  settleContractDepositAndComplete: (
+    contractId: string,
+    settleDate: string,
+    refundAccountInfo?: { bank: string; account: string; holder: string },
+    memo?: string
+  ) => Promise<{ success: boolean; totalOffsetAmount: number; refundAmount: number; updatedBillingsCount: number }>;
   saveBankDeposit: (data: Omit<BankTransaction, 'id' | 'createdAt' | 'withdrawAmount'>) => void;  // 통장입금 등록/수정
   deleteBankDeposit: (txId: string) => void;  // 통장입금 삭제 (연결 수납 없을 때만)
   uploadBankTransactions: (txs: Omit<BankTransaction, 'id' | 'createdAt'>[]) => void;
@@ -608,7 +577,7 @@ interface AppContextType {
   historyStack: Array<{ tab: string; payload?: any }>;
   historyIndex: number;
 
-  // 🛡️ 전자결재 파이프라인
+  // 🛡️ 전자결재 파이프라인 (Approval Engine)
   fetchRuleForEvent: (eventCode: string) => Promise<{ rule: ApprovalRule | null; consensus: RuleConsensus[] }>;
   createApprovalRequest: (
     ruleId: string,
@@ -655,9 +624,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return (typeof window !== 'undefined' ? localStorage.getItem('erp_current_tenant_id') : null) || db.currentTenant?.id || 'tenant-giyeonlift';
   });
 
-  const currentTenant = isDemoMode()
-    ? ((tenants && tenants.length > 0 ? tenants.find(t => t.id === 'giyeun' || (t.subdomain || '').toLowerCase() === 'awp-demo' || (t.tenantCode || '').toLowerCase() === 'ebro_awp' || (t.displayName || '').toLowerCase().includes('e-bro')) : null) || db.currentTenant)
-    : ((tenants && tenants.length > 0 ? (tenants.find(t => t.id === currentTenantId || t.tenantCode === currentTenantId) || tenants.find(t => t.isDefault) || tenants[0]) : null) || db.currentTenant);
+  const currentTenant = (tenants && tenants.length > 0 ? (tenants.find(t => t.id === currentTenantId || t.tenantCode === currentTenantId) || tenants.find(t => t.isDefault) || tenants[0]) : null) || db.currentTenant;
 
   const setCurrentTenantId = (id: string) => {
     if (typeof window !== 'undefined') {
@@ -861,13 +828,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [vehicleFuelLogs, setVehicleFuelLogs] = useState<VehicleFuelLog[]>([]);
   const [stocktakingAudits, setStocktakingAudits] = useState<StocktakingAudit[]>([]);
   const [stocktakingAuditItems, setStocktakingAuditItems] = useState<StocktakingAuditItem[]>([]);
-  const [collectedParts, setCollectedParts] = useState<CollectedPart[]>([]);
-  const [mechanicConsumableStocks, setMechanicConsumableStocks] = useState<MechanicConsumableStock[]>([]);
   const [printStations, setPrintStations] = useState<PrintStation[]>([]);
   const [printQueue, setPrintQueue] = useState<PrintQueueItem[]>([]);
   const [errorReports, setErrorReports] = useState<ErrorReport[]>(() => db.errorReports || []);
   const [monthlyIncomeStatements, setMonthlyIncomeStatements] = useState<MonthlyIncomeStatement[]>(() => db.monthlyIncomeStatements || []);
-  const [salesJournals, setSalesJournals] = useState<SalesJournal[]>(() => db.salesJournals || []);
 
 
   // Navigation / Routing states with In-App History (최대 30단계 뒤로/앞으로가기)
@@ -1091,7 +1055,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       db.awaitPendingWrites().catch(err => console.error("BillingDetails cleanup error:", err));
     }
 
-    // 💡 헌장 1.2 & 5.2 준수: 계약/배차가 존재하지 않는 고아 출고검수의뢰 자동 소탕 & DB 동기 삭제
+    // 💡 헌장 1.2 & 5.2 준수: 계약/배차가 존재하지 않는 고아 출고검수의뢰(outboundInspections) 자동 소탕 & DB 동기 삭제
     if (db.contracts.length > 0) {
       const validContractIds = new Set(db.contracts.map(c => c.id));
       const validDeliveryIds = new Set(db.deliveries.map(d => d.id));
@@ -1103,239 +1067,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         orphanInspections.forEach(i => db.deleteRow('outboundInspections', i.id));
         db.awaitPendingWrites().catch(err => console.error("Orphan inspections cleanup error:", err));
       }
-
-      // 💡 헌장 1.1 & 1.2 준수: 취소된 출고 요청(status === 'CANCELLED')에 묶여 잔류하던 검수/체결슬롯 자동 정리 및 자산 임대가능(AVAILABLE) 원복
-      const activeCaIdsFromActiveDeliveries = new Set<string>();
-      db.deliveries.forEach(d => {
-        if (d.status === 'CANCELLED') return;
-        if (!d.cargoItems) return;
-        try {
-          const parsed = JSON.parse(d.cargoItems);
-          if (Array.isArray(parsed)) {
-            parsed.forEach((ci: any) => {
-              if (Array.isArray(ci?.contractAssetIds)) {
-                ci.contractAssetIds.forEach((id: string) => {
-                  if (id) activeCaIdsFromActiveDeliveries.add(id);
-                });
-              }
-            });
-          }
-        } catch {}
-      });
-
-      const cancelledOutbounds = db.deliveries.filter(
-        d => d.status === 'CANCELLED' && (d.type === 'OUTBOUND' || d.type === 'EXCHANGE' || d.dispatchCategory === '출고' || d.dispatchCategory === '교환')
-      );
-      let cancelledCleanupTriggered = false;
-      const candidateRevertAssetIds = new Set<string>();
-      const nowCleanupIso = new Date().toISOString();
-
-      cancelledOutbounds.forEach(deliv => {
-        // 1) 취소된 배차에 직접 연결된 출고검수 레코드 제거
-        const linkedInsps = db.outboundInspections.filter(ins => ins.deliveryId === deliv.id);
-        linkedInsps.forEach(ins => {
-          if (ins.assetId) candidateRevertAssetIds.add(ins.assetId);
-          if (ins.contractAssetId && !activeCaIdsFromActiveDeliveries.has(ins.contractAssetId)) {
-            const caObj = db.contractAssets.find(c => c.id === ins.contractAssetId && (!deliv.contractId || c.contractId === deliv.contractId));
-            if (caObj) {
-              if (caObj.assetId) candidateRevertAssetIds.add(caObj.assetId);
-              db.deleteRow('contractAssets', caObj.id);
-            }
-          }
-          db.deleteRow('outboundInspections', ins.id);
-          cancelledCleanupTriggered = true;
-        });
-
-        // 2) 취소된 배차 cargoItems 내 잔류 contractAssetIds 정리
-        if (deliv.cargoItems) {
-          try {
-            const parsed = JSON.parse(deliv.cargoItems);
-            if (Array.isArray(parsed)) {
-              let hasResidualCaIds = false;
-              parsed.forEach((ci: any) => {
-                if (Array.isArray(ci?.contractAssetIds) && ci.contractAssetIds.length > 0) {
-                  hasResidualCaIds = true;
-                  ci.contractAssetIds.forEach((caId: string) => {
-                    if (!caId || activeCaIdsFromActiveDeliveries.has(caId)) return;
-                    const caObj = db.contractAssets.find(c => c.id === caId && (!deliv.contractId || c.contractId === deliv.contractId));
-                    if (caObj) {
-                      if (caObj.assetId) candidateRevertAssetIds.add(caObj.assetId);
-                      db.deleteRow('contractAssets', caObj.id);
-                      cancelledCleanupTriggered = true;
-                    }
-                  });
-                }
-              });
-              if (hasResidualCaIds) {
-                const cleanedCargo = parsed.map((ci: any) => ({ ...ci, contractAssetIds: [] }));
-                db.updateRow<Delivery>('deliveries', deliv.id, {
-                  cargoItems: JSON.stringify(cleanedCargo),
-                  updatedAt: nowCleanupIso
-                });
-                cancelledCleanupTriggered = true;
-              }
-            }
-          } catch {}
-        }
-      });
-
-      // 3) 취소 슬롯에서 해제된 장비(또는 활성 체결자산이 전혀 없는데 대여중/할당중으로 남은 장비 G14015, G14019 등)를 임대가능(AVAILABLE)으로 복원
-      ['ASSET-0000077', 'ASSET-0000081'].forEach(id => candidateRevertAssetIds.add(id));
-      candidateRevertAssetIds.forEach(assetId => {
-        const stillActiveCa = db.contractAssets.some(
-          ca => ca.assetId === assetId && ca.status !== 'RETURNED' && ca.status !== 'SOLD'
-        );
-        if (!stillActiveCa) {
-          const targetAsset = db.assets.find(a => a.id === assetId);
-          if (targetAsset && (targetAsset.status === 'RENTED' || targetAsset.status === 'ASSIGNED' || targetAsset.status === 'OUTBOUND_INSPECTION' || targetAsset.status === 'AWAITING_TRANSPORT')) {
-            db.updateRow<Asset>('assets', targetAsset.id, {
-              status: 'AVAILABLE',
-              currentCustomerId: null as any,
-              currentSiteId: null as any,
-              contractStart: null as any,
-              contractEnd: null as any,
-              updatedAt: nowCleanupIso
-            });
-            cancelledCleanupTriggered = true;
-          }
-        }
-      });
-
-      if (cancelledCleanupTriggered) {
-        db.awaitPendingWrites().catch(err => console.error("Cancelled outbound cleanup sync error:", err));
-      }
-
-      // 💡 [상차완료 ➔ 하차 예정일 자동 운송완료 및 계약/청구 개시일 동기화]
-      const nowLocal = new Date();
-      const todayLocalStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, '0')}-${String(nowLocal.getDate()).padStart(2, '0')}`;
-      let autoDeliverySyncTriggered = false;
-
-      db.deliveries.forEach(deliv => {
-        if (deliv.status === 'CANCELLED') return;
-        const isLoadedOrDelivered = Boolean(deliv.loadingCompletedAt) || deliv.status === 'DELIVERED' || (deliv.status as string) === 'COMPLETED';
-        if (!isLoadedOrDelivered) return;
-
-        const effUnload = (deliv.unloadingDate || deliv.loadingDate || deliv.scheduledDate || '').slice(0, 10);
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(effUnload)) return;
-
-        // 1) 상차완료 상태에서 하차 예정일이 도래(오늘 이하)한 경우 자동으로 운송완료(DELIVERED) 전환
-        if (deliv.status === 'DISPATCHED' && deliv.loadingCompletedAt && effUnload <= todayLocalStr) {
-          db.updateRow<Delivery>('deliveries', deliv.id, {
-            status: 'DELIVERED',
-            unloadingCompletedAt: effUnload,
-            updatedAt: nowCleanupIso
-          });
-          autoDeliverySyncTriggered = true;
-        } else if (deliv.loadingCompletedAt && deliv.unloadingCompletedAt !== effUnload) {
-          db.updateRow<Delivery>('deliveries', deliv.id, {
-            unloadingCompletedAt: effUnload,
-            updatedAt: nowCleanupIso
-          });
-          autoDeliverySyncTriggered = true;
-        }
-
-        // 2) 출고/교환 배차의 경우 하차 예정일 = 운송 완료일 = 계약 개시일 = 청구 개시일 100% 일치 보장
-        const isOutboundLike =
-          deliv.type === 'OUTBOUND' ||
-          deliv.type === 'EXCHANGE' ||
-          deliv.dispatchCategory === '출고' ||
-          deliv.dispatchCategory === '교환';
-
-        if (isOutboundLike && deliv.contractId) {
-          const targetCaIds = new Set<string>();
-          if (deliv.cargoItems) {
-            try {
-              const parsed = typeof deliv.cargoItems === 'string' ? JSON.parse(deliv.cargoItems) : deliv.cargoItems;
-              if (Array.isArray(parsed)) {
-                parsed.forEach((ci: any) => {
-                  if (Array.isArray(ci?.contractAssetIds)) {
-                    ci.contractAssetIds.forEach((id: string) => {
-                      if (id) targetCaIds.add(id);
-                    });
-                  }
-                });
-              }
-            } catch {}
-          }
-          db.outboundInspections
-            .filter(ins => ins.deliveryId === deliv.id && ins.contractAssetId)
-            .forEach(ins => {
-              if (ins.contractAssetId) targetCaIds.add(ins.contractAssetId);
-            });
-
-          if (targetCaIds.size === 0) {
-            const siblingOutbounds = db.deliveries.filter(
-              d => d.contractId === deliv.contractId && d.status !== 'CANCELLED' && (d.type === 'OUTBOUND' || d.type === 'EXCHANGE')
-            );
-            if (siblingOutbounds.length === 1) {
-              db.contractAssets
-                .filter(ca => ca.contractId === deliv.contractId && ca.status !== 'RETURNED' && ca.status !== 'SOLD')
-                .forEach(ca => targetCaIds.add(ca.id));
-            }
-          }
-
-          targetCaIds.forEach(caId => {
-            const caObj = db.contractAssets.find(c => c.id === caId && c.contractId === deliv.contractId);
-            if (!caObj) return;
-            const loadStr = (deliv.loadingDate || deliv.scheduledDate || '').slice(0, 10);
-            const shouldSyncFirstStart =
-              !caObj.firstStartDate ||
-              caObj.firstStartDate === caObj.startDate ||
-              caObj.firstStartDate === loadStr;
-            if (caObj.startDate !== effUnload || caObj.status === 'AWAITING_TRANSPORT' || (shouldSyncFirstStart && caObj.firstStartDate !== effUnload)) {
-              db.updateRow<ContractAsset>('contractAssets', caObj.id, {
-                status: 'RENTED',
-                startDate: effUnload,
-                ...(shouldSyncFirstStart ? { firstStartDate: effUnload } : {})
-              });
-              autoDeliverySyncTriggered = true;
-            }
-            if (caObj.assetId) {
-              const assetObj = db.assets.find(a => a.id === caObj.assetId);
-              if (assetObj && (assetObj.status === 'RENTED' || assetObj.status === 'AWAITING_TRANSPORT') && assetObj.currentCustomerId && (assetObj.contractStart !== effUnload || assetObj.status !== 'RENTED')) {
-                db.updateRow<Asset>('assets', assetObj.id, {
-                  status: 'RENTED',
-                  contractStart: effUnload
-                });
-                autoDeliverySyncTriggered = true;
-              }
-            }
-          });
-
-          db.assetInOutLogs
-            .filter(l => l.deliveryId === deliv.id && l.type === 'OUTBOUND' && l.eventDate !== effUnload)
-            .forEach(l => {
-              db.updateRow<AssetInOutLog>('asset_inout_logs', l.id, {
-                eventDate: effUnload
-              });
-              autoDeliverySyncTriggered = true;
-            });
-
-          const parentContract = db.contracts.find(c => c.id === deliv.contractId);
-          if (parentContract) {
-            const activeCas = db.contractAssets.filter(
-              c => c.contractId === parentContract.id && c.status !== 'RETURNED' && c.status !== 'SOLD' && c.startDate
-            );
-            const earliestStart = activeCas.map(c => c.startDate).filter(Boolean).sort()[0] || effUnload;
-            const needStatusActive = parentContract.status !== 'COMPLETED' && parentContract.status !== 'ACTIVE' && parentContract.status !== 'EXTENDED';
-            if (parentContract.startDate !== earliestStart || needStatusActive) {
-              db.updateRow<Contract>('contracts', parentContract.id, {
-                startDate: earliestStart,
-                ...(needStatusActive ? { status: 'ACTIVE' } : {}),
-                updatedAt: nowCleanupIso
-              });
-              autoDeliverySyncTriggered = true;
-            }
-          }
-        }
-      });
-
-      if (autoDeliverySyncTriggered) {
-        db.awaitPendingWrites().catch(err => console.error("Auto delivery unloading sync error:", err));
-      }
     }
 
-    // 진짜 개발자 계정만 '개발자'로 정규화 (사장/부사장 등 최고관리자 성명 보존)
+    // 진짜 개발자(admin, sys-admin) 계정만 '개발자'로 정규화 (사장/부사장 등 최고관리자 성명 보존)
     db.users.forEach(u => {
       if (u.loginId === 'admin' || u.id === 'sys-admin') {
         u.name = '개발자';
@@ -1363,14 +1097,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTransportDrivers([...db.transportDrivers]);
     setTransportNegotiations([...db.transportNegotiations]);
     setSubleaseNegotiations([...db.subleaseNegotiations]);
-    // 🧹 원장 상태와 교차 검증하여 이미 처리 완료된 ToDo 자동 상계 정리
-    try {
-      const cleanedTodos = reconcileCompletedTodosInDb();
-      if (cleanedTodos > 0) {
-        db.awaitPendingWrites().catch(() => {});
-      }
-    } catch {}
-
     setBillings([...db.billings]);
     setBillingDetails([...db.billingDetails]);
     setPayments([...db.payments]);
@@ -1408,13 +1134,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setVehicleFuelLogs([...db.vehicleFuelLogs]);
     setStocktakingAudits([...db.stocktakingAudits]);
     setStocktakingAuditItems([...db.stocktakingAuditItems]);
-    setCollectedParts([...db.collectedParts]);
-    setMechanicConsumableStocks([...db.mechanicConsumableStocks]);
     setPrintStations([...db.printStations]);
     setPrintQueue([...db.printQueue]);
     setErrorReports([...(db.errorReports || [])]);
     setMonthlyIncomeStatements([...(db.monthlyIncomeStatements || [])]);
-    setSalesJournals([...(db.salesJournals || [])]);
 
     setCurrentUser(prev => {
       if (prev && (prev.loginId === 'admin' || prev.id === 'sys-admin')) {
@@ -1441,7 +1164,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (centralTenants && centralTenants.length > 0) {
         db.tenants = centralTenants;
         setTenants([...centralTenants]);
-        setOfficialMailConfigs([...db.officialMailConfigs]);
 
         const currentValid = centralTenants.find(t => t.id === currentTenantId || t.tenantCode === currentTenantId);
         if (!currentValid) {
@@ -1494,35 +1216,29 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // 메뉴별 관련 테이블만 Supabase pull (메뉴 전환 시 호출 — 최신 데이터 보장)
   const MENU_TABLE_MAP: Record<string, string[]> = {
-    'dashboard':            ['deliveries', 'contracts', 'contractAssets', 'outboundInspections', 'repairs', 'customers', 'sites', 'vendors', 'contractHistory', 'billings', 'todos', 'assets', 'consumablePurchases', 'purchaseSettlements', 'leaveUsages', 'users', 'departments', 'permissions', 'customRoles', 'rolePermissions'],
+    'dashboard':            ['deliveries', 'contracts', 'billings', 'todos', 'assets', 'users', 'departments', 'permissions', 'customRoles', 'rolePermissions'],
     'delivery':             ['deliveries', 'transportCompanies', 'transportDrivers', 'contracts', 'assets', 'sites', 'siteMasters', 'standardOptions', 'printStations', 'printQueue'],
     'transport_master':     ['transportCompanies', 'transportDrivers'],
-    'field_as':             ['repairs', 'assets', 'products', 'users', 'consumables', 'mechanicConsumableStocks', 'customers', 'sites', 'siteMasters', 'contracts', 'contractAssets', 'vendors'],
-    'as_route_tracking':    ['repairs', 'assets', 'products', 'users', 'customers', 'sites', 'siteMasters', 'contracts', 'contractAssets', 'vendors', 'departments'],
-    'smart_as_request':     ['repairs', 'customers', 'sites', 'siteMasters', 'contracts', 'contractAssets', 'assets', 'products', 'vendors'],
-    'repair':               ['repairs', 'assets', 'consumables', 'repairConsumables', 'mechanicConsumableStocks', 'vendors'],
-    'contract':             ['contracts', 'contractAssets', 'contractHistory', 'customers', 'sites', 'siteMasters', 'standardOptions', 'assets', 'products', 'deliveries'],
+    'smart_as_request':     ['repairs', 'customers', 'sites', 'siteMasters', 'contracts', 'contractAssets', 'assets'],
+    'repair':               ['repairs', 'assets', 'consumables', 'repairConsumables', 'vendors'],
+    'contract':             ['contracts', 'contractAssets', 'contractHistory', 'customers', 'sites', 'siteMasters', 'standardOptions', 'assets'],
     'billing':              ['billings', 'billingDetails', 'payments', 'paymentDepositLinks', 'bankTransactions', 'contracts', 'customers'],
     'customer':             ['customers', 'contacts', 'sites', 'siteMasters', 'standardOptions'],
-    'sales_journal':        ['salesJournals', 'customers', 'users', 'departments'],
-    'site_options':         ['siteMasters', 'sites', 'standardOptions', 'customers', 'contracts', 'assets'],
-    'available_inventory':  ['products', 'assets', 'contracts', 'contractAssets', 'deliveries', 'outboundInspections', 'customers', 'sites', 'contractHistory'],
     'product':              ['products'],
-    'asset':                ['assets', 'products', 'vendors', 'assetInOutLogs'],
-    'acquisition_disposal': ['assets', 'products', 'vendors', 'assetInOutLogs'],
-    'rent_asset':           ['assets', 'products', 'vendors', 'assetInOutLogs', 'deliveries'],
-    'consumable':           ['consumables', 'consumableLogs', 'consumablePurchases', 'vendors', 'mechanicConsumableStocks', 'stocktakingAudits', 'stocktakingAuditItems', 'collectedParts'],
+    'asset':                ['assets', 'products', 'vendors'],
+    'acquisition_disposal': ['assets', 'products', 'vendors'],
+    'rent_asset':           ['assets', 'vendors'],
+    'consumable':           ['consumables', 'consumableLogs', 'consumablePurchases', 'vendors', 'stocktakingAudits', 'stocktakingAuditItems'],
     'consumable_purchase':  ['consumables', 'consumablePurchases', 'vendors'],
-    'consumable_inout':     ['consumables', 'consumableLogs', 'consumablePurchases', 'assets', 'mechanicConsumableStocks'],
-    'consumable_stock':     ['consumables', 'consumableLogs', 'mechanicConsumableStocks', 'stocktakingAudits', 'stocktakingAuditItems', 'collectedParts'],
-    'smart_dispatch':       ['deliveries', 'contracts', 'assets', 'sites', 'siteMasters', 'standardOptions', 'transportCompanies', 'transportDrivers', 'printStations', 'printQueue', 'assetInOutLogs'],
-    'smart_dispatch4':      ['customers', 'sites', 'siteMasters', 'standardOptions', 'contacts', 'contracts', 'contractAssets', 'contractHistory', 'deliveries', 'todos', 'outboundInspections', 'assets', 'products', 'assetInOutLogs'],
+    'consumable_inout':     ['consumables', 'consumableLogs', 'consumablePurchases', 'assets'],
+    'consumable_stock':     ['consumables', 'consumableLogs', 'stocktakingAudits', 'stocktakingAuditItems'],
+    'smart_dispatch':       ['deliveries', 'contracts', 'assets', 'sites', 'siteMasters', 'standardOptions', 'transportCompanies', 'transportDrivers', 'printStations', 'printQueue'],
+    'smart_dispatch4':      ['customers', 'sites', 'siteMasters', 'standardOptions', 'contacts', 'contracts', 'deliveries', 'assets', 'products'],
     'voice_dispatch':       ['customers', 'sites', 'siteMasters', 'standardOptions', 'contacts', 'contracts', 'deliveries', 'assets', 'products'],
-    'smart_return':         ['deliveries', 'contracts', 'assets', 'sites', 'siteMasters', 'standardOptions', 'transportCompanies', 'transportDrivers', 'printStations', 'printQueue', 'assetInOutLogs'],
-    'asset_inout_history':  ['assetInOutLogs', 'assets', 'customers', 'sites', 'contracts', 'contractAssets', 'deliveries', 'outboundInspections'],
-    'daily_inout':          ['assetInOutLogs', 'assets', 'deliveries', 'contracts', 'contractAssets', 'outboundInspections', 'customers', 'sites'],
-    'dispatch_assign':      ['contracts', 'contractAssets', 'assets', 'outboundInspections', 'deliveries', 'customers', 'sites', 'siteMasters', 'standardOptions', 'contractHistory', 'assetInOutLogs'],
-    'outbound_inspections': ['outboundInspections', 'contracts', 'contractAssets', 'assets', 'customers', 'sites', 'siteMasters', 'standardOptions', 'deliveries', 'assetInOutLogs'],
+    'smart_return':         ['deliveries', 'contracts', 'assets', 'sites', 'siteMasters', 'standardOptions', 'transportCompanies', 'transportDrivers', 'printStations', 'printQueue'],
+    'asset_inout_history':  ['assetInOutLogs', 'assets', 'customers'],
+    'dispatch_assign':      ['contracts', 'contractAssets', 'assets', 'outboundInspections', 'customers', 'sites', 'siteMasters', 'standardOptions', 'contractHistory'],
+    'outbound_inspections': ['outboundInspections', 'contracts', 'contractAssets', 'assets', 'customers', 'sites', 'siteMasters', 'standardOptions', 'deliveries'],
     'bank_matching':        ['bankTransactions', 'bankMatchingRules', 'bankInitialBalances', 'paymentDepositLinks', 'payments', 'billings', 'customers', 'purchaseSettlements'],
     'vendors':              ['vendors'],
     'organization':         ['users', 'departments'],
@@ -1555,45 +1271,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     'dev_uploader':         ['contracts', 'contractAssets', 'customers', 'sites', 'siteMasters', 'assets'],
   };
 
-  const inFlightMenuLoadsRef = useRef<Map<string, Promise<void>>>(new Map());
-  const lastMenuLoadAtRef = useRef<Map<string, number>>(new Map());
-
-  const loadTablesForMenu = useCallback(async (menuId: string) => {
+  const loadTablesForMenu = async (menuId: string) => {
     if (!db.isSupabaseConnected()) return;
     const keys = MENU_TABLE_MAP[menuId];
     if (!keys || keys.length === 0) return;
-
-    const existingPromise = inFlightMenuLoadsRef.current.get(menuId);
-    if (existingPromise) {
-      return existingPromise;
+    try {
+      await Promise.all(keys.map(key => db.pullTableFromSupabase(key)));
+      refreshAllData();
+    } catch (err: any) {
+      console.error('loadTablesForMenu error:', err);
+      showErrorModal(err?.message || String(err), '메뉴 데이터 동기화 오류');
     }
-
-    const now = Date.now();
-    const lastLoadedAt = lastMenuLoadAtRef.current.get(menuId) || 0;
-    if (now - lastLoadedAt < 1500) {
-      return;
-    }
-
-    const loadPromise = (async () => {
-      try {
-        await Promise.all(keys.map(key => db.pullTableFromSupabase(key)));
-        lastMenuLoadAtRef.current.set(menuId, Date.now());
-        refreshAllData();
-      } catch (err: any) {
-        console.error('loadTablesForMenu error:', err);
-        showErrorModal(err?.message || String(err), '메뉴 데이터 동기화 오류');
-      } finally {
-        inFlightMenuLoadsRef.current.delete(menuId);
-      }
-    })();
-
-    inFlightMenuLoadsRef.current.set(menuId, loadPromise);
-    return loadPromise;
-  }, []);
+  };
 
 
   useEffect(() => {
-    // Seed 계약 데이터 초기화는 개발 환경에서만 실행
+    // Seed 계약 데이터 초기화는 개발 환경(localhost)에서만 실행
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
       if (!localStorage.getItem('seed_v1_8_dummy_contracts_v2')) {
         localStorage.removeItem('erp_contracts');
@@ -1606,12 +1299,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark';
     if (savedTheme) {
       setTheme(savedTheme);
-      if (document.documentElement.getAttribute('data-mobile-view') !== 'true') {
-        document.documentElement.setAttribute('data-theme', savedTheme);
-      }
+      document.documentElement.setAttribute('data-theme', savedTheme);
     }
     
-    // 🛡️ [세션 위변조 방어 로드]
+    // 🛡️ [세션 위변조 방어 로드 (Tamper-Proof Session Hydration)]
     const normalizeDeveloperIdentity = (u: User): User => {
       if (isSystemDeveloperUser(u)) {
         return {
@@ -1764,7 +1455,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: true };
     }
 
-    // 🌐 플랫폼 최고관리자 도메인 접속 시 일반 계정 차단
+    // 🌐 플랫폼 최고관리자 도메인(admin.ebro.run) 접속 시 일반 계정 차단
     if (getDomainMode() === 'ADMIN') {
       return {
         success: false,
@@ -1772,7 +1463,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
     }
 
-    // 2. 개발 전용 테스트 계정 보장 또는 로컬/원격 DB 사용자 검색
+    // 2. 개발 전용 테스트 계정 보장 (manager, user, mechanic) 또는 로컬/원격 DB 사용자 검색
     let user: User | undefined;
 
     if (cleanId.toLowerCase() === 'manager' && cleanPw === 'mgr123') {
@@ -1810,7 +1501,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       user = db.users.find(matchUser);
 
-      // 4. 로컬 캐시에 없는 경우 (초기 로딩 전 또는 캐시 미반영), Supabase 원격 DB 직접 단건 조회
+      // 4. 로컬 캐시에 없는 경우 (초기 로딩 전 또는 캐시 미반영), Supabase 원격 DB 직접 단건 조회 (Zero Race Condition)
       if (!user && db.isSupabaseConnected() && supabase) {
         try {
           const { data: suUsers } = await supabase
@@ -1881,7 +1572,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       }
 
-      // 🛡️ 평문 비밀번호 자동 SHA-256 해시 업그레이드
+      // 🛡️ 평문 비밀번호 자동 SHA-256 해시 업그레이드 (Zero Plaintext Security)
       if (user.passwordHash && !/^[a-f0-9]{64}$/i.test(user.passwordHash)) {
         const upgradedHash = hashPassword(cleanPw);
         user.passwordHash = upgradedHash;
@@ -1896,8 +1587,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // 7-1. 🏢 [테넌트 구독 만료 및 정지 가드]
-    // 테넌트 상태가 SUSPENDED이거나 구독이 만료되고 유예기간이 지난 경우,
+    // 7-1. 🏢 [테넌트 구독 만료 및 정지 가드 (Tenant Subscription / Suspension Guard)]
+    // 테넌트 상태가 SUSPENDED이거나 구독이 만료(EXPIRED)되고 유예기간(gracePeriodDays)이 지난 경우,
     // 일반 직원의 로그인을 차단하고 명확한 안내 에러 메시지 반환
     const targetTenant = (user as any).tenantId 
       ? (tenants.find(t => t.id === (user as any).tenantId) || currentTenant)
@@ -2068,34 +1759,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const hasPermission = (menuId: string, action: 'view' | 'save'): boolean => {
     if (!currentUser) return false;
 
-    // 0. 퇴사 계정은 전사 모든 메뉴 권한 즉시 전면 차단
+    // 0. 퇴사(RETIRED) 계정은 전사 모든 메뉴 권한 즉시 전면 차단 (Zero-Access Security)
     if (currentUser.status === 'RETIRED') return false;
 
-    // 0-1. 휴직 계정은 변경/저장 권한 원천 차단 (조회만 허용)
+    // 0-1. 휴직(LEAVE_OF_ABSENCE) 계정은 변경/저장(save) 권한 원천 차단 (조회만 허용)
     if (currentUser.status === 'LEAVE_OF_ABSENCE' && action === 'save') return false;
 
-    // 2. 단일 표준 단수형 메뉴 ID로 정규화
+    // 2. 단일 표준(SSOT) 단수형 메뉴 ID로 정규화
     const normMenuId = normalizeMenuId(menuId);
 
-    // 최고관리자 및 시스템 개발자 계정 여부 판정
-    const isDeveloper =
-      isSystemDeveloperUser(currentUser) ||
-      currentUser.loginId === 'admin' ||
-      currentUser.id === 'sys-admin' ||
-      currentUser.id === 'u-1' ||
-      currentUser.name === '개발자' ||
-      currentUser.department === '개발자';
-    const isSuperAdmin = isDeveloper || currentUser.role === 'ADMIN';
+    // 최고관리자(플랫폼/시스템 최고관리자 및 ADMIN 역할) 여부 판정
+    const isSuperAdmin = currentUser.role === 'ADMIN' || currentUser.loginId === 'admin' || currentUser.id === 'sys-admin' || currentUser.id === 'u-1';
 
+    // 0-2. 🏢 [테넌트별 페이지 노출/숨김 격리 (Tenant-level Page Visibility)]
+    // 관리자(currentUser.loginId === 'admin' || currentUser.id === 'sys-admin' || currentUser.role === 'ADMIN')라 할지라도
+    // 테넌트 모드(개별 테넌트 화면)에서는 테넌트의 hiddenPages에 포함된 메뉴는 사이드바, 검색(Ctrl+K), 라우팅에서 100% 숨겨지고 차단된다.
     // 🛡️ [특급 보안] 테넌트가 사용하는 사이트(giyeon.ebro.run 등)에서는 테넌트 관리 메뉴 원천 차단 (오직 admin.ebro.run 전용)
     if (normMenuId === 'tenant_management') {
       return getDomainMode() === 'ADMIN' && isSuperAdmin;
     }
 
-    // 1. 시스템 개발자 계정 및 최고관리자(ADMIN)는 모든 메뉴에 100% 무조건 권한 부여
-    if (isSuperAdmin) return true;
-
-    // 0-2. 🏢 [테넌트별 페이지 노출/숨김 격리 (일반 임직원 대상)]
     if (currentTenant) {
       const rawHidden = Array.isArray(currentTenant.hiddenPages) ? currentTenant.hiddenPages : [];
       const rawAllowed = Array.isArray(currentTenant.allowedPages) ? currentTenant.allowedPages : [];
@@ -2108,42 +1791,32 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return false;
       }
 
-      // 2) allowedPages가 지정되어 있는 경우, 허용 목록에 없는 메뉴는 원천 차단 (대시보드 및 신규 영업일지/가용재고조회/현장정비동선관리 기본 개방 제외, 숨김은 hiddenPages에서 제어)
-      if (
-        normAllowedPages.length > 0 &&
-        normMenuId !== 'dashboard' &&
-        normMenuId !== 'sales_journal' &&
-        normMenuId !== 'available_inventory' &&
-        normMenuId !== 'as_route_tracking' &&
-        !normAllowedPages.includes(normMenuId)
-      ) {
+      // 2) allowedPages가 지정되어 있는 경우, 허용 목록에 없는 메뉴는 원천 차단 (대시보드 제외)
+      if (normAllowedPages.length > 0 && normMenuId !== 'dashboard' && !normAllowedPages.includes(normMenuId)) {
         return false;
       }
     }
 
-    // 2-1. 대시보드 및 가용재고조회는 기본 진입/열람 화면이므로 모든 임직원(영업부, 경영진, 출고팀 등)에게 조회 개방
-    if (normMenuId === 'dashboard' || (normMenuId === 'available_inventory' && action === 'view')) {
+    // 1. 시스템 최고관리자 계정 및 ADMIN 역할 사용자는 모든 메뉴에 100% 무조건 권한 부여 (테넌트 숨김 가드 통과 후)
+    if (isSuperAdmin) return true;
+
+    // 2-1. 대시보드는 기본 진입 화면이므로 모든 임직원에게 조회 개방
+    if (normMenuId === 'dashboard') {
       return true;
     }
 
-    // 3. 사용자 정의 권한 명칭 상속 판정 (역할 기반 자동 상속 최우선 - 매트릭스 설정과 100% 일치)
+    // 2-2. 테넌트 관리는 최고 관리자(ADMIN, admin, sys-admin) 전용 보안 메뉴 (admin.ebro.run 전용)
+    if (normMenuId === 'tenant_management') {
+      return getDomainMode() === 'ADMIN' && isSuperAdmin;
+    }
+
+    // 3. 사용자 정의 권한 명칭(CustomRole) 상속 판정 (역할 기반 자동 상속 최우선 - 매트릭스 설정과 100% 일치)
     if (currentUser.customRoleId) {
       const userRolePerms = rolePermissions.filter(p => p.roleId === currentUser.customRoleId);
       if (userRolePerms.length > 0) {
         const rolePerm = userRolePerms.find(p => normalizeMenuId(p.menuId) === normMenuId);
         if (rolePerm) {
           return action === 'view' ? Boolean(rolePerm.canView) : Boolean(rolePerm.canSave);
-        }
-        if (
-          normMenuId === 'sales_journal' ||
-          normMenuId === 'available_inventory' ||
-          normMenuId === 'as_route_tracking' ||
-          normMenuId.startsWith('trade_') ||
-          normMenuId === 'courier_dispatch'
-        ) {
-          const dept = currentUser.departmentId || currentUser.department;
-          const fallbackRule = getRoleTemplatePermission(currentUser.role, dept, normMenuId, action);
-          if (fallbackRule !== undefined) return fallbackRule;
         }
         return false;
       }
@@ -2158,14 +1831,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return action === 'view' ? Boolean(perm.canView) : Boolean(perm.canSave);
     }
 
-    // 5. 직무 템플릿 기반 자동 상속 판정
+    // 5. 직무 템플릿(RBAC) 기반 자동 상속 판정
     const dept = currentUser.departmentId || currentUser.department;
     const templateRule = getRoleTemplatePermission(currentUser.role, dept, normMenuId, action);
     if (templateRule !== undefined) {
       return templateRule;
     }
 
-    // 6. 엄격한 거부 우선: 정의되지 않은 메뉴는 전면 차단
+    // 6. 엄격한 거부 우선 (Deny-by-Default): 정의되지 않은 메뉴는 전면 차단
     return false;
   };
 
@@ -2287,7 +1960,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // ── 사용자 정의 권한 명칭 및 권한 관리 뮤테이터 ──
+  // ── 사용자 정의 권한 명칭(CustomRole) 및 권한(RolePermission) 관리 뮤테이터 ──
   const saveCustomRole = async (role: CustomRole) => {
     try {
       const now = new Date().toISOString();
@@ -2316,7 +1989,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteCustomRole = async (roleId: string) => {
     try {
-      // 1. 해당 역할의 세부 메뉴 권한 DB 및 로컬 삭제
+      // 1. 해당 역할의 세부 메뉴 권한(role_permissions) DB 및 로컬 삭제
       const targetPerms = db.rolePermissions.filter(p => p.roleId === roleId);
       for (const perm of targetPerms) {
         db.deleteRow('rolePermissions', perm.id);
@@ -2347,7 +2020,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const now = new Date().toISOString();
 
-      // 🛡️ [FK 무결성 보장] role_permissions 저장 전 부모 테이블에 해당 roleId가 반드시 존재하도록 선행 동기화
+      // 🛡️ [FK 무결성 보장] role_permissions 저장 전 부모 테이블(custom_roles)에 해당 roleId가 반드시 존재하도록 선행 동기화
       const existingRoles = db.customRoles && db.customRoles.length > 0 ? [...db.customRoles] : [];
       if (!existingRoles.some(r => r.id === roleId)) {
         existingRoles.push({
@@ -2517,61 +2190,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (existingCust) {
       res = db.updateRow<Customer>('customers', existingCust.id, cust) as Customer;
 
-      // 상호(고객사명) 변경 시 연관 테이블(contracts, deliveries, asset_inout_logs)의 고객사명 참조 자동 동기화
-      if (res.name && existingCust.name !== res.name) {
-        const oldName = existingCust.name;
-        const newName = res.name;
-        const linkedContracts = db.contracts.filter(c => c.customerId === existingCust.id);
-        const linkedContractIds = new Set(linkedContracts.map(c => c.id));
-        linkedContracts.forEach(c => {
-          if (c.customerName !== newName) {
-            db.updateRow<Contract>('contracts', c.id, { customerName: newName });
-          }
-        });
-        const linkedPredContracts = db.contracts.filter(c => c.predecessorCustomerId === existingCust.id && c.predecessorCustomerName !== newName);
-        linkedPredContracts.forEach(c => {
-          db.updateRow<Contract>('contracts', c.id, { predecessorCustomerName: newName });
-        });
-        const linkedDeliveries = db.deliveries.filter(d => (d as any).customerId === existingCust.id || (d.contractId && linkedContractIds.has(d.contractId)) || d.billableCustomerId === existingCust.id);
-        const linkedDeliveryIds = new Set(linkedDeliveries.map(d => d.id));
-        linkedDeliveries.forEach(d => {
-          const patch: Partial<Delivery> = {};
-          if (d.cargoItems) {
-            try {
-              const items = JSON.parse(d.cargoItems);
-              let changed = false;
-              if (Array.isArray(items)) {
-                items.forEach(it => {
-                  if (it?.requestMeta && it.requestMeta.customerName !== newName) {
-                    it.requestMeta.customerName = newName;
-                    changed = true;
-                  }
-                });
-              }
-              if (changed) patch.cargoItems = JSON.stringify(items);
-            } catch { /* ignore */ }
-          }
-          if (d.destinationAddress && d.destinationAddress.startsWith(`${oldName} (`)) {
-            patch.destinationAddress = `${newName}${d.destinationAddress.slice(oldName.length)}`;
-          }
-          if (d.originAddress && d.originAddress.startsWith(`${oldName} (`)) {
-            patch.originAddress = `${newName}${d.originAddress.slice(oldName.length)}`;
-          }
-          if (Object.keys(patch).length > 0) {
-            db.updateRow<Delivery>('deliveries', d.id, patch);
-          }
-        });
-        const linkedInOutLogs = db.assetInOutLogs.filter(l => (l.customerId === existingCust.id || (l.deliveryId && linkedDeliveryIds.has(l.deliveryId))) && l.customerName && !l.customerName.includes('(임차처)') && l.customerName !== newName);
-        linkedInOutLogs.forEach(l => {
-          db.updateRow<AssetInOutLog>('asset_inout_logs', l.id, { customerName: newName });
-        });
-        const linkedJournals = (db.salesJournals || []).filter(j => j.customerId === existingCust.id && j.customerName !== newName);
-        linkedJournals.forEach(j => {
-          db.updateRow<SalesJournal>('salesJournals', j.id, { customerName: newName });
-        });
-      }
-
-      // 고객 정보 보완 완료 시 관련 할 일 자동 상계 처리
+      // 고객 정보 보완 완료 시 관련 할 일(Todo) 자동 상계 처리
       const relatedTodos = db.todos.filter(
         t => t.relatedEntityId === cust.id && t.type === 'MISSING_INFO' && !t.isCompleted
       );
@@ -2610,7 +2229,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetCust = db.customers.find(c => c.id === id);
     const custName = targetCust?.name || id;
 
-    // 1. 고객사에 속한 모든 고객 현장 식별
+    // 1. 고객사에 속한 모든 고객 현장(customer_sites) 식별
     const custSites = db.sites.filter(s => s.customerId === id);
     const custSiteIds = new Set(custSites.map(s => s.id));
 
@@ -2732,7 +2351,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   
   const saveSiteMaster = async (s: Partial<SiteMaster>, options?: { propagateToLinkedSites?: boolean }): Promise<SiteMaster> => {
-    // [헌장 1.5] 옵션 그룹에는 address를 일절 저장하지 않고 현장명(그룹명)과 옵션 정보만 저장
+    // [헌장 1.5] 옵션 그룹(SiteMaster)에는 address를 일절 저장하지 않고 현장명(그룹명)과 옵션 정보만 저장
     const cleanPayload: Partial<SiteMaster> = {
       ...s,
       isActive: true,
@@ -2751,19 +2370,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } as any);
     }
 
-    // 옵션 그룹을 상속받은 연결된 고객현장에 옵션만 일괄 전파 (현장명/주소/운송료청구기준은 절대 덮어쓰지 않음)
+    // 옵션 그룹을 상속받은 연결된 고객현장(CustomerSite)에 옵션만 일괄 전파 (현장명/주소는 절대 덮어쓰지 않음)
     if (options?.propagateToLinkedSites && savedMaster?.id) {
       const linkedSites = db.sites.filter(site => site.siteMasterId === savedMaster.id);
       for (const ls of linkedSites) {
-        const nextCheckedSpecs: Record<string, any> = savedMaster.checkedSpecs ? { ...savedMaster.checkedSpecs } : (ls.checkedSpecs || {});
-        if (ls.checkedSpecs && (ls.checkedSpecs as any).__freightBillingStandard && !nextCheckedSpecs.__freightBillingStandard) {
-          nextCheckedSpecs.__freightBillingStandard = (ls.checkedSpecs as any).__freightBillingStandard;
-        }
         db.updateRow<CustomerSite>('sites', ls.id, {
           paidOptions: savedMaster.paidOptions ?? ls.paidOptions ?? '',
           protection: savedMaster.protection ?? ls.protection ?? 'NONE',
           attachments: savedMaster.attachments ?? ls.attachments ?? '',
-          checkedSpecs: nextCheckedSpecs,
+          checkedSpecs: savedMaster.checkedSpecs ? { ...savedMaster.checkedSpecs } : (ls.checkedSpecs || {}),
           updatedAt: new Date().toISOString(),
         } as any);
       }
@@ -2775,7 +2390,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteSiteMaster = async (id: string) => {
-    // 옵션 그룹 삭제 시 고객 현장 자체는 절대 삭제하지 않고, 참조만 해제함
+    // 옵션 그룹(SiteMaster) 삭제 시 고객 현장(CustomerSite) 자체는 절대 삭제하지 않고, 참조(siteMasterId)만 해제함
     const linkedSites = db.sites.filter(s => s.siteMasterId === id);
     for (const ls of linkedSites) {
       db.updateRow('sites', ls.id, { ...ls, siteMasterId: null } as any);
@@ -2790,7 +2405,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const saveSite = async (site: Omit<CustomerSite, 'id' | 'createdAt'> & { id?: string }) => {
-    // [헌장 1.5] 고객 현장 직접 귀속 및 옵션 그룹 상속
+    // [헌장 1.5] 고객 현장(CustomerSite) 직접 귀속 및 옵션 그룹 상속
     const master = site.siteMasterId ? db.siteMasters.find(m => m.id === site.siteMasterId) : null;
 
     const sitePayload: Partial<CustomerSite> = {
@@ -2834,7 +2449,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteSite = async (id: string): Promise<boolean> => {
     const targetSite = db.sites.find(s => s.id === id);
 
-    // ✅ 고아 레코드 방지: 해당 고객 현장과 연결된 계약 또는 투입 장비가 있으면 삭제 차단
+    // ✅ 고아 레코드 방지: 해당 고객 현장(customer_sites)과 연결된 계약 또는 투입 장비가 있으면 삭제 차단
     const linkedContracts = db.contracts.filter(c => c.siteId === id);
     const linkedAssets = db.assets.filter(a => a.currentSiteId === id);
     if (linkedContracts.length > 0 || linkedAssets.length > 0) {
@@ -3014,18 +2629,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // 🏷️ 전사 표준 옵션 마스터 CUD
   const saveStandardOption = async (optionData: Omit<StandardOption, 'id' | 'createdAt'> & { id?: string }): Promise<StandardOption> => {
-    const sanitizedName = (optionData.name || '').replace(/\s*,\s*/g, '·').trim();
-    const cleanData = { ...optionData, name: sanitizedName };
     let result: StandardOption;
-    if (cleanData.id) {
-      result = db.updateRow<StandardOption>('standardOptions', cleanData.id, {
-        ...cleanData,
+    if (optionData.id) {
+      result = db.updateRow<StandardOption>('standardOptions', optionData.id, {
+        ...optionData,
         updatedAt: new Date().toISOString()
       }) as StandardOption;
     } else {
       const nextId = 'opt_' + Date.now();
       result = db.insertRow<StandardOption>('standardOptions', {
-        ...cleanData,
+        ...optionData,
         id: nextId,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -3061,61 +2674,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved;
   };
 
-  // 📝 영업일지 저장 및 삭제 (Groq LLM 추출 데이터 + 원문 통합 보관)
-  const saveSalesJournal = async (journal: Omit<SalesJournal, 'id' | 'createdAt'> & { id?: string }): Promise<SalesJournal> => {
-    const existing = journal.id ? (db.salesJournals || []).find(j => j.id === journal.id) : null;
-    const nowIso = new Date().toISOString();
-    let saved: SalesJournal;
-    if (existing) {
-      saved = db.updateRow<SalesJournal>('salesJournals', existing.id, {
-        ...journal,
-        updatedAt: nowIso
-      }) as SalesJournal;
-    } else {
-      saved = db.insertRow<SalesJournal>('salesJournals', {
-        ...journal,
-        createdAt: nowIso,
-        updatedAt: nowIso,
-        tenant_id: currentTenant?.id || 'giyeun'
-      }) as SalesJournal;
-    }
-    await db.awaitPendingWrites();
-    refreshAllData();
-    return saved;
-  };
-
-  const deleteSalesJournal = async (id: string): Promise<void> => {
-    db.deleteRow('salesJournals', id);
-    await db.awaitPendingWrites();
-    refreshAllData();
-  };
-
-  const normalizeManufactureYear = (raw?: string | number | null): string => {
-    const trimmed = String(raw ?? '').trim();
-    if (!trimmed) return '';
-    const exactFourDigits = trimmed.match(/^(\d{4})\s*\.?$/);
-    if (exactFourDigits) return `${exactFourDigits[1]}년`;
-    if (/^\d{4}(?!\d)/.test(trimmed) && !trimmed.includes('년')) {
-      return trimmed.replace(/^(\d{4})\s*[.\-/]?\s*/, '$1년 ').trim();
-    }
-    return trimmed;
-  };
-
   const saveAsset = async (asset: Omit<Asset, 'id' | 'createdAt' | 'updatedAt'> & { id?: string }) => {
     let result;
     const existingAsset = asset.id ? db.assets.find(a => a.id === asset.id) : null;
     const isNew = !existingAsset;
-    const resolvedMfg = db.resolveAssetManufacturer(asset.modelName || existingAsset?.modelName, asset.manufacturer || existingAsset?.manufacturer);
-    const resolvedManufactureYear = normalizeManufactureYear(asset.manufactureYear ?? existingAsset?.manufactureYear ?? '');
-    const normalizedAsset = {
-      ...asset,
-      manufacturer: resolvedMfg,
-      manufactureYear: resolvedManufactureYear,
-      yard: asset.yard || existingAsset?.yard || '용인'
-    };
 
     if (existingAsset) {
-      result = db.updateRow<Asset>('assets', existingAsset.id, normalizedAsset as Asset);
+      result = db.updateRow<Asset>('assets', existingAsset.id, asset as Asset);
     } else {
       // 🛡️ [수량 한도 제한 인터셉터]
       const maxAssets = currentTenant?.subscription?.maxAssets;
@@ -3128,14 +2693,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       result = db.insertRow<Asset>('assets', {
-        ...normalizedAsset,
+        ...asset,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       } as Omit<Asset, 'id'>);
     }
 
     if (result) {
-      // 1. 신규 취득 이력 자동 기록
+      // 1. 신규 취득(ACQUISITION) 이력 자동 기록
       if (isNew) {
         db.insertRow<AssetInOutLog>('assetInOutLogs', {
           assetId: result.id,
@@ -3148,7 +2713,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
-      // 2. 자산 매각 이력 자동 기록
+      // 2. 자산 매각(DISPOSAL) 이력 자동 기록
       if (result.status === 'SOLD' && (!existingAsset || existingAsset.status !== 'SOLD')) {
         db.insertRow<AssetInOutLog>('assetInOutLogs', {
           assetId: result.id,
@@ -3186,7 +2751,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       db.updateRow<Asset>('assets', assetId, updatedPayload);
 
-      // 자산 입출고/상태 변동 이력 자동 타임라인 기록
+      // 자산 입출고/상태 변동 이력(assetInOutLogs) 자동 타임라인 기록
       db.insertRow<AssetInOutLog>('assetInOutLogs', {
         assetId: assetId,
         assetNo: targetAsset.assetNo || '',
@@ -3238,24 +2803,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return `${prefix}-${nextSeq}`;
   };
 
-  const getActorDispatchStaffTag = (): string => {
-    if (!currentUser) return '';
-    const matchedUser = db.users.find(u => u.id === currentUser.id) || currentUser;
-    const rawName = (matchedUser.name || '').trim();
-    if (!rawName) return '';
-    const pos = ((matchedUser as any).position || '').trim();
-    const displayName = pos && !rawName.endsWith(pos) ? `${rawName} ${pos}` : rawName;
-    const phone = (matchedUser.phone || '').trim() || '-';
-    return `[배차담당자: ${displayName} (${phone}) | ${matchedUser.id}]`;
-  };
-
-  const appendDispatchStaffTag = (memoText: string): string => {
-    const tag = getActorDispatchStaffTag();
-    const base = (memoText || '').trim();
-    if (!tag || base.includes('[배차담당자:')) return base;
-    return base ? `${base} ${tag}` : tag;
-  };
-
   const saveSmartDispatch = async (data: SmartDispatchData, autoRegister: boolean, onProgress?: (log: string, percent: number) => void) => {
     const notify = async (msg: string, pct: number, delayMs = 180) => {
       if (onProgress) {
@@ -3277,59 +2824,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
     
     // 🛡️ [1. 방어 가드 - Validation Guard]
-    // 현장명은 반드시 100% 정확히 일치(===)해야만 기존 현장으로 매칭하며, 부분/포함 매칭을 원천 차단한다.
+    // 현장 상세 주소와 현장담당자 연락처가 입력값과 기존 DB 모두에 전혀 없는 경우 강력 방어
     const currentCust = customer;
-    const trimmedInputSiteName = (data.siteName || '').trim();
-    const existingSite = currentCust
-      ? db.sites.find(s => s.customerId === currentCust.id && s.name.trim() === trimmedInputSiteName)
-      : null;
+    const existingSite = currentCust ? db.sites.find(s => s.customerId === currentCust.id && (s.name.replace(/\s/g, '') === data.siteName.replace(/\s/g, '') || s.name.includes(data.siteName) || data.siteName.includes(s.name))) : null;
+    const existingContact = currentCust ? db.contacts.find(ct => ct.customerId === currentCust.id && (data.siteContactName ? ct.name.replace(/\s/g, '') === data.siteContactName.replace(/\s/g, '') : true)) : null;
 
-    // 🚫 기존 현장과 100% 일치하지 않는 현장명인데 신규 현장 등록(autoRegister)이 명시되지 않은 경우 입력 원천 차단
-    if (currentCust && !existingSite && !autoRegister) {
-      return {
-        success: false,
-        requiresConfirm: true,
-        missingFields: [`현장: ${trimmedInputSiteName}`],
-        errorMessage: `등록되지 않은 현장명('${trimmedInputSiteName}')입니다. 기존 현장명과 100% 일치하지 않으므로 입력이 제한됩니다. 기존 현장을 정확히 선택하거나 [신규현장 등록]을 통해 현장을 새로 등록해 주십시오.`
-      };
-    }
-
-    const isBlankContactField = (v?: string | null) => {
-      if (!v) return true;
-      const t = String(v).trim();
-      return t === '' || t === '미상' || t === '-' || t === '없음' || t === '미입력';
-    };
-
-    const existingSiteEqContact = existingSite
-      ? ((existingSite.contacts || []).find(c => c && c.isActive !== false && c.contactType === 'EQUIPMENT') || (existingSite.contacts || []).find(c => c && c.isActive !== false))
-      : undefined;
-
-    const existingContact = currentCust ? db.contacts.find(ct => ct.customerId === currentCust.id && (!isBlankContactField(data.siteContactName) ? ct.name.replace(/\s/g, '') === data.siteContactName.replace(/\s/g, '') : true)) : null;
-
-    const effectiveAddress = (!isBlankContactField(data.siteAddress) ? data.siteAddress.trim() : '') || (!isBlankContactField(existingSite?.address) ? existingSite!.address.trim() : '');
-    const effectiveContactName = (!isBlankContactField(data.siteContactName) ? data.siteContactName.trim() : '')
-      || (!isBlankContactField(existingSite?.contactName) ? existingSite!.contactName.trim() : '')
-      || (!isBlankContactField(existingSiteEqContact?.name) ? existingSiteEqContact!.name.trim() : '');
-    const effectivePhone = (!isBlankContactField(data.siteContactPhone) ? data.siteContactPhone.trim() : '')
-      || (!isBlankContactField(existingSite?.contact) ? existingSite!.contact.trim() : '')
-      || (!isBlankContactField(existingSiteEqContact?.contact) ? existingSiteEqContact!.contact.trim() : '')
-      || (!isBlankContactField(existingContact?.contact) ? existingContact!.contact.trim() : '');
-    const effectivePosition = (!isBlankContactField(data.siteContactPosition) ? data.siteContactPosition!.trim() : '')
-      || (!isBlankContactField(existingSiteEqContact?.position) ? existingSiteEqContact!.position!.trim() : '');
-    const effectiveEmail = (!isBlankContactField(data.siteContactEmail) ? data.siteContactEmail.trim() : '')
-      || (!isBlankContactField(existingSite?.email) ? existingSite!.email.trim() : '')
-      || (!isBlankContactField(existingSiteEqContact?.email) ? existingSiteEqContact!.email!.trim() : '');
+    const effectiveAddress = data.siteAddress?.trim() || (existingSite?.address && existingSite.address !== '미상' ? existingSite.address : '');
+    const effectivePhone = data.siteContactPhone?.trim() || (existingSite?.contact && existingSite.contact !== '미상' ? existingSite.contact : '') || (existingContact?.contact && existingContact.contact !== '미상' ? existingContact.contact : '');
 
     if (!effectiveAddress) {
       return {
         success: false,
         errorMessage: `⚠️ [현장 상세 주소 필수 누락]\n\n고객사 '${data.customerName}' / 현장 '${data.siteName}'의 기존 DB에 등록된 주소가 없으며, 현재 입력창에도 주소가 생략되어 있습니다.\n\n배차 기사 운송 및 계약 체결을 위해 현장 상세 주소를 반드시 입력해주세요.`
-      };
-    }
-    if (!effectiveContactName) {
-      return {
-        success: false,
-        errorMessage: `⚠️ [현장 담당자 성명 필수 누락]\n\n고객사 '${data.customerName}' / 현장 '${data.siteName}'의 기존 현장담당자 성명이 미입력(공백) 상태입니다.\n\n현장담당자의 부족한 정보(성명 및 연락처)를 입력해 주시면 해당 현장 정보에 즉시 업데이트됩니다.`
       };
     }
     if (!effectivePhone) {
@@ -3341,10 +2847,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // ⚡ [2. 기존 정보 상속] 누락 필드 자동 승계
     data.siteAddress = effectiveAddress;
-    data.siteContactName = effectiveContactName;
-    data.siteContactPhone = effectivePhone;
-    if (effectivePosition) data.siteContactPosition = effectivePosition;
-    if (effectiveEmail) data.siteContactEmail = effectiveEmail;
+    if (!data.siteContactPhone?.trim()) data.siteContactPhone = effectivePhone;
+    if (!data.siteContactName?.trim() && existingSite?.contactName && existingSite.contactName !== '미상') {
+      data.siteContactName = existingSite.contactName;
+    }
     if (!data.taxBillEmail?.trim() && customer?.repEmail && customer.repEmail !== '미상') {
       data.taxBillEmail = customer.repEmail;
     }
@@ -3436,37 +2942,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
 
       // 담당자 정보 업데이트 및 신규 추가
-      if (data.siteContactName && !isBlankContactField(data.siteContactName)) {
+      if (data.siteContactName) {
         const targetCustomerId = customer.id;
-        const matchedContact = db.contacts.find(ct => ct.customerId === targetCustomerId && ct.name.replace(/\s/g, '') === data.siteContactName.replace(/\s/g, ''))
-          || db.contacts.find(ct => ct.customerId === targetCustomerId && isBlankContactField(ct.name));
+        const matchedContact = db.contacts.find(ct => ct.customerId === targetCustomerId && ct.name.replace(/\s/g, '') === data.siteContactName.replace(/\s/g, ''));
         if (matchedContact) {
-          const contactUpdates: Partial<CustomerContact> = {};
-          if (isBlankContactField(matchedContact.name) && data.siteContactName) {
-            contactUpdates.name = data.siteContactName;
-          }
-          if (data.siteContactPhone && !isBlankContactField(data.siteContactPhone) && data.siteContactPhone !== matchedContact.contact) {
-            contactUpdates.contact = data.siteContactPhone;
-          }
-          if (data.siteContactPosition && !isBlankContactField(data.siteContactPosition) && data.siteContactPosition !== matchedContact.position) {
-            contactUpdates.position = data.siteContactPosition;
-          }
-          if (data.siteContactEmail && !isBlankContactField(data.siteContactEmail) && data.siteContactEmail !== matchedContact.email) {
-            contactUpdates.email = data.siteContactEmail;
-          }
-          if (Object.keys(contactUpdates).length > 0) {
+          if ((data.siteContactPhone && data.siteContactPhone !== '미상' && data.siteContactPhone !== matchedContact.contact) || (data.siteContactEmail && data.siteContactEmail !== '미상' && data.siteContactEmail !== matchedContact.email)) {
             db.updateRow<CustomerContact>('contacts', matchedContact.id, {
-              ...contactUpdates,
+              contact: data.siteContactPhone || matchedContact.contact,
+              email: data.siteContactEmail || matchedContact.email,
               updatedAt: new Date().toISOString()
             });
-            await notify(`👤 [담당자 최신화] 담당자 '${data.siteContactName}' 정보가 최신값으로 업데이트되었습니다.`, 30);
+            await notify(`👤 [담당자 최신화] 담당자 '${data.siteContactName}' 연락처가 최신값으로 업데이트되었습니다.`, 30);
           }
         } else {
           await notify(`👤 [신규 담당자] 현장 담당자 '${data.siteContactName}' 등록 중...`, 30);
           db.insertRow<CustomerContact>('contacts', {
             customerId: targetCustomerId,
             name: data.siteContactName,
-            position: data.siteContactPosition || '현장담당자',
+            position: '현장담당자',
             contact: data.siteContactPhone || '미상',
             email: data.siteContactEmail || '미상',
             createdAt: new Date().toISOString()
@@ -3492,43 +2985,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const finalCustomer = customer;
 
-    // 현장 처리: 고객 산하 현장 매핑 (100% 정확히 일치하는 현장명 === 매칭) 또는 신규 고객현장 등록 (옵션은 CustomerSite에 직접 저장)
-    let site = db.sites.find(s => s.customerId === finalCustomer.id && s.name.trim() === trimmedInputSiteName);
+    // 현장(CustomerSite) 처리: 고객 산하 현장 매핑 또는 신규 고객현장 자동 등록 (옵션은 CustomerSite에 직접 저장)
+    let site = db.sites.find(s => s.customerId === finalCustomer.id && (s.name.replace(/\s/g, '') === data.siteName.replace(/\s/g, '') || s.name.includes(data.siteName) || data.siteName.includes(s.name)));
     const selectedOptionGroup = data.siteMasterId ? db.siteMasters.find(m => m.id === data.siteMasterId) : undefined;
 
     if (!site) {
       await notify(`📍 [2/5 현장 등록] 고객 현장 '${data.siteName}' 등록 중...`, 40);
-      const initialSiteContacts = (!isBlankContactField(data.siteContactName) || !isBlankContactField(data.siteContactPhone))
-        ? [{
-            id: `sc-eq-${Date.now()}`,
-            name: data.siteContactName || '미상',
-            contactType: 'EQUIPMENT' as const,
-            position: data.siteContactPosition || '현장담당자',
-            contact: data.siteContactPhone || '미상',
-            email: !isBlankContactField(data.siteContactEmail) ? data.siteContactEmail : '',
-            isPrimary: true,
-            isActive: true
-          }]
-        : undefined;
-      const isSeboCust = finalCustomer.id === 'CUST-0000022' || String(finalCustomer.bizRegNo || '').replace(/[^0-9]/g, '') === '1188100241';
-      const resolvedTaxInvoiceIssueType: 'FORWARD' | 'REVERSE' =
-        rawData.taxInvoiceIssueType === 'REVERSE'
-          ? 'REVERSE'
-          : rawData.taxInvoiceIssueType === 'FORWARD'
-            ? 'FORWARD'
-            : (finalCustomer.defaultTaxInvoiceIssueType === 'REVERSE' || isSeboCust ? 'REVERSE' : 'FORWARD');
-      const resolvedPaymentMethod: 'CASH' | 'BILL' | 'BOND' =
-        (rawData.paymentMethod === 'BILL' || rawData.paymentMethod === 'BOND')
-          ? rawData.paymentMethod
-          : (finalCustomer.defaultPaymentMethod === 'BILL' || finalCustomer.defaultPaymentMethod === 'BOND' ? finalCustomer.defaultPaymentMethod : 'CASH');
-      const resolvedPaymentTermsNote: string =
-        rawData.paymentTermsNote !== undefined
-          ? String(rawData.paymentTermsNote || '').trim()
-          : String(finalCustomer.defaultPaymentTermsNote || '').trim();
-      const resolvedPaymentDueMonthOffset: number =
-        rawData.paymentDueMonthOffset !== undefined && rawData.paymentDueMonthOffset !== null
-          ? Number(rawData.paymentDueMonthOffset)
-          : (finalCustomer.paymentDueMonthOffset ?? 1);
       site = db.insertRow<CustomerSite>('sites', {
         customerId: finalCustomer.id,
         siteMasterId: selectedOptionGroup?.id || null,
@@ -3538,96 +3000,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         contactName: data.siteContactName || '미상',
         contact: data.siteContactPhone || '미상',
         email: data.siteContactEmail || '미상',
-        contacts: initialSiteContacts,
         billingDay: contractBillingDay,
         statementClosingDay: contractStatementClosingDay,
-        paymentDueMonthOffset: resolvedPaymentDueMonthOffset,
         paymentDueDay: contractPaymentDueDay,
-        paymentMethod: resolvedPaymentMethod,
-        paymentTermsNote: resolvedPaymentTermsNote,
-        freightBillingStandard: rawData.freightBillingStandard === '2/4' ? '2/4' : '3/5',
-        taxInvoiceIssueType: resolvedTaxInvoiceIssueType,
         paidOptions: data.paidOptions !== undefined ? data.paidOptions : (selectedOptionGroup?.paidOptions || finalCustomer.defaultPaidOptions || ''),
         protection: data.protection !== undefined ? data.protection : (selectedOptionGroup?.protection || finalCustomer.defaultProtection || 'NONE'),
         attachments: data.attachments !== undefined ? data.attachments : (selectedOptionGroup?.attachments || finalCustomer.defaultAttachments || ''),
-        checkedSpecs: mergeOptionPricesIntoSpecs(
-          {
-            ...((data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0)
-              ? data.checkedSpecs
-              : (selectedOptionGroup?.checkedSpecs || finalCustomer.defaultCheckedSpecs || {})),
-            __freightBillingStandard: rawData.freightBillingStandard === '2/4' ? '2/4' : '3/5',
-            __taxInvoiceIssueType: resolvedTaxInvoiceIssueType,
-            __paymentMethod: resolvedPaymentMethod,
-            __paymentTermsNote: resolvedPaymentTermsNote
-          },
-          db.standardOptions,
-          data.paidOptionPrices
-        ),
+        checkedSpecs: (data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0)
+          ? data.checkedSpecs
+          : (selectedOptionGroup?.checkedSpecs || finalCustomer.defaultCheckedSpecs || {}),
         createdAt: new Date().toISOString()
       });
     } else {
-      // 기존 고객 현장 정보 최신화 (주소, 담당자, contacts 배열, 마감조건, 현장 옵션/보양/사양)
+      // 기존 고객 현장 정보 최신화 (주소, 담당자, 마감조건, 현장 옵션/보양/사양)
       const siteUpdates: Partial<CustomerSite> = {};
       if (selectedOptionGroup && selectedOptionGroup.id !== site.siteMasterId) {
         siteUpdates.siteMasterId = selectedOptionGroup.id;
       }
-      if (data.siteAddress && !isBlankContactField(data.siteAddress) && data.siteAddress !== site.address) {
+      if (data.siteAddress && data.siteAddress !== '미상' && data.siteAddress !== site.address) {
         siteUpdates.address = data.siteAddress;
       }
-      if (data.siteContactName && !isBlankContactField(data.siteContactName) && data.siteContactName !== site.contactName) {
+      if (data.siteContactName && data.siteContactName !== '미상' && data.siteContactName !== site.contactName) {
         siteUpdates.contactName = data.siteContactName;
       }
-      if (data.siteContactPhone && !isBlankContactField(data.siteContactPhone) && data.siteContactPhone !== site.contact) {
+      if (data.siteContactPhone && data.siteContactPhone !== '미상' && data.siteContactPhone !== site.contact) {
         siteUpdates.contact = data.siteContactPhone;
       }
-      if (data.siteContactEmail && !isBlankContactField(data.siteContactEmail) && data.siteContactEmail !== site.email) {
+      if (data.siteContactEmail && data.siteContactEmail !== '미상' && data.siteContactEmail !== site.email) {
         siteUpdates.email = data.siteContactEmail;
-      }
-
-      // 🌟 [현장담당자 목록(contacts) 1:1 동기화]: 기존 현장의 담당자가 공백이었거나 추가 정보가 입력된 경우 contacts 배열 동시 업데이트
-      if (!isBlankContactField(data.siteContactName) || !isBlankContactField(data.siteContactPhone) || !isBlankContactField(data.siteContactPosition) || !isBlankContactField(data.siteContactEmail)) {
-        const existingContactsList = Array.isArray(site.contacts) ? site.contacts.map(c => ({ ...c })) : [];
-        const eqIdx = existingContactsList.findIndex(c => c.contactType === 'EQUIPMENT');
-        const targetIdx = eqIdx >= 0 ? eqIdx : (existingContactsList.length > 0 && !existingContactsList[0].contactType ? 0 : -1);
-
-        const nextName = !isBlankContactField(data.siteContactName) ? data.siteContactName.trim() : (!isBlankContactField(site.contactName) ? site.contactName.trim() : '');
-        const nextPhone = !isBlankContactField(data.siteContactPhone) ? data.siteContactPhone.trim() : (!isBlankContactField(site.contact) ? site.contact.trim() : '');
-        const nextPos = !isBlankContactField(data.siteContactPosition) ? data.siteContactPosition!.trim() : '';
-        const nextEmail = !isBlankContactField(data.siteContactEmail) ? data.siteContactEmail.trim() : (!isBlankContactField(site.email) ? site.email.trim() : '');
-
-        if (targetIdx >= 0) {
-          const prevEq = existingContactsList[targetIdx];
-          const mergedName = nextName || prevEq.name || '';
-          const mergedPhone = nextPhone || prevEq.contact || '';
-          const mergedPos = nextPos || (!isBlankContactField(prevEq.position) ? prevEq.position! : '현장담당자');
-          const mergedEmail = nextEmail || (!isBlankContactField(prevEq.email) ? prevEq.email! : '');
-          if (mergedName !== prevEq.name || mergedPhone !== prevEq.contact || mergedPos !== prevEq.position || mergedEmail !== prevEq.email || prevEq.isActive === false) {
-            existingContactsList[targetIdx] = {
-              ...prevEq,
-              id: prevEq.id || `sc-eq-${Date.now()}`,
-              name: mergedName,
-              contactType: 'EQUIPMENT',
-              position: mergedPos,
-              contact: mergedPhone,
-              email: mergedEmail,
-              isPrimary: prevEq.isPrimary ?? true,
-              isActive: true
-            };
-            siteUpdates.contacts = existingContactsList;
-          }
-        } else if (nextName || nextPhone) {
-          existingContactsList.unshift({
-            id: `sc-eq-${Date.now()}`,
-            name: nextName || '현장담당자',
-            contactType: 'EQUIPMENT',
-            position: nextPos || '현장담당자',
-            contact: nextPhone || '',
-            email: nextEmail || '',
-            isPrimary: true,
-            isActive: true
-          });
-          siteUpdates.contacts = existingContactsList;
-        }
       }
       if (rawData.closingDay !== undefined) {
         siteUpdates.billingDay = contractBillingDay;
@@ -3638,58 +3038,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (rawData.paymentDay !== undefined || rawData.paymentDueDay !== undefined) {
         siteUpdates.paymentDueDay = contractPaymentDueDay;
       }
-      if (rawData.freightBillingStandard === '2/4' || rawData.freightBillingStandard === '3/5') {
-        const nextFreightStd: '2/4' | '3/5' = rawData.freightBillingStandard;
-        const prevSiteStd = site.freightBillingStandard || (site.checkedSpecs && (site.checkedSpecs as any).__freightBillingStandard);
-        if (prevSiteStd !== nextFreightStd) {
-          siteUpdates.freightBillingStandard = nextFreightStd;
-          siteUpdates.checkedSpecs = {
-            ...(site.checkedSpecs || {}),
-            ...(siteUpdates.checkedSpecs || {}),
-            __freightBillingStandard: nextFreightStd
-          };
-        }
-      }
-      if (rawData.taxInvoiceIssueType === 'FORWARD' || rawData.taxInvoiceIssueType === 'REVERSE') {
-        const nextIssueType: 'FORWARD' | 'REVERSE' = rawData.taxInvoiceIssueType;
-        const prevIssueType = site.taxInvoiceIssueType || (site.checkedSpecs && (site.checkedSpecs as any).__taxInvoiceIssueType);
-        if (prevIssueType !== nextIssueType) {
-          siteUpdates.taxInvoiceIssueType = nextIssueType;
-          siteUpdates.checkedSpecs = {
-            ...(site.checkedSpecs || {}),
-            ...(siteUpdates.checkedSpecs || {}),
-            __taxInvoiceIssueType: nextIssueType
-          };
-        }
-      }
-      if (rawData.paymentDueMonthOffset !== undefined && rawData.paymentDueMonthOffset !== null) {
-        siteUpdates.paymentDueMonthOffset = Number(rawData.paymentDueMonthOffset);
-      }
-      if (rawData.paymentMethod === 'CASH' || rawData.paymentMethod === 'BILL' || rawData.paymentMethod === 'BOND') {
-        const nextMethod: 'CASH' | 'BILL' | 'BOND' = rawData.paymentMethod;
-        const prevMethod = site.paymentMethod || (site.checkedSpecs && (site.checkedSpecs as any).__paymentMethod);
-        if (prevMethod !== nextMethod) {
-          siteUpdates.paymentMethod = nextMethod;
-          siteUpdates.checkedSpecs = {
-            ...(site.checkedSpecs || {}),
-            ...(siteUpdates.checkedSpecs || {}),
-            __paymentMethod: nextMethod
-          };
-        }
-      }
-      if (rawData.paymentTermsNote !== undefined) {
-        const nextNote = String(rawData.paymentTermsNote || '').trim();
-        const prevNote = site.paymentTermsNote ?? ((site.checkedSpecs && (site.checkedSpecs as any).__paymentTermsNote) || '');
-        if (prevNote !== nextNote) {
-          siteUpdates.paymentTermsNote = nextNote;
-          siteUpdates.checkedSpecs = {
-            ...(site.checkedSpecs || {}),
-            ...(siteUpdates.checkedSpecs || {}),
-            __paymentTermsNote: nextNote
-          };
-        }
-      }
-      // 🌟 [헌장 1.5] 옵션/보양/부착물/표준사양은 고객 현장에 직접 저장
+      // 🌟 [헌장 1.5] 옵션/보양/부착물/표준사양은 고객 현장(CustomerSite)에 직접 저장
       if (data.saveOptionsToSite !== false) {
         if (data.paidOptions !== undefined && data.paidOptions !== site.paidOptions) {
           siteUpdates.paidOptions = data.paidOptions;
@@ -3700,22 +3049,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (data.attachments !== undefined && data.attachments !== site.attachments) {
           siteUpdates.attachments = data.attachments;
         }
-        if ((data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0) || (data.paidOptionPrices && Object.keys(data.paidOptionPrices).length > 0)) {
-          const baseSpecsForUpdate = (data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0)
-            ? {
-                ...(site.checkedSpecs?.__optionMeta && typeof site.checkedSpecs.__optionMeta === 'object' ? { __optionMeta: site.checkedSpecs.__optionMeta } : {}),
-                ...data.checkedSpecs,
-                ...(siteUpdates.checkedSpecs?.__freightBillingStandard ? { __freightBillingStandard: siteUpdates.checkedSpecs.__freightBillingStandard } : (site.checkedSpecs?.__freightBillingStandard ? { __freightBillingStandard: site.checkedSpecs.__freightBillingStandard } : {}))
-              }
-            : {
-                ...(site.checkedSpecs || {}),
-                ...(siteUpdates.checkedSpecs || {})
-              };
-          siteUpdates.checkedSpecs = mergeOptionPricesIntoSpecs(
-            baseSpecsForUpdate,
-            db.standardOptions,
-            data.paidOptionPrices
-          );
+        if (data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0) {
+          siteUpdates.checkedSpecs = data.checkedSpecs;
         }
       }
       if (Object.keys(siteUpdates).length > 0) {
@@ -3726,36 +3061,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    // 🌟 고객사 기본 옵션/보양 등록 및 전체 현장 일괄 전파 처리 (1회성 출고 적용 시에는 고객사 기본값 오염 방지)
+    // 🌟 고객사 기본 옵션/보양 등록 및 전체 현장 일괄 전파 처리
     const custOptionUpdates: Partial<Customer> = {};
-    if (rawData.freightBillingStandard === '2/4' || rawData.freightBillingStandard === '3/5') {
-      if (!finalCustomer.defaultFreightBillingStandard) {
-        custOptionUpdates.defaultFreightBillingStandard = rawData.freightBillingStandard;
-        custOptionUpdates.defaultCheckedSpecs = {
-          ...(finalCustomer.defaultCheckedSpecs || {}),
-          __freightBillingStandard: rawData.freightBillingStandard
-        };
-      }
+    if (data.isSetAsCustomerDefault || (!finalCustomer.defaultPaidOptions && data.paidOptions)) {
+      if (data.paidOptions) custOptionUpdates.defaultPaidOptions = data.paidOptions;
     }
-    if (data.saveOptionsToSite !== false) {
-      if (data.isSetAsCustomerDefault || (!finalCustomer.defaultPaidOptions && data.paidOptions)) {
-        if (data.paidOptions) custOptionUpdates.defaultPaidOptions = data.paidOptions;
-      }
-      if (data.isSetAsCustomerDefault || (!finalCustomer.defaultProtection && data.protection)) {
-        if (data.protection) custOptionUpdates.defaultProtection = data.protection;
-      }
-      if (data.isSetAsCustomerDefault || (!finalCustomer.defaultAttachments && data.attachments)) {
-        if (data.attachments) custOptionUpdates.defaultAttachments = data.attachments;
-      }
-      if (data.isSetAsCustomerDefault || (!finalCustomer.defaultCheckedSpecs && ((data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0) || (data.paidOptionPrices && Object.keys(data.paidOptionPrices).length > 0)))) {
-        const baseCustSpecs = (data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0)
-          ? {
-              ...(finalCustomer.defaultCheckedSpecs?.__optionMeta && typeof finalCustomer.defaultCheckedSpecs.__optionMeta === 'object' ? { __optionMeta: finalCustomer.defaultCheckedSpecs.__optionMeta } : {}),
-              ...data.checkedSpecs
-            }
-          : (finalCustomer.defaultCheckedSpecs || {});
-        custOptionUpdates.defaultCheckedSpecs = mergeOptionPricesIntoSpecs(baseCustSpecs, db.standardOptions, data.paidOptionPrices);
-      }
+    if (data.isSetAsCustomerDefault || (!finalCustomer.defaultProtection && data.protection)) {
+      if (data.protection) custOptionUpdates.defaultProtection = data.protection;
+    }
+    if (data.isSetAsCustomerDefault || (!finalCustomer.defaultAttachments && data.attachments)) {
+      if (data.attachments) custOptionUpdates.defaultAttachments = data.attachments;
+    }
+    if (data.isSetAsCustomerDefault || (!finalCustomer.defaultCheckedSpecs && data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0)) {
+      if (data.checkedSpecs) custOptionUpdates.defaultCheckedSpecs = data.checkedSpecs;
     }
     if (Object.keys(custOptionUpdates).length > 0) {
       db.updateRow<Customer>('customers', finalCustomer.id, { ...custOptionUpdates, updatedAt: new Date().toISOString() });
@@ -3765,17 +3083,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (data.applyToAllSites) {
       const allSites = db.sites.filter(s => s.customerId === finalCustomer.id);
       for (const s of allSites) {
-        const baseSiteSpecs = (data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0)
-          ? {
-              ...(s.checkedSpecs?.__optionMeta && typeof s.checkedSpecs.__optionMeta === 'object' ? { __optionMeta: s.checkedSpecs.__optionMeta } : {}),
-              ...data.checkedSpecs
-            }
-          : (s.checkedSpecs || {});
         db.updateRow<CustomerSite>('sites', s.id, {
           paidOptions: data.paidOptions !== undefined ? data.paidOptions : s.paidOptions,
           protection: data.protection !== undefined ? data.protection : s.protection,
           attachments: data.attachments !== undefined ? data.attachments : s.attachments,
-          checkedSpecs: mergeOptionPricesIntoSpecs(baseSiteSpecs, db.standardOptions, data.paidOptionPrices),
+          checkedSpecs: (data.checkedSpecs && Object.keys(data.checkedSpecs).length > 0) ? data.checkedSpecs : s.checkedSpecs,
           updatedAt: new Date().toISOString()
         });
       }
@@ -3796,7 +3108,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const finalSite = site!;
 
-    // ⚠️ FK 제약 방지: 현장 레코드가 Supabase 원격 DB에 100% 저장·반영 완료된 후에만 contracts 생성이 가능하도록 동기 대기!
+    // ⚠️ FK 제약 방지: 현장(CustomerSite) 레코드가 Supabase 원격 DB에 100% 저장·반영 완료된 후에만 contracts 생성이 가능하도록 동기 대기!
     try {
       await db.awaitPendingWrites();
     } catch (err: any) {
@@ -3806,61 +3118,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const existingUsers = db.users;
-    // 💡 계약 영업담당자 결정 원칙:
-    // 1) 최초 출고 요청자(ownerId / salespersonId / salespersonName)가 명시되어 있으면 해당 직원을 최우선 적용
-    // 2) 없으면 현재 출고 요청을 입력한 로그인 사용자(currentUser)를 적용
-    // 3) 기존 계약에 장비 추가 편입 시에는 기존 계약의 최초 영업담당자(existingActiveContract.salespersonId)를 절대 덮어쓰지 않고 유지함
-    const explicitRequesterId = rawData.salespersonId || rawData.requesterId || rawData.ownerId;
-    const explicitRequesterByName = (!explicitRequesterId && data.salespersonName)
-      ? existingUsers.find(u => u.name.trim() === data.salespersonName!.trim())?.id
-      : undefined;
-    const candidateSalespersonId = explicitRequesterId || explicitRequesterByName || currentUser?.id;
-    const isSalespersonValid = candidateSalespersonId && existingUsers.some(u => u.id === candidateSalespersonId);
-    const validSalespersonId = isSalespersonValid ? candidateSalespersonId : (existingUsers.find(u => u.id === 'u-1')?.id || existingUsers[0]?.id || undefined);
+    const isSalespersonValid = currentUser?.id && existingUsers.some(u => u.id === currentUser.id);
+    const validSalespersonId = isSalespersonValid ? currentUser.id : (existingUsers.find(u => u.id === 'u-1')?.id || existingUsers[0]?.id || undefined);
 
     const extractDate = (dateTimeStr?: string): string => {
       if (!dateTimeStr) return '';
       const match = dateTimeStr.match(/\d{4}-\d{2}-\d{2}/);
       return match ? match[0] : '';
     };
-    const targetStartDate = extractDate(data.unloadingTime) || extractDate(data.loadingTime) || new Date().toISOString().split('T')[0];
+    const targetStartDate = extractDate(data.loadingTime) || extractDate(data.unloadingTime) || new Date().toISOString().split('T')[0];
 
-    // ── 계약 단일성 원칙: 명시 지정 계약 ➔ 동일 (고객사 + 현장) 활성 계약 ➔ 동일 현장 종료 계약 탐색 ──
-    const explicitTargetContract = (!rawData.forceNewContract && rawData.targetContractId)
-      ? db.contracts.find(c => c.id === String(rawData.targetContractId) && c.customerId === finalCustomer.id)
-      : undefined;
-    const existingActiveContract = rawData.forceNewContract
-      ? undefined
-      : (
-          explicitTargetContract ||
-          db.contracts.find(c =>
-            c.customerId === finalCustomer.id &&
-            c.siteId === finalSite.id &&
-            (c.status === 'ACTIVE' || c.status === 'EXTENDED')
-          ) ||
-          db.contracts.find(c =>
-            c.customerId === finalCustomer.id &&
-            c.siteId === finalSite.id &&
-            c.status === 'COMPLETED'
-          )
-        );
+    // ── 계약 단일성 원칙: 동일 (고객사 + 현장) 활성 계약 탐색 ──
+    const existingActiveContract = db.contracts.find(c => 
+      c.customerId === finalCustomer.id && 
+      c.siteId === finalSite.id && 
+      (c.status === 'ACTIVE' || c.status === 'EXTENDED')
+    );
 
     let contract: Contract;
 
-    const resolvedFreightStd: '2/4' | '3/5' = rawData.freightBillingStandard === '2/4' ? '2/4' : '3/5';
-
     if (existingActiveContract) {
-      // 1) 기존 계약이 존재할 경우: 신규 계약을 파편화하여 생성하지 않고 기존 계약에 장비 편입!
-      if (existingActiveContract.status === 'COMPLETED' || existingActiveContract.freightBillingStandard !== resolvedFreightStd) {
-        const reactivated = db.updateRow<Contract>('contracts', existingActiveContract.id, {
-          status: 'ACTIVE',
-          freightBillingStandard: resolvedFreightStd,
-          updatedAt: new Date().toISOString(),
-        });
-        contract = reactivated || { ...existingActiveContract, status: 'ACTIVE', freightBillingStandard: resolvedFreightStd };
-      } else {
-        contract = existingActiveContract;
-      }
+      // 1) 기존 활성 계약이 존재할 경우: 신규 계약을 파편화하여 생성하지 않고 기존 계약에 장비 편입!
+      contract = existingActiveContract;
       await notify(`📄 [3/5 기존 계약 편입] 기존 계약(${contract.contractNo})에 신규 장비 편입 중...`, 55);
 
       // 📜 [헌장 1.2] 발생 사건 무누락 DB 저장: 기존 계약에 장비 추가 편입 이력 등록
@@ -3873,7 +3152,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createdAt: new Date().toISOString()
       });
     } else {
-      // 2) 기존 계약이 없을 경우: 최초 발생월 기준 채번하여 신규 계약 생성
+      // 2) 기존 계약이 없을 경우: 최초 발생월(YYMM) 기준 채번하여 신규 계약 생성
       const nextContractNo = generateNextContractNo(targetStartDate);
 
       await notify(`📄 [3/5 계약 생성] 임대차 계약서 작성 중 (${nextContractNo})...`, 55);
@@ -3889,7 +3168,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         endDate: '', 
         billingDay: contractBillingDay,
         statementClosingDay: contractStatementClosingDay,
-        freightBillingStandard: resolvedFreightStd,
         lateInterestRate: contractLateInterestRate,
         paymentDueDay: contractPaymentDueDay,
         salespersonId: validSalespersonId,
@@ -3898,7 +3176,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: new Date().toISOString()
       });
 
-      // ⚠️ 외래키 제약조건 위반 방지: 부모 contract 레코드가 Supabase 원격 DB에 먼저 100% 생성되도록 1차 동기 대기!
+      // ⚠️ 외래키(Foreign Key) 제약조건 위반 방지: 부모 contract 레코드가 Supabase 원격 DB에 먼저 100% 생성되도록 1차 동기 대기!
       try {
         await db.awaitPendingWrites();
       } catch (err: any) {
@@ -3924,151 +3202,113 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     await notify('🏗️ [4/5 장비 매핑] 계약 투입 장비 모델 및 단가 자동 상속 중...', 80);
 
     const custContractIds = db.contracts.filter(c => c.customerId === finalCustomer.id).map(c => c.id);
-    const dData = data as any;
-    const effectivePaidOptionsForDelivery: string = dData.paidOptions !== undefined ? String(dData.paidOptions) : '';
-    const effectivePaidOptionPricesForDelivery: Record<string, number> | undefined =
-      dData.paidOptionPrices && typeof dData.paidOptionPrices === 'object' && Object.keys(dData.paidOptionPrices).length > 0
-        ? dData.paidOptionPrices
-        : undefined;
-    const effectivePaidOptionUnitsForDelivery: Record<string, '월' | '대' | '건' | '수량'> | undefined =
-      dData.paidOptionUnits && typeof dData.paidOptionUnits === 'object' && Object.keys(dData.paidOptionUnits).length > 0
-        ? dData.paidOptionUnits
-        : undefined;
-    const effectivePaidOptionQtysForDelivery: Record<string, number> | undefined =
-      dData.paidOptionQtys && typeof dData.paidOptionQtys === 'object' && Object.keys(dData.paidOptionQtys).length > 0
-        ? dData.paidOptionQtys
-        : undefined;
-    const cargoItemsPayload: {
-      modelName: string;
-      count: number;
-      contractAssetIds: string[];
-      paidOptions: string;
-      paidOptionPrices?: Record<string, number>;
-      paidOptionUnits?: Record<string, '월' | '대' | '건' | '수량'>;
-      paidOptionQtys?: Record<string, number>;
-      monthlyRentalFee?: number;
-      dailyRentalFee?: number;
-      requestMeta?: {
-        requesterId?: string;
-        requesterName?: string;
-        requestedAt: string;
-        context?: string;
-        customerName: string;
-        siteName: string;
-        siteAddress: string;
-        siteContactName: string;
-        siteContactPhone: string;
-        siteContactEmail?: string;
-        loadingTime: string;
-        unloadingTime: string;
-        vehicleType: string;
-        paidBy?: string;
-        protection?: string;
-        attachments?: string;
-        staggeredMemo?: string;
-        retrievalAssetIds?: string[];
-        closingDay?: number | string;
-        statementClosingDay?: number | string;
-        paymentDueDay?: number | string;
-        freightBillingStandard?: '2/4' | '3/5';
-        userNote?: string;
-        fullNote?: string;
-        paidOptionPrices?: Record<string, number>;
-        paidOptionUnits?: Record<string, '월' | '대' | '건' | '수량'>;
-        paidOptionQtys?: Record<string, number>;
-      };
-    }[] = [];
 
-    const requestSnapshotMeta = {
-      requesterId: currentUser?.id,
-      requesterName: currentUser?.name || '본사 담당자',
-      requestedAt: new Date().toISOString(),
-      context: dData.context || (dData.type === 'EXCHANGE' ? 'EXCHANGE' : 'ADDITIONAL'),
-      customerName: finalCustomer.name,
-      siteName: finalSite.name,
-      siteAddress: finalSite.address || data.siteAddress || '',
-      siteContactName: data.siteContactName || finalSite.contactName || '',
-      siteContactPhone: data.siteContactPhone || finalSite.contact || '',
-      siteContactEmail: (data.siteContactEmail && data.siteContactEmail !== '미상' ? data.siteContactEmail : '') || (finalSite.email && finalSite.email !== '미상' ? finalSite.email : '') || '',
-      loadingTime: data.loadingTime || '',
-      unloadingTime: data.unloadingTime || '',
-      vehicleType: dData.vehicleType || '5T',
-      paidBy: dData.paidBy || '',
-      protection: dData.protection || '',
-      attachments: dData.attachments || '',
-      staggeredMemo: dData.staggeredMemo || '',
-      retrievalAssetIds: dData.retrievalAssetIds || [],
-      closingDay: contractBillingDay,
-      statementClosingDay: contractStatementClosingDay,
-      paymentDueDay: contractPaymentDueDay,
-      freightBillingStandard: (dData.freightBillingStandard === '2/4' ? '2/4' : '3/5') as '2/4' | '3/5',
-      userNote: dData.userNote !== undefined ? String(dData.userNote).trim() : '',
-      fullNote: data.note || '',
-      ...(effectivePaidOptionPricesForDelivery ? { paidOptionPrices: effectivePaidOptionPricesForDelivery } : {}),
-      ...(effectivePaidOptionUnitsForDelivery ? { paidOptionUnits: effectivePaidOptionUnitsForDelivery } : {}),
-      ...(effectivePaidOptionQtysForDelivery ? { paidOptionQtys: effectivePaidOptionQtysForDelivery } : {})
-    };
-
-    // 다중 PC 동시 출고 요청 시 CAST- / DLV- 채번 충돌 방지를 위해 최신 슬롯 및 배차 테이블을 원격 DB에서 선행 동기화
-    if (db.isSupabaseConnected()) {
-      try {
-        await Promise.all([
-          db.pullTableFromSupabase('contractAssets'),
-          db.pullTableFromSupabase('deliveries'),
-          db.pullTableFromSupabase('outboundInspections')
-        ]);
-      } catch (pullErr) {
-        console.warn('saveSmartDispatch pre-insert sync warning:', pullErr);
-      }
-    }
+    let totalContractPureRentalFee = 0;
 
     data.equipments.forEach((eq) => {
       const eqData = eq as any;
       const count = Math.max(1, Math.floor(Number(eq.qty) || 1));
 
-      // 영업사원이 입력한 단가를 그대로 적용 (미입력/0원 입력 시에도 임의의 과거 계약 단가나 하드코딩된 추정 단가로 덮어쓰지 않고 0원 유지)
-      const rawMonthly = eqData.monthlyRate ?? eqData.monthlyRent ?? eqData.monthlyRentalFee ?? 0;
+      // 1. 사용자가 직접 입력/지정한 단가 최우선 반영 (헌장 1.2, 1.4 - 입력값 누락 덮어쓰기 방지)
+      const rawMonthly = eqData.monthlyRate ?? eqData.monthlyRent ?? eqData.monthlyRentalFee ?? eqData.unitPrice;
       const rawDaily = eqData.dailyRate ?? eqData.dailyRent ?? eqData.dailyRentalFee;
-      const determinedMonthly = Math.max(0, Number(rawMonthly) || 0);
-      const determinedDaily = rawDaily !== undefined && rawDaily !== null && String(rawDaily).trim() !== ''
-        ? Math.max(0, Number(rawDaily) || 0)
+
+      let determinedMonthly = (rawMonthly !== undefined && rawMonthly !== null && rawMonthly !== '' && !isNaN(Number(rawMonthly)))
+        ? Math.max(0, Number(rawMonthly))
+        : 0;
+      let determinedDaily = (rawDaily !== undefined && rawDaily !== null && rawDaily !== '' && !isNaN(Number(rawDaily)))
+        ? Math.max(0, Number(rawDaily))
         : (determinedMonthly > 0 ? Math.round(determinedMonthly / 30) : 0);
 
-      const eqCreatedCaIds: string[] = [];
+      // 2. 단가 미입력(0원) 시 고객사의 동일 모델 최근 계약 단가 자동 상속 (헌장 2.2)
+      if (determinedMonthly === 0 && finalCustomer?.id) {
+        const recentCustCA = db.contractAssets
+          .filter(ca => custContractIds.includes(ca.contractId) && ca.expectedModel === eq.modelName && ca.monthlyRentalFee > 0)
+          .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))[0];
+        if (recentCustCA) {
+          determinedMonthly = recentCustCA.monthlyRentalFee;
+          determinedDaily = recentCustCA.dailyRentalFee || Math.round(determinedMonthly / 30);
+        }
+      }
+
+      // 3. 미입력 시 자산/제품 마스터 동일 모델의 표준 월 렌탈료 상속
+      if (determinedMonthly === 0) {
+        const prod = db.products?.find((p: any) => p.modelName === eq.modelName);
+        const peerAsset = db.assets.find(a => a.modelName === eq.modelName && (a.monthlyRentalFee || a.dailyRentalFee));
+        if (peerAsset?.monthlyRentalFee) {
+          determinedMonthly = peerAsset.monthlyRentalFee;
+          determinedDaily = peerAsset.dailyRentalFee || Math.round(determinedMonthly / 30);
+        } else if (prod?.category) {
+          // IT 렌탈 카테고리별 표준 기본 월단가
+          const cat = String(prod.category).toUpperCase();
+          if (cat === 'SERVER') determinedMonthly = 350000;
+          else if (cat === 'DESKTOP') determinedMonthly = 60000;
+          else if (cat === 'LAPTOP') determinedMonthly = 70000;
+          else if (cat === 'MONITOR') determinedMonthly = 20000;
+          else if (cat === 'PRINTER') determinedMonthly = 120000;
+          else determinedMonthly = 50000;
+          determinedDaily = Math.round(determinedMonthly / 30);
+        }
+      }
+
+      // 4. 모델명 키워드 기반 IT 기본 단가 추정 (AWP 고소작업대 하드코딩 완전 퇴출)
+      if (determinedMonthly === 0) {
+        const m = (eq.modelName || '').toUpperCase();
+        if (m.includes('SERVER') || m.includes('서버') || m.includes('XEON')) determinedMonthly = 350000;
+        else if (m.includes('NOTEBOOK') || m.includes('LAPTOP') || m.includes('노트북') || m.includes('THINKPAD') || m.includes('GRAM') || m.includes('MACBOOK')) determinedMonthly = 70000;
+        else if (m.includes('MONITOR') || m.includes('모니터') || m.includes('VIEW') || m.includes('24인치') || m.includes('27인치')) determinedMonthly = 20000;
+        else if (m.includes('PRINTER') || m.includes('복합기') || m.includes('프린터')) determinedMonthly = 120000;
+        else if (m.includes('DESKTOP') || m.includes('데스크탑') || m.includes('PC') || m.includes('본체')) determinedMonthly = 60000;
+        else determinedMonthly = 50000; // IT 표준 기본단가
+        determinedDaily = Math.round(determinedMonthly / 30);
+      }
+
+      totalContractPureRentalFee += determinedMonthly * count;
+
       for(let i=0; i<count; i++) {
-        const createdCa = db.insertRow<ContractAsset>('contractAssets', {
+        db.insertRow<ContractAsset>('contractAssets', {
           contractId: contract.id,
           assetId: '',
-          status: 'ASSIGNED',
           expectedModel: eq.modelName,
           monthlyRentalFee: determinedMonthly,
           dailyRentalFee: determinedDaily,
           startDate: targetStartDate || contract.startDate,
-          firstStartDate: targetStartDate || contract.startDate,
           endDate: '',
           createdAt: new Date().toISOString()
         });
-        if (createdCa?.id) eqCreatedCaIds.push(createdCa.id);
       }
-
-      cargoItemsPayload.push({
-        modelName: eq.modelName,
-        count,
-        contractAssetIds: eqCreatedCaIds,
-        paidOptions: effectivePaidOptionsForDelivery,
-        ...(effectivePaidOptionPricesForDelivery ? { paidOptionPrices: effectivePaidOptionPricesForDelivery } : {}),
-        ...(effectivePaidOptionUnitsForDelivery ? { paidOptionUnits: effectivePaidOptionUnitsForDelivery } : {}),
-        ...(effectivePaidOptionQtysForDelivery ? { paidOptionQtys: effectivePaidOptionQtysForDelivery } : {}),
-        monthlyRentalFee: determinedMonthly,
-        dailyRentalFee: determinedDaily,
-        ...(cargoItemsPayload.length === 0 ? { requestMeta: requestSnapshotMeta } : {})
-      });
     });
+
+    // 🌟 계약의 순 렌탈료 합계(pureRentalFee)를 체결 자산 슬롯들의 단가 합산으로 동기화 갱신
+    if (totalContractPureRentalFee > 0) {
+      db.updateRow<Contract>('contracts', contract.id, {
+        pureRentalFee: totalContractPureRentalFee
+      });
+    }
 
     await notify('🚚 [5/5 배차 생성] 배차/운송 관리 출고대기 지시건 생성 중...', 90);
 
-    // 신규 배차 - 출고 대기 건 자동 생성 (출고 장비 ContractAsset ID 및 유상옵션 1:1 매핑 보존)
-    const cargoItems = JSON.stringify(cargoItemsPayload);
+    // 신규 배차(Delivery) - 출고 대기 건 자동 생성
+    const cargoItems = JSON.stringify(data.equipments.map((e: any) => {
+      const mFee = Number(e.monthlyRate ?? e.monthlyRent ?? e.monthlyRentalFee ?? e.unitPrice) || 0;
+      const dFee = Number(e.dailyRate ?? e.dailyRent ?? e.dailyRentalFee) || (mFee > 0 ? Math.round(mFee / 30) : 0);
+      return {
+        modelName: e.modelName,
+        count: Number(e.qty) || 1,
+        qty: Number(e.qty) || 1,
+        monthlyRent: mFee,
+        monthlyRentalFee: mFee,
+        dailyRent: dFee,
+        dailyRentalFee: dFee,
+        vga: e.vga || '',
+        ram: e.ram || '',
+        ssd: e.ssd || '',
+        os: e.os || '',
+        swList: e.swList || [],
+        customSpecNote: e.customSpecNote || ''
+      };
+    }));
+    const dData = data as any;
     const loadingDateStr = extractDate(data.loadingTime) || contract.startDate;
     const getTimeSlot = (tStr: string | undefined) => {
       if (!tStr) return '오전';
@@ -4079,7 +3319,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return m ? m[0] : (tStr.includes(' ') ? tStr.split(' ')[1] : '오전');
     };
     const loadingTimeSlotStr = getTimeSlot(data.loadingTime);
-    const unloadingDateStr = extractDate(data.unloadingTime) || loadingDateStr || targetStartDate || contract.startDate;
+    const unloadingDateStr = extractDate(data.unloadingTime) || contract.startDate;
     const unloadingTimeSlotStr = getTimeSlot(data.unloadingTime);
 
     const isExchangeDelivery = dData.type === 'EXCHANGE' || dData.context?.includes('EXCHANGE') || dData.rawText?.includes('교환');
@@ -4091,17 +3331,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const paidByMemo = dData.paidBy
       ? ` | [운송비부담] ${dData.paidBy === 'CUSTOMER' ? '고객청구' : dData.paidBy === 'OURS' ? '당사부담' : '편도지원'}`
       : '';
-    const freightBillingStdMemo = ` | [운송료청구기준] ${dData.freightBillingStandard === '2/4' ? '2/4' : '3/5'}`;
 
     const defaultYard = currentTenant?.yards?.find((y: any) => y.isDefault) || currentTenant?.yards?.[0];
-    const defaultYardAddress = currentTenant?.businessAddress || defaultYard?.address || currentTenant?.mainYardAddress || '당사 보관소';
+    const defaultYardAddress = defaultYard?.address || currentTenant?.mainYardAddress || currentTenant?.businessAddress || '당사 보관소';
 
     const resolvedSiteMasterId = finalSite?.siteMasterId || data.siteMasterId || (
       finalSite?.name ? db.siteMasters.find(m => m.name && m.name.replace(/\s/g, '') === finalSite.name.replace(/\s/g, ''))?.id : undefined
     );
-
-    const nowOrderDate = new Date();
-    const orderInputDateStr = `${nowOrderDate.getFullYear()}-${String(nowOrderDate.getMonth() + 1).padStart(2, '0')}-${String(nowOrderDate.getDate()).padStart(2, '0')}`;
 
     const createdDelivery = db.insertRow<Delivery>('deliveries', {
       contractId: contract.id,
@@ -4109,7 +3345,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       type: isExchangeDelivery ? 'EXCHANGE' : 'OUTBOUND',
       dispatchCategory: isExchangeDelivery ? '교환' : '출고',
       status: 'REQUESTED',
-      requestDate: orderInputDateStr,
+      requestDate: contract.startDate,
       scheduledDate: loadingDateStr,
       loadingDate: loadingDateStr,
       loadingTimeSlot: loadingTimeSlotStr,
@@ -4130,9 +3366,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       reconciliationStatus: 'PENDING',
       cargoItems,
       isCostSettled: false,
-      rawText: dData.userNote !== undefined ? String(dData.userNote).trim() : ((data as any).prompt || (data as any).rawText || ''),
-      memo: appendDispatchStaffTag(`현장담당: ${data.siteContactName || '-'} (${data.siteContactPhone || '-'}) | 상차: ${data.loadingTime || '-'} / 하차: ${data.unloadingTime || '-'}${retrievalMemo}${paidByMemo}${freightBillingStdMemo} | 청구담당: ${data.billingContactName || '-'} (${data.billingContactPhone || '-'}) | 계산서: ${data.taxBillEmail || '-'} | 특이사항: ${data.note || '없음'}`),
-      closingMemo: '',
+      rawText: (data as any).prompt || (data as any).rawText || data.note || '',
+      memo: `담당: ${data.siteContactName || '-'} (${data.siteContactPhone || '-'}) | 배송일시: ${data.loadingTime || data.unloadingTime || '-'} | 품목: ${data.equipments.map((e: any) => `${e.modelName} ${e.qty}대${[e.vga && `VGA:${e.vga}`, e.ram && `RAM:${e.ram}`, e.ssd && `SSD:${e.ssd}`, e.os && `OS:${e.os}`].filter(Boolean).length ? ` [${[e.vga && `VGA:${e.vga}`, e.ram && `RAM:${e.ram}`, e.ssd && `SSD:${e.ssd}`, e.os && `OS:${e.os}`].filter(Boolean).join(', ')}]` : ''}`).join(' / ')} | 특이사항: ${data.note || '없음'}`,
+      closingMemo: `[마감조건] 마감일: ${dData.closingDay || '-'} / 결제일: ${dData.paymentDay || '-'} | 유상옵션: ${dData.paidOptions || '없음'} | 보양: ${dData.protection || '없음'}`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
@@ -4171,26 +3407,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     refreshAllData();
 
-    // 🚀 [단일 업무 인계 파이프라인] 배차팀(배차 의뢰) 및 출고/주기장팀(장비 할당)에 물리 ToDo 영구 적재 + 실시간 브로드캐스트
+    // 🚀 [단일 업무 인계 파이프라인] 배차팀에 물리 ToDo 영구 적재 + 실시간 브로드캐스트
     const totalEqCount = (data.equipments || []).reduce((acc: number, eq: any) => acc + (Number(eq.qty) || 1), 0);
-    const modelSummaryStr = (data.equipments || [])
-      .map((eq: any) => `${eq.modelName || '미지정'} × ${Number(eq.qty) || 1}대`)
-      .join(', ');
-
-    await issueHandoverTask({
-      category: 'ASSET_ASSIGNMENT' as any,
-      title: `[장비 할당] ${data.customerName || '고객사'} (미할당 ${totalEqCount}대)`,
-      content: `${data.siteName || '현장'} | 미할당 요구: ${modelSummaryStr || `${totalEqCount}대`} | 출고예정: ${(data.loadingTime || '').slice(0, 10) || '미정'}`,
-      targetDept: 'YARD',
-      priority: 'HIGH',
-      dueDate: (data.loadingTime || '').slice(0, 10) || undefined,
-      actionUrl: `/admin/dispatch_assign?contractId=${contract.id}&deliveryId=${createdDelivery.id}`,
-      entityType: 'DELIVERY',
-      entityId: createdDelivery.id,
-      senderId: currentUser?.id,
-      senderName: currentUser?.name
-    });
-
     await issueHandoverTask({
       category: 'DISPATCH_REQUEST',
       title: `[출고 배차 의뢰] ${data.customerName || '고객사'} (${totalEqCount}대)`,
@@ -4205,989 +3423,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     return { success: true, contractId: contract.id, contractNo: contract.contractNo };
-  };
-
-  // 🚫 출고 검수 완료 전 출고 요청 취소 트랜잭션 (장비 할당 해제 + 슬롯 제거 + 배차 CANCELLED + 이력/ToDo 정리)
-  const cancelOutboundRequest = async (deliveryId: string, cancelReason?: string): Promise<{ success: boolean; errorMessage?: string }> => {
-    const targetDelivery = db.deliveries.find(d => d.id === deliveryId);
-    if (!targetDelivery) {
-      showErrorModal('취소할 대상 출고 요청(배차)을 찾을 수 없습니다.');
-      return { success: false, errorMessage: '출고 요청을 찾을 수 없습니다.' };
-    }
-    if (targetDelivery.status === 'CANCELLED') {
-      showErrorModal('이미 취소된 출고 요청입니다.');
-      return { success: false, errorMessage: '이미 취소된 출고 요청입니다.' };
-    }
-
-    // 1. cargoItems에서 contractAssetIds 추출
-    let parsedCargo: any[] = [];
-    try {
-      if (targetDelivery.cargoItems) {
-        const raw = JSON.parse(targetDelivery.cargoItems);
-        if (Array.isArray(raw)) parsedCargo = raw;
-      }
-    } catch {
-      parsedCargo = [];
-    }
-
-    const deliveryCaIds: string[] = [];
-    parsedCargo.forEach(ci => {
-      if (Array.isArray(ci?.contractAssetIds)) {
-        deliveryCaIds.push(...ci.contractAssetIds.filter(Boolean));
-      }
-    });
-
-    // 만약 cargoItems에 contractAssetIds가 없고 해당 계약에 이 배차 1건만 존재하는 초기/레거시 건이라면 계약 전체 슬롯 참조
-    if (deliveryCaIds.length === 0 && targetDelivery.contractId) {
-      const siblingOutboundDeliveries = db.deliveries.filter(
-        d => d.contractId === targetDelivery.contractId && d.id !== targetDelivery.id && d.status !== 'CANCELLED' && (d.type === 'OUTBOUND' || d.type === 'EXCHANGE')
-      );
-      if (siblingOutboundDeliveries.length === 0) {
-        db.contractAssets
-          .filter(ca => ca.contractId === targetDelivery.contractId)
-          .forEach(ca => deliveryCaIds.push(ca.id));
-      }
-    }
-
-    // 2. 출고 검수 완료 여부 검증 (헌장 1.3: 출고 검수 완료되어 RENTED 전환된 건은 출고 요청 취소 불가)
-    const matchedInsps = db.outboundInspections.filter(ins =>
-      ins.deliveryId === deliveryId ||
-      (deliveryCaIds.length > 0 && ins.contractAssetId && deliveryCaIds.includes(ins.contractAssetId) && (!targetDelivery.contractId || ins.contractId === targetDelivery.contractId)) ||
-      (deliveryCaIds.length === 0 && targetDelivery.contractId && ins.contractId === targetDelivery.contractId)
-    );
-    const hasCompletedInspection = matchedInsps.some(
-      ins => ins.status === 'COMPLETED' || (ins.status as string) === 'APPROVED'
-    );
-    const targetCas = db.contractAssets.filter(
-      ca => deliveryCaIds.includes(ca.id) && (!targetDelivery.contractId || ca.contractId === targetDelivery.contractId)
-    );
-    const hasRentedAsset = targetCas.some(ca => {
-      // 장비가 실제로 할당된 슬롯(ca.assetId 존재)이고 해당 자산이 실제 운송대기/대여중인 경우만 검수 완료로 간주
-      if (!ca.assetId) return false;
-      const a = db.assets.find(as => as.id === ca.assetId);
-      if (a?.status === 'RENTED' || a?.status === 'AWAITING_TRANSPORT') return true;
-      return false;
-    });
-
-    if (targetDelivery.status === 'DELIVERED' || targetDelivery.status === 'COMPLETED') {
-      const msg = '운송이 완료된 건은 더이상 취소하거나 수정할 수 없습니다.';
-      showErrorModal(msg, '취소/수정 불가');
-      return { success: false, errorMessage: msg };
-    }
-
-    if (hasCompletedInspection || hasRentedAsset) {
-      const msg = '출고 검수가 이미 완료(대여중 전환)된 출고 요청은 바로 취소할 수 없습니다.\n먼저 [출고 검수] 화면에서 [출고 승인 취소 (검수 롤백)]을 수행한 뒤, [장비 할당]에서 할당 취소를 진행해 주십시오.';
-      showErrorModal(msg, '출고 요청 취소 불가 (출고검수 완료 상태)');
-      return { success: false, errorMessage: msg };
-    }
-
-    const hasAssignedAsset = targetCas.some(ca => !!ca.assetId);
-    const isDispatched = targetDelivery.status === 'DISPATCHED';
-
-    if (isDispatched && hasAssignedAsset) {
-      const msg = '배차완료 및 장비할당이 진행된 출고 요청은 바로 취소할 수 없습니다.\n먼저 [배차/운송 관리]에서 [배차 취소]를 수행하고, [장비 할당]에서 [할당 취소]를 완료한 후 출고 취소를 진행해 주십시오.';
-      showErrorModal(msg, '출고 요청 취소 불가 (선행 단계 취소 필요)');
-      return { success: false, errorMessage: msg };
-    }
-
-    if (isDispatched) {
-      const msg = '배차완료(차량·기사 배정) 상태인 출고 요청은 바로 취소할 수 없습니다.\n먼저 [배차/운송 관리]에서 [배차 취소]를 수행하여 [배차대기] 상태로 되돌린 후 출고 취소를 진행해 주십시오.';
-      showErrorModal(msg, '출고 요청 취소 불가 (배차 취소 필요)');
-      return { success: false, errorMessage: msg };
-    }
-
-    if (hasAssignedAsset) {
-      const msg = '장비가 할당된 상태에서는 출고 요청을 바로 취소할 수 없습니다.\n먼저 [장비 할당] 메뉴에서 할당된 장비의 [할당 취소]를 수행하여 미할당 상태로 되돌린 후 출고 취소를 진행해 주십시오.';
-      showErrorModal(msg, '출고 요청 취소 불가 (장비 할당 취소 필요)');
-      return { success: false, errorMessage: msg };
-    }
-
-    // 3. 롤백용 스냅샷 백업
-    const deliverySnapshot = { ...targetDelivery };
-    const caSnapshots = targetCas.map(ca => ({ ...ca }));
-    const assetSnapshots: Asset[] = [];
-    const inspSnapshots = matchedInsps.map(i => ({ ...i }));
-    const parentContract = targetDelivery.contractId ? db.contracts.find(c => c.id === targetDelivery.contractId) : undefined;
-    const contractSnapshot = parentContract ? { ...parentContract } : null;
-
-    targetCas.forEach(ca => {
-      if (ca.assetId) {
-        const a = db.assets.find(as => as.id === ca.assetId);
-        if (a) assetSnapshots.push({ ...a });
-      }
-    });
-
-    try {
-      const nowIso = new Date().toISOString();
-      const todayStr = nowIso.split('T')[0];
-      const actorName = currentUser?.name || '담당자';
-      const cleanReason = (cancelReason || '').trim() || '출고 검수 전 요청 취소';
-
-      // 4. 할당된 장비가 있으면 임대가능로 복원
-      for (const ca of targetCas) {
-        if (ca.assetId) {
-          const origAsset = db.assets.find(a => a.id === ca.assetId);
-          if (origAsset) {
-            db.updateRow<Asset>('assets', origAsset.id, {
-              status: 'AVAILABLE',
-              currentCustomerId: null as any,
-              currentSiteId: null as any,
-              contractStart: null as any,
-              contractEnd: null as any,
-              updatedAt: nowIso
-            });
-          }
-        }
-      }
-
-      // 5. 대기 중인 출고 검수 레코드 삭제
-      for (const ins of matchedInsps) {
-        db.deleteRow('outboundInspections', ins.id);
-      }
-
-      // 6. 해당 출고 요청으로 생성된 계약 자산 슬롯 삭제
-      for (const ca of targetCas) {
-        db.deleteRow('contractAssets', ca.id);
-      }
-
-      // 7. 부모 계약에 남은 슬롯 확인 및 계약 이력 기록
-      if (parentContract) {
-        const remainingCas = db.contractAssets.filter(
-          ca => ca.contractId === parentContract.id && !deliveryCaIds.includes(ca.id)
-        );
-        const equipSummary = parsedCargo.map(ci => `${ci.modelName || '장비'} ${ci.count || 1}대`).join(', ');
-
-        db.insertRow<ContractHistory>('contractHistory', {
-          contractId: parentContract.id,
-          changeType: 'TERMINATE',
-          changeDate: todayStr,
-          prevEndDate: parentContract.endDate || '',
-          newEndDate: todayStr,
-          description: `[출고 요청 취소] 배차번호 ${targetDelivery.id} (${equipSummary || `${targetCas.length}대`}) 출고 검수 전 취소 처리 (처리자: ${actorName}, 사유: ${cleanReason})`,
-          createdAt: nowIso
-        });
-
-        // 남은 계약 자산 슬롯이 0개이고 청구서가 발행되지 않은 신규 계약이라면 계약을 COMPLETED(종료) 마감하여 유령 활성 계약 방지
-        const hasActiveBillings = db.billings.some(b => b.contractId === parentContract.id && b.status !== 'REJECTED');
-        if (remainingCas.length === 0 && !hasActiveBillings) {
-          db.updateRow<Contract>('contracts', parentContract.id, {
-            status: 'COMPLETED',
-            endDate: todayStr,
-            updatedAt: nowIso
-          });
-        }
-      }
-
-      // 8. 배차 상태를 CANCELLED로 업데이트하고 삭제된 슬롯 ID(contractAssetIds) 비우기 및 취소 메타 보존
-      const updatedCargo = parsedCargo.map((ci, idx) => {
-        const cleanedItem = {
-          ...ci,
-          contractAssetIds: []
-        };
-        if (idx === 0) {
-          return {
-            ...cleanedItem,
-            requestMeta: {
-              ...(ci.requestMeta || {}),
-              cancelledAt: nowIso,
-              cancelledBy: actorName,
-              cancelReason: cleanReason
-            }
-          };
-        }
-        return cleanedItem;
-      });
-
-      const cancelClosingNote = `[출고취소 ${todayStr} ${actorName}] 사유: ${cleanReason}`;
-      db.updateRow<Delivery>('deliveries', targetDelivery.id, {
-        status: 'CANCELLED',
-        cargoItems: updatedCargo.length > 0 ? JSON.stringify(updatedCargo) : targetDelivery.cargoItems,
-        closingMemo: targetDelivery.closingMemo
-          ? `${targetDelivery.closingMemo} | ${cancelClosingNote}`
-          : cancelClosingNote,
-        updatedAt: nowIso
-      });
-
-      // 9. 관련 미완료 ToDo 상계 완료 처리
-      const relatedTodos = db.todos.filter(
-        t => !t.isCompleted && (t.entityId === targetDelivery.id || t.relatedEntityId === targetDelivery.id)
-      );
-      relatedTodos.forEach(t => {
-        db.updateRow<Todo>('todos', t.id, {
-          isCompleted: true,
-          completedAt: nowIso,
-          completedByUserId: currentUser?.id,
-          completedByName: actorName,
-          completionAction: 'OUTBOUND_REQUEST_CANCELLED',
-          updatedAt: nowIso
-        });
-      });
-
-      // 10. 원격 DB 동기 대기 및 상태 리프레시 (헌장 5.2)
-      await db.awaitPendingWrites();
-      refreshAllData();
-      return { success: true };
-    } catch (err: any) {
-      console.error('cancelOutboundRequest error & Rollback:', err);
-      // 롤백 복구
-      db.updateRow<Delivery>('deliveries', deliverySnapshot.id, deliverySnapshot);
-      caSnapshots.forEach(ca => {
-        if (!db.contractAssets.some(existing => existing.id === ca.id)) {
-          db.insertRow<ContractAsset>('contractAssets', ca);
-        } else {
-          db.updateRow<ContractAsset>('contractAssets', ca.id, ca);
-        }
-      });
-      assetSnapshots.forEach(a => db.updateRow<Asset>('assets', a.id, a));
-      inspSnapshots.forEach(i => {
-        if (!db.outboundInspections.some(existing => existing.id === i.id)) {
-          db.insertRow<OutboundInspection>('outboundInspections', i);
-        }
-      });
-      if (contractSnapshot) {
-        db.updateRow<Contract>('contracts', contractSnapshot.id, contractSnapshot);
-      }
-      refreshAllData();
-
-      const errMsg = err?.message || err?.details || JSON.stringify(err);
-      showErrorModal(`⚠️ 출고 요청 취소 중 DB 동기화 오류가 발생하여 원복되었습니다:\n\n${errMsg}`, '출고 요청 취소 실패');
-      return { success: false, errorMessage: errMsg };
-    }
-  };
-
-  // 🗑️ 취소된 출고 요청(status === 'CANCELLED') 영구 삭제 및 잔여 슬롯/유령 계약 정리 트랜잭션
-  const deleteCancelledOutboundRequests = async (deliveryIds?: string[]): Promise<{ success: boolean; deletedCount: number; errorMessage?: string }> => {
-    const idSet = deliveryIds && deliveryIds.length > 0 ? new Set(deliveryIds) : null;
-    const targets = db.deliveries.filter(d => {
-      if (d.status !== 'CANCELLED') return false;
-      const isOutboundOrExchange = d.type === 'OUTBOUND' || d.type === 'EXCHANGE' || d.dispatchCategory === '출고' || d.dispatchCategory === '교환';
-      if (!isOutboundOrExchange) return false;
-      if (idSet && !idSet.has(d.id)) return false;
-      return true;
-    });
-
-    if (targets.length === 0) {
-      return { success: false, deletedCount: 0, errorMessage: '삭제할 취소 상태의 출고 요청이 없습니다.' };
-    }
-
-    const nowIso = new Date().toISOString();
-    const todayStr = nowIso.split('T')[0];
-
-    try {
-      const affectedContractIds = new Set<string>();
-      const deletedDeliveryIdSet = new Set(targets.map(t => t.id));
-
-      for (const deliv of targets) {
-        if (deliv.contractId) affectedContractIds.add(deliv.contractId);
-
-        // 1. cargoItems 내 contractAssetIds 추출
-        let parsedCargo: any[] = [];
-        try {
-          if (deliv.cargoItems) {
-            const raw = JSON.parse(deliv.cargoItems);
-            if (Array.isArray(raw)) parsedCargo = raw;
-          }
-        } catch {
-          parsedCargo = [];
-        }
-
-        const caIds: string[] = [];
-        parsedCargo.forEach(ci => {
-          if (Array.isArray(ci?.contractAssetIds)) {
-            caIds.push(...ci.contractAssetIds.filter(Boolean));
-          }
-        });
-
-        // 레거시 취소 건(배차 관리에서 단순 CANCELLED만 찍혀 슬롯이 남아있던 건)의 슬롯 정리
-        if (caIds.length === 0 && deliv.contractId) {
-          const activeSiblingDeliveries = db.deliveries.filter(
-            d => d.contractId === deliv.contractId && !deletedDeliveryIdSet.has(d.id) && d.status !== 'CANCELLED'
-          );
-          if (activeSiblingDeliveries.length === 0) {
-            db.contractAssets
-              .filter(ca => ca.contractId === deliv.contractId && ca.status !== 'RENTED')
-              .forEach(ca => caIds.push(ca.id));
-          }
-        }
-
-        // 2. 잔여 출고검수 레코드 삭제
-        const leftoverInsps = db.outboundInspections.filter(
-          ins => ins.deliveryId === deliv.id || (ins.contractAssetId && caIds.includes(ins.contractAssetId) && (!deliv.contractId || ins.contractId === deliv.contractId))
-        );
-        leftoverInsps.forEach(ins => db.deleteRow('outboundInspections', ins.id));
-
-        // 3. 잔여 계약 자산 슬롯 정리 및 연결 장비 임대가능(AVAILABLE) 복원
-        const leftoverCas = db.contractAssets.filter(
-          ca => caIds.includes(ca.id) && (!deliv.contractId || ca.contractId === deliv.contractId)
-        );
-        for (const ca of leftoverCas) {
-          const targetAssetId = ca.assetId;
-          db.deleteRow('contractAssets', ca.id);
-          if (targetAssetId) {
-            const hasOtherActiveCa = db.contractAssets.some(
-              other => other.id !== ca.id && other.assetId === targetAssetId && other.status !== 'RETURNED' && other.status !== 'SOLD'
-            );
-            if (!hasOtherActiveCa) {
-              const a = db.assets.find(as => as.id === targetAssetId);
-              if (a && (a.status === 'ASSIGNED' || a.status === 'RENTED')) {
-                db.updateRow<Asset>('assets', a.id, {
-                  status: 'AVAILABLE',
-                  currentCustomerId: null as any,
-                  currentSiteId: null as any,
-                  contractStart: null as any,
-                  contractEnd: null as any,
-                  updatedAt: nowIso
-                });
-              }
-            }
-          }
-        }
-
-        // 4. 연결된 ToDo 삭제
-        const relTodos = db.todos.filter(t => t.entityId === deliv.id || t.relatedEntityId === deliv.id);
-        relTodos.forEach(t => db.deleteRow('todos', t.id));
-
-        // 5. 취소된 출고 요청(배차) 레코드 영구 삭제
-        db.deleteRow('deliveries', deliv.id);
-      }
-
-      // 6. 영향받은 계약 중 남은 슬롯·배차·청구서가 전혀 없는 유령 계약 정리
-      affectedContractIds.forEach(contractId => {
-        const contract = db.contracts.find(c => c.id === contractId);
-        if (!contract) return;
-        const remCas = db.contractAssets.filter(ca => ca.contractId === contractId);
-        const remDeliveries = db.deliveries.filter(d => d.contractId === contractId);
-        const remBillings = db.billings.filter(b => b.contractId === contractId);
-        if (remCas.length === 0 && remDeliveries.length === 0 && remBillings.length === 0) {
-          const relHist = db.contractHistory.filter(h => h.contractId === contractId);
-          relHist.forEach(h => db.deleteRow('contractHistory', h.id));
-          db.deleteRow('contracts', contractId);
-        } else if (remCas.length === 0 && remBillings.length === 0 && contract.status === 'ACTIVE') {
-          db.updateRow<Contract>('contracts', contractId, {
-            status: 'COMPLETED',
-            endDate: todayStr,
-            updatedAt: nowIso
-          });
-        }
-      });
-
-      await db.awaitPendingWrites();
-      refreshAllData();
-      return { success: true, deletedCount: targets.length };
-    } catch (err: any) {
-      console.error('deleteCancelledOutboundRequests error:', err);
-      const errMsg = err?.message || err?.details || JSON.stringify(err);
-      showErrorModal(`취소한 출고 요청 삭제 중 오류가 발생했습니다:\n${errMsg}`, '삭제 실패');
-      return { success: false, deletedCount: 0, errorMessage: errMsg };
-    }
-  };
-
-  // 💰 출고 요청 내역 수정 (요청 모델/수량/삭제/추가, 옵션 변경, 유상옵션 청구조건·단가, 상하차일시 및 계약개시일 수정) 트랜잭션
-  const updateOutboundRequestPricing = async (params: {
-    deliveryId: string;
-    allowCompletedModify?: boolean;
-    equipments?: { contractAssetIds?: string[]; modelName: string; qty: number; monthlyRate: number; dailyRate: number }[];
-    equipmentRates?: { modelName: string; monthlyRate: number; dailyRate: number }[];
-    paidOptions?: string;
-    protection?: string;
-    attachments?: string;
-    checkedSpecs?: Record<string, any>;
-    paidOptionPrices?: Record<string, number>;
-    paidOptionUnits?: Record<string, '월' | '대' | '건' | '수량'>;
-    paidOptionQtys?: Record<string, number>;
-    loadingDate?: string;
-    loadingTimeSlot?: string;
-    unloadingDate?: string;
-    unloadingTimeSlot?: string;
-    reason?: string;
-  }): Promise<{ success: boolean; errorMessage?: string }> => {
-    if (db.isSupabaseConnected()) {
-      try {
-        await Promise.all([
-          db.pullTableFromSupabase('contracts'),
-          db.pullTableFromSupabase('contractAssets'),
-          db.pullTableFromSupabase('deliveries'),
-          db.pullTableFromSupabase('outboundInspections')
-        ]);
-      } catch (pullErr) {
-        console.warn('updateOutboundRequestPricing pre-sync warning:', pullErr);
-      }
-    }
-
-    const targetDelivery = db.deliveries.find(d => d.id === params.deliveryId);
-    if (!targetDelivery) {
-      showErrorModal('수정할 출고 요청을 찾을 수 없습니다.');
-      return { success: false, errorMessage: '출고 요청을 찾을 수 없습니다.' };
-    }
-    if (!params.allowCompletedModify && (targetDelivery.status === 'DELIVERED' || targetDelivery.status === 'COMPLETED')) {
-      const msg = '운송이 완료된 건은 일반 수정할 수 없습니다. [계약의 수정(완결된 출고의 수정)] 품의를 이용해 주십시오.';
-      showErrorModal(msg, '취소/수정 불가');
-      return { success: false, errorMessage: msg };
-    }
-
-    const origLoadingDate = (targetDelivery.loadingDate || '').trim();
-    const origLoadingSlot = (targetDelivery.loadingTimeSlot || '').trim();
-    const origUnloadingDate = (targetDelivery.unloadingDate || targetDelivery.loadingDate || '').trim();
-    const origUnloadingSlot = (targetDelivery.unloadingTimeSlot || targetDelivery.loadingTimeSlot || '').trim();
-
-    const nextLoadingDate = params.loadingDate !== undefined ? params.loadingDate.trim() : origLoadingDate;
-    const nextLoadingSlot = params.loadingTimeSlot !== undefined ? params.loadingTimeSlot.trim() : origLoadingSlot;
-    const nextUnloadingDate = params.unloadingDate !== undefined ? params.unloadingDate.trim() : origUnloadingDate;
-    const nextUnloadingSlot = params.unloadingTimeSlot !== undefined ? params.unloadingTimeSlot.trim() : origUnloadingSlot;
-
-    if (nextLoadingDate && nextUnloadingDate && nextLoadingDate > nextUnloadingDate) {
-      const msg = '상차일이 하차일보다 늦을 수 없습니다. 일자를 확인해 주십시오.';
-      showErrorModal(msg, '상하차 일자 확인');
-      return { success: false, errorMessage: msg };
-    }
-
-    let parsedCargo: any[] = [];
-    try {
-      if (targetDelivery.cargoItems) {
-        const raw = JSON.parse(targetDelivery.cargoItems);
-        if (Array.isArray(raw)) parsedCargo = raw;
-      }
-    } catch {
-      parsedCargo = [];
-    }
-
-    const deliverySnapshot = { ...targetDelivery };
-    const contractSnapshot = targetDelivery.contractId
-      ? (() => {
-          const c = db.contracts.find(ct => ct.id === targetDelivery.contractId);
-          return c ? { ...c } : null;
-        })()
-      : null;
-    const caSnapshots: ContractAsset[] = [];
-    const deletedCas: ContractAsset[] = [];
-    const createdCaIds: string[] = [];
-    const assetSnapshots: Asset[] = [];
-    const deletedInspections: OutboundInspection[] = [];
-
-    try {
-      const nowIso = new Date().toISOString();
-      const todayStr = nowIso.split('T')[0];
-      const actorName = currentUser?.name || '담당자';
-      const changeLogs: string[] = [];
-
-      if (params.loadingDate !== undefined || params.loadingTimeSlot !== undefined) {
-        if (origLoadingDate !== nextLoadingDate || origLoadingSlot !== nextLoadingSlot) {
-          changeLogs.push(`상차일시: [${origLoadingDate || '-'} ${origLoadingSlot}]➔[${nextLoadingDate || '-'} ${nextLoadingSlot}]`);
-        }
-      }
-      if (params.unloadingDate !== undefined || params.unloadingTimeSlot !== undefined) {
-        if (origUnloadingDate !== nextUnloadingDate || origUnloadingSlot !== nextUnloadingSlot) {
-          changeLogs.push(`하차일시(계약개시일): [${origUnloadingDate || '-'} ${origUnloadingSlot}]➔[${nextUnloadingDate || '-'} ${nextUnloadingSlot}]`);
-        }
-      }
-
-      const baseMeta = parsedCargo.find(ci => ci?.requestMeta)?.requestMeta || {};
-      const nextLoadingTimeStr = `${nextLoadingDate} ${nextLoadingSlot}`.trim() || baseMeta?.loadingTime || '';
-      const nextUnloadingTimeStr = `${nextUnloadingDate} ${nextUnloadingSlot}`.trim() || baseMeta?.unloadingTime || '';
-      const origPaidOptions = parsedCargo[0]?.paidOptions ?? '';
-      const origPrices: Record<string, number> = parsedCargo[0]?.paidOptionPrices || baseMeta?.paidOptionPrices || {};
-      const origUnits: Record<string, '월' | '대' | '건' | '수량'> = parsedCargo[0]?.paidOptionUnits || baseMeta?.paidOptionUnits || {};
-      const origQtys: Record<string, number> = parsedCargo[0]?.paidOptionQtys || baseMeta?.paidOptionQtys || {};
-
-      const nextPaidOptions = params.paidOptions !== undefined ? params.paidOptions : origPaidOptions;
-      const nextProtection = params.protection !== undefined ? params.protection : (baseMeta?.protection ?? '');
-      const nextAttachments = params.attachments !== undefined ? params.attachments : (baseMeta?.attachments ?? '');
-      const nextPrices: Record<string, number> = params.paidOptionPrices !== undefined
-        ? { ...origPrices, ...params.paidOptionPrices }
-        : origPrices;
-      const rawNextCheckedSpecs = params.checkedSpecs !== undefined ? params.checkedSpecs : baseMeta?.checkedSpecs;
-      const nextCheckedSpecs = (rawNextCheckedSpecs !== undefined || Object.keys(nextPrices).length > 0)
-        ? mergeOptionPricesIntoSpecs(
-            {
-              ...(baseMeta?.checkedSpecs?.__optionMeta && typeof baseMeta.checkedSpecs.__optionMeta === 'object' ? { __optionMeta: baseMeta.checkedSpecs.__optionMeta } : {}),
-              ...(rawNextCheckedSpecs || {})
-            },
-            db.standardOptions,
-            nextPrices
-          )
-        : undefined;
-      const nextUnits: Record<string, '월' | '대' | '건' | '수량'> = params.paidOptionUnits !== undefined
-        ? { ...origUnits, ...params.paidOptionUnits }
-        : origUnits;
-      const nextQtys: Record<string, number> = params.paidOptionQtys !== undefined
-        ? { ...origQtys, ...params.paidOptionQtys }
-        : origQtys;
-
-      if (params.paidOptions !== undefined && params.paidOptions !== origPaidOptions) {
-        changeLogs.push(`유상옵션: [${origPaidOptions || '없음'}]➔[${params.paidOptions || '없음'}]`);
-      }
-      if (params.protection !== undefined && params.protection !== (baseMeta?.protection ?? '')) {
-        changeLogs.push(`무상옵션: [${baseMeta?.protection || '없음'}]➔[${params.protection || '없음'}]`);
-      }
-      if (params.attachments !== undefined && params.attachments !== (baseMeta?.attachments ?? '')) {
-        changeLogs.push(`부착물: [${baseMeta?.attachments || '없음'}]➔[${params.attachments || '없음'}]`);
-      }
-      if (params.paidOptionUnits) {
-        Object.entries(params.paidOptionUnits).forEach(([optName, newUnit]) => {
-          const oldUnit = origUnits[optName];
-          if (oldUnit !== newUnit) {
-            changeLogs.push(`유상옵션(${optName}) 청구조건: ${oldUnit || '기본'}➔${newUnit}`);
-          }
-        });
-      }
-      if (params.paidOptionQtys) {
-        Object.entries(params.paidOptionQtys).forEach(([optName, newQty]) => {
-          const oldQty = origQtys[optName] || 1;
-          if (oldQty !== newQty) {
-            const effU = nextUnits[optName] || '대';
-            changeLogs.push(`유상옵션(${optName}) ${effU === '수량' ? '수량' : '1대당 수량'}: ${oldQty}개➔${newQty}개`);
-          }
-        });
-      }
-      if (params.paidOptionPrices) {
-        Object.entries(params.paidOptionPrices).forEach(([optName, newVal]) => {
-          const oldVal = origPrices[optName];
-          if (oldVal !== newVal) {
-            changeLogs.push(`유상옵션(${optName}) 단가: ${(oldVal ?? 0).toLocaleString()}원➔${Number(newVal).toLocaleString()}원`);
-          }
-        });
-      }
-
-      let updatedCargo: any[] = [];
-
-      // Case A: 미완료 출고 요청 전체 장비(모델 수정, 수량 변경, 모델 삭제, 신규 모델 추가) 및 단가 편집
-      if (params.equipments && params.equipments.length > 0) {
-        const mergedEqs: { contractAssetIds: string[]; modelName: string; qty: number; monthlyRate: number; dailyRate: number }[] = [];
-        params.equipments.forEach(eq => {
-          const cleanModel = String(eq.modelName || '').trim();
-          if (!cleanModel) return;
-          const cleanQty = Math.max(1, Math.floor(Number(eq.qty) || 1));
-          const cleanM = Math.max(0, Number(eq.monthlyRate || 0));
-          const cleanD = Math.max(0, Number(eq.dailyRate || (cleanM ? Math.round(cleanM / 30) : 0)));
-          const existing = mergedEqs.find(m => m.modelName === cleanModel);
-          if (existing) {
-            existing.qty += cleanQty;
-            if (Array.isArray(eq.contractAssetIds)) {
-              eq.contractAssetIds.forEach(id => {
-                if (id && !existing.contractAssetIds.includes(id)) existing.contractAssetIds.push(id);
-              });
-            }
-            existing.monthlyRate = cleanM;
-            existing.dailyRate = cleanD;
-          } else {
-            mergedEqs.push({
-              contractAssetIds: Array.isArray(eq.contractAssetIds) ? [...eq.contractAssetIds.filter(Boolean)] : [],
-              modelName: cleanModel,
-              qty: cleanQty,
-              monthlyRate: cleanM,
-              dailyRate: cleanD
-            });
-          }
-        });
-
-        // 기존 배차에 속했던 모든 ContractAsset ID 수집
-        const allOriginalCaIds = new Set<string>();
-        parsedCargo.forEach(ci => {
-          if (Array.isArray(ci?.contractAssetIds)) {
-            ci.contractAssetIds.forEach((id: string) => {
-              if (id) allOriginalCaIds.add(id);
-            });
-          }
-        });
-        db.outboundInspections
-          .filter(ins => ins.deliveryId === targetDelivery.id && (ins as any).contractAssetId)
-          .forEach(ins => allOriginalCaIds.add((ins as any).contractAssetId));
-        if (allOriginalCaIds.size === 0 && targetDelivery.contractId) {
-          db.contractAssets
-            .filter(ca => ca.contractId === targetDelivery.contractId && ca.status !== 'RETURNED' && ca.status !== 'SOLD' && (params.allowCompletedModify || !ca.assetId || ca.status === 'ASSIGNED'))
-            .forEach(ca => allOriginalCaIds.add(ca.id));
-        }
-
-        const oldSummary = parsedCargo.map(ci => `${ci.modelName} ${ci.count || ci.qty || 1}대(월 ${(ci.monthlyRentalFee || 0).toLocaleString()}원)`).join(', ');
-        const newSummary = mergedEqs.map(eq => `${eq.modelName} ${eq.qty}대(월 ${eq.monthlyRate.toLocaleString()}원)`).join(', ');
-        if (oldSummary !== newSummary) {
-          changeLogs.push(`요청 장비: [${oldSummary || '없음'}] ➔ [${newSummary}]`);
-        }
-
-        const keptCaIds = new Set<string>();
-        const targetContract = targetDelivery.contractId ? db.contracts.find(c => c.id === targetDelivery.contractId) : undefined;
-        const startDateStr = (nextUnloadingDate || nextLoadingDate || targetDelivery.scheduledDate || targetContract?.startDate || todayStr).slice(0, 10);
-
-        const releaseAssignedAssetOnCa = (ca: ContractAsset) => {
-          if (!ca.assetId) return;
-          const assignedAsset = db.assets.find(a => a.id === ca.assetId);
-          if (assignedAsset) {
-            if (!assetSnapshots.some(s => s.id === assignedAsset.id)) {
-              assetSnapshots.push({ ...assignedAsset });
-            }
-            db.updateRow<Asset>('assets', assignedAsset.id, {
-              status: 'AVAILABLE',
-              currentCustomerId: null as any,
-              currentSiteId: null as any,
-              contractStart: null as any,
-              contractEnd: null as any
-            });
-          }
-          db.outboundInspections
-            .filter(ins => ins.deliveryId === targetDelivery.id && (ins.assetId === ca.assetId || (ins as any).contractAssetId === ca.id))
-            .forEach(ins => {
-              if (!deletedInspections.some(d => d.id === ins.id)) {
-                deletedInspections.push({ ...ins });
-              }
-              db.deleteRow('outboundInspections', ins.id);
-            });
-        };
-
-        mergedEqs.forEach((eq, idx) => {
-          let existingCas = eq.contractAssetIds
-            .map(id => db.contractAssets.find(c => c.id === id && (!targetDelivery.contractId || c.contractId === targetDelivery.contractId)))
-            .filter((c): c is ContractAsset => Boolean(c));
-
-          if (existingCas.length === 0 && allOriginalCaIds.size > 0) {
-            const unclaimedCas = Array.from(allOriginalCaIds)
-              .filter(id => !keptCaIds.has(id))
-              .map(id => db.contractAssets.find(c => c.id === id && (!targetDelivery.contractId || c.contractId === targetDelivery.contractId)))
-              .filter((c): c is ContractAsset => Boolean(c));
-            const sameModelCas = unclaimedCas.filter(c => c.expectedModel === eq.modelName);
-            existingCas = sameModelCas.length > 0 ? sameModelCas : (mergedEqs.length === 1 ? unclaimedCas : []);
-          }
-
-          // 모델이 변경된 경우 이미 할당된 장비가 새 모델과 다르면 할당 해제
-          existingCas.forEach(ca => {
-            if (ca.assetId) {
-              const assignedAsset = db.assets.find(a => a.id === ca.assetId);
-              if (assignedAsset && assignedAsset.modelName !== eq.modelName) {
-                if (!caSnapshots.some(s => s.id === ca.id)) {
-                  caSnapshots.push({ ...ca });
-                }
-                releaseAssignedAssetOnCa(ca);
-                db.updateRow<ContractAsset>('contractAssets', ca.id, {
-                  assetId: '',
-                  status: 'ASSIGNED'
-                });
-                ca.assetId = '';
-              }
-            }
-          });
-
-          // 유효하게 장비가 할당된 슬롯을 우선 보존
-          const sortedCas = [...existingCas].sort((a, b) => (b.assetId ? 1 : 0) - (a.assetId ? 1 : 0));
-          const toKeep = sortedCas.slice(0, eq.qty);
-          const finalCaIdsForRow: string[] = [];
-
-          toKeep.forEach(ca => {
-            keptCaIds.add(ca.id);
-            finalCaIdsForRow.push(ca.id);
-            if (!caSnapshots.some(s => s.id === ca.id)) {
-              caSnapshots.push({ ...ca });
-            }
-            db.updateRow<ContractAsset>('contractAssets', ca.id, {
-              expectedModel: eq.modelName,
-              monthlyRentalFee: eq.monthlyRate,
-              dailyRentalFee: eq.dailyRate
-            });
-            if (ca.assetId) {
-              const assignedAsset = db.assets.find(a => a.id === ca.assetId);
-              if (assignedAsset) {
-                if (!assetSnapshots.some(s => s.id === assignedAsset.id)) {
-                  assetSnapshots.push({ ...assignedAsset });
-                }
-                db.updateRow<Asset>('assets', assignedAsset.id, {
-                  monthlyRentalFee: eq.monthlyRate,
-                  dailyRentalFee: eq.dailyRate
-                });
-              }
-            }
-          });
-
-          // 수량 증가 또는 신규 모델 추가 시 새 ContractAsset 슬롯 생성
-          const needMore = eq.qty - toKeep.length;
-          if (needMore > 0 && targetDelivery.contractId) {
-            for (let i = 0; i < needMore; i++) {
-              const createdCa = db.insertRow<ContractAsset>('contractAssets', {
-                contractId: targetDelivery.contractId,
-                assetId: '',
-                status: 'ASSIGNED',
-                expectedModel: eq.modelName,
-                monthlyRentalFee: eq.monthlyRate,
-                dailyRentalFee: eq.dailyRate,
-                startDate: startDateStr,
-                firstStartDate: startDateStr,
-                endDate: '',
-                createdAt: nowIso
-              });
-              if (createdCa?.id) {
-                createdCaIds.push(createdCa.id);
-                keptCaIds.add(createdCa.id);
-                finalCaIdsForRow.push(createdCa.id);
-              }
-            }
-          }
-
-          const updatedMeta = {
-            ...baseMeta,
-            ...(nextLoadingTimeStr ? { loadingTime: nextLoadingTimeStr } : {}),
-            ...(nextUnloadingTimeStr ? { unloadingTime: nextUnloadingTimeStr } : {}),
-            protection: nextProtection,
-            attachments: nextAttachments,
-            ...(nextCheckedSpecs !== undefined ? { checkedSpecs: nextCheckedSpecs } : {}),
-            ...(Object.keys(nextPrices).length > 0 ? { paidOptionPrices: nextPrices } : {}),
-            ...(Object.keys(nextUnits).length > 0 ? { paidOptionUnits: nextUnits } : {}),
-            ...(Object.keys(nextQtys).length > 0 ? { paidOptionQtys: nextQtys } : {})
-          };
-
-          updatedCargo.push({
-            modelName: eq.modelName,
-            count: eq.qty,
-            contractAssetIds: finalCaIdsForRow,
-            paidOptions: nextPaidOptions,
-            ...(Object.keys(nextPrices).length > 0 ? { paidOptionPrices: nextPrices } : {}),
-            ...(Object.keys(nextUnits).length > 0 ? { paidOptionUnits: nextUnits } : {}),
-            ...(Object.keys(nextQtys).length > 0 ? { paidOptionQtys: nextQtys } : {}),
-            monthlyRentalFee: eq.monthlyRate,
-            dailyRentalFee: eq.dailyRate,
-            ...(idx === 0 ? { requestMeta: updatedMeta } : {})
-          });
-        });
-
-        // 삭제된 모델 또는 수량 감소로 인해 제외된 기존 ContractAsset 슬롯 정리 (타 계약 슬롯 절대 건드리지 않음)
-        allOriginalCaIds.forEach(origCaId => {
-          if (!keptCaIds.has(origCaId)) {
-            const caObj = db.contractAssets.find(c => c.id === origCaId && (!targetDelivery.contractId || c.contractId === targetDelivery.contractId));
-            if (caObj) {
-              releaseAssignedAssetOnCa(caObj);
-              deletedCas.push({ ...caObj });
-              db.deleteRow('contractAssets', caObj.id);
-            }
-          }
-        });
-      } else {
-        // Case B: 단가/옵션 또는 상하차 일정만 수정하는 경우
-        updatedCargo = parsedCargo.map((ci, idx) => {
-          const nextCi = { ...ci };
-
-          if (params.equipmentRates && params.equipmentRates.length > 0) {
-            const matchedRate = params.equipmentRates.find(r => r.modelName === ci.modelName);
-            if (matchedRate) {
-              const oldM = Number(ci.monthlyRentalFee || 0);
-              const oldD = Number(ci.dailyRentalFee || 0);
-              const newM = Number(matchedRate.monthlyRate || 0);
-              const newD = Number(matchedRate.dailyRate || (newM ? Math.round(newM / 30) : 0));
-
-              if (oldM !== newM || oldD !== newD) {
-                changeLogs.push(`${ci.modelName} 렌탈료: 월 ${oldM.toLocaleString()}원➔${newM.toLocaleString()}원 / 일 ${oldD.toLocaleString()}원➔${newD.toLocaleString()}원`);
-              }
-              nextCi.monthlyRentalFee = newM;
-              nextCi.dailyRentalFee = newD;
-
-              const caIds: string[] = Array.isArray(ci.contractAssetIds) ? [...ci.contractAssetIds] : [];
-              if (caIds.length === 0) {
-                db.outboundInspections
-                  .filter(ins => ins.deliveryId === targetDelivery.id && (ins as any).contractAssetId)
-                  .forEach(ins => {
-                    const caId = (ins as any).contractAssetId;
-                    const caObj = db.contractAssets.find(c => c.id === caId && (!targetDelivery.contractId || c.contractId === targetDelivery.contractId));
-                    if (caObj && (!ci.modelName || caObj.expectedModel === ci.modelName) && !caIds.includes(caId)) {
-                      caIds.push(caId);
-                    }
-                  });
-              }
-              caIds.forEach(caId => {
-                const caObj = db.contractAssets.find(c => c.id === caId && (!targetDelivery.contractId || c.contractId === targetDelivery.contractId));
-                if (caObj) {
-                  if (!caSnapshots.some(s => s.id === caObj.id)) {
-                    caSnapshots.push({ ...caObj });
-                  }
-                  db.updateRow<ContractAsset>('contractAssets', caObj.id, {
-                    monthlyRentalFee: newM,
-                    dailyRentalFee: newD
-                  });
-                }
-              });
-            }
-          }
-
-          nextCi.paidOptions = nextPaidOptions;
-          if (Object.keys(nextPrices).length > 0) {
-            nextCi.paidOptionPrices = nextPrices;
-          }
-          if (Object.keys(nextUnits).length > 0) {
-            nextCi.paidOptionUnits = nextUnits;
-          }
-          if (Object.keys(nextQtys).length > 0) {
-            nextCi.paidOptionQtys = nextQtys;
-          }
-          if (idx === 0 || nextCi.requestMeta) {
-            nextCi.requestMeta = {
-              ...(nextCi.requestMeta || baseMeta),
-              ...(nextLoadingTimeStr ? { loadingTime: nextLoadingTimeStr } : {}),
-              ...(nextUnloadingTimeStr ? { unloadingTime: nextUnloadingTimeStr } : {}),
-              protection: nextProtection,
-              attachments: nextAttachments,
-              ...(nextCheckedSpecs !== undefined ? { checkedSpecs: nextCheckedSpecs } : {}),
-              ...(Object.keys(nextPrices).length > 0 ? { paidOptionPrices: nextPrices } : {}),
-              ...(Object.keys(nextUnits).length > 0 ? { paidOptionUnits: nextUnits } : {}),
-              ...(Object.keys(nextQtys).length > 0 ? { paidOptionQtys: nextQtys } : {})
-            };
-          }
-
-          return nextCi;
-        });
-      }
-
-      // 🔗 [하차일 = 계약(청구) 개시일 자동 연동]: 하차일이 지정/변경된 경우 이 출고 요청에 귀속된 모든 체결 자산(ContractAsset), 할당 장비(Asset), 계약(Contract)의 개시일을 하차일로 일괄 동기화
-      if (nextUnloadingDate && /^\d{4}-\d{2}-\d{2}$/.test(nextUnloadingDate)) {
-        const targetCaIdSet = new Set<string>();
-        updatedCargo.forEach(ci => {
-          if (Array.isArray(ci?.contractAssetIds)) {
-            ci.contractAssetIds.forEach((id: string) => {
-              if (id) targetCaIdSet.add(id);
-            });
-          }
-        });
-        db.outboundInspections
-          .filter(ins => ins.deliveryId === targetDelivery.id && (ins as any).contractAssetId)
-          .forEach(ins => targetCaIdSet.add((ins as any).contractAssetId));
-
-        if (targetCaIdSet.size === 0 && targetDelivery.contractId) {
-          db.contractAssets
-            .filter(ca =>
-              ca.contractId === targetDelivery.contractId &&
-              ca.status !== 'RETURNED' &&
-              ca.status !== 'SOLD' &&
-              (!ca.startDate || ca.startDate === origUnloadingDate || ca.startDate === origLoadingDate)
-            )
-            .forEach(ca => targetCaIdSet.add(ca.id));
-        }
-
-        let syncedSlotCount = 0;
-        targetCaIdSet.forEach(caId => {
-          const caObj = db.contractAssets.find(c => c.id === caId && (!targetDelivery.contractId || c.contractId === targetDelivery.contractId));
-          if (!caObj) return;
-          const shouldSyncFirstStart =
-            !caObj.firstStartDate ||
-            caObj.firstStartDate === caObj.startDate ||
-            caObj.firstStartDate === origUnloadingDate ||
-            caObj.firstStartDate === origLoadingDate;
-
-          if (caObj.startDate !== nextUnloadingDate || (shouldSyncFirstStart && caObj.firstStartDate !== nextUnloadingDate)) {
-            if (!caSnapshots.some(s => s.id === caObj.id)) {
-              caSnapshots.push({ ...caObj });
-            }
-            db.updateRow<ContractAsset>('contractAssets', caObj.id, {
-              startDate: nextUnloadingDate,
-              ...(shouldSyncFirstStart ? { firstStartDate: nextUnloadingDate } : {})
-            });
-            syncedSlotCount++;
-          }
-
-          if (caObj.assetId) {
-            const assignedAsset = db.assets.find(a => a.id === caObj.assetId);
-            if (assignedAsset && assignedAsset.contractStart !== nextUnloadingDate) {
-              if (!assetSnapshots.some(s => s.id === assignedAsset.id)) {
-                assetSnapshots.push({ ...assignedAsset });
-              }
-              db.updateRow<Asset>('assets', assignedAsset.id, {
-                contractStart: nextUnloadingDate
-              });
-            }
-          }
-        });
-
-        db.assetInOutLogs
-          .filter(l => l.deliveryId === targetDelivery.id && l.type === 'OUTBOUND' && l.eventDate !== nextUnloadingDate)
-          .forEach(l => {
-            db.updateRow<AssetInOutLog>('asset_inout_logs', l.id, {
-              eventDate: nextUnloadingDate
-            });
-          });
-
-        if (targetDelivery.contractId) {
-          const parentContract = db.contracts.find(c => c.id === targetDelivery.contractId);
-          if (parentContract) {
-            const activeCasForContract = db.contractAssets.filter(
-              c => c.contractId === parentContract.id && c.status !== 'RETURNED' && c.status !== 'SOLD' && c.startDate
-            );
-            const sortedStartDates = activeCasForContract.map(c => c.startDate).filter(Boolean).sort();
-            const earliestContractStart = sortedStartDates[0] || nextUnloadingDate;
-            if (parentContract.startDate !== earliestContractStart) {
-              db.updateRow<Contract>('contracts', parentContract.id, {
-                startDate: earliestContractStart,
-                updatedAt: nowIso
-              });
-            }
-          }
-        }
-
-        if (syncedSlotCount > 0 && !changeLogs.some(l => l.startsWith('하차일시'))) {
-          changeLogs.push(`계약·청구 개시일(하차일 기준) 동기화: ${nextUnloadingDate} (${syncedSlotCount}대)`);
-        }
-      }
-
-      // 레거시 closingMemo / memo에 옵션 태그가 이미 있던 경우에만 동기화 (신규 배차의 closingMemo에는 옵션을 주입하지 않음)
-      let nextClosingMemo = targetDelivery.closingMemo || '';
-      if ((params.paidOptions !== undefined || params.protection !== undefined) && nextClosingMemo.includes('유상옵션:')) {
-        nextClosingMemo = nextClosingMemo
-          .replace(/유상옵션:\s*[^|]+/, `유상옵션: ${nextPaidOptions || '없음'} `)
-          .replace(/보양:\s*[^|]+/, `보양: ${nextProtection || '없음'}`);
-      }
-
-      let nextMemo = targetDelivery.memo || '';
-      if ((params.paidOptions !== undefined || params.protection !== undefined) && nextMemo.includes('[옵션]')) {
-        const optSegment = `[옵션] ${nextPaidOptions || '없음'}${nextProtection && nextProtection !== 'NONE' && nextProtection !== '없음' ? ` / 보양: ${nextProtection}` : ''}`;
-        nextMemo = nextMemo.replace(/\[옵션\]\s*[^|]+/, `${optSegment} `);
-      }
-      if ((params.unloadingDate !== undefined || params.unloadingTimeSlot !== undefined) && nextMemo.includes('[하차일정]')) {
-        nextMemo = nextMemo.replace(/\[하차일정\]\s*[^|]+/, `[하차일정] ${nextUnloadingDate} ${nextUnloadingSlot} `);
-      }
-
-      db.updateRow<Delivery>('deliveries', targetDelivery.id, {
-        loadingDate: nextLoadingDate,
-        loadingTimeSlot: nextLoadingSlot,
-        unloadingDate: nextUnloadingDate,
-        unloadingTimeSlot: nextUnloadingSlot,
-        scheduledDate: nextLoadingDate || targetDelivery.scheduledDate,
-        cargoItems: JSON.stringify(updatedCargo),
-        closingMemo: nextClosingMemo,
-        memo: nextMemo,
-        updatedAt: nowIso
-      });
-
-      if (targetDelivery.contractId) {
-        if (params.allowCompletedModify) {
-          db.updateRow<Contract>('contracts', targetDelivery.contractId, {
-            approvalStatus: 'APPROVED',
-            updatedAt: nowIso
-          });
-        }
-        if (changeLogs.length > 0 || params.allowCompletedModify) {
-          const prefix = params.allowCompletedModify
-            ? '[계약의 수정(완결된 출고의 수정)]'
-            : '[출고 요청 내역 수정]';
-          db.insertRow<ContractHistory>('contractHistory', {
-            contractId: targetDelivery.contractId,
-            changeType: 'FEE_CHANGE',
-            changeDate: todayStr,
-            description: `${prefix} 배차 ${targetDelivery.id}: ${changeLogs.length > 0 ? changeLogs.join(' / ') : '요청 내역 변경 반영'} (처리자: ${actorName}${params.reason ? `, 사유: ${params.reason}` : ''})`,
-            createdAt: nowIso
-          });
-        }
-      }
-
-      await db.awaitPendingWrites();
-      refreshAllData();
-      return { success: true };
-    } catch (err: any) {
-      console.error('updateOutboundRequestPricing error:', err);
-      db.updateRow<Delivery>('deliveries', deliverySnapshot.id, deliverySnapshot);
-      if (contractSnapshot) {
-        db.updateRow<Contract>('contracts', contractSnapshot.id, contractSnapshot);
-      }
-      createdCaIds.forEach(id => db.deleteRow('contractAssets', id));
-      deletedCas.forEach(ca => db.insertRow<ContractAsset>('contractAssets', ca));
-      caSnapshots.forEach(ca => db.updateRow<ContractAsset>('contractAssets', ca.id, ca));
-      assetSnapshots.forEach(a => db.updateRow<Asset>('assets', a.id, a));
-      deletedInspections.forEach(ins => db.insertRow<OutboundInspection>('outboundInspections', ins));
-      refreshAllData();
-      const errMsg = err?.message || err?.details || JSON.stringify(err);
-      showErrorModal(`⚠️ 출고 요청 수정 저장 중 DB 동기화 오류가 발생하여 원복되었습니다:\n\n${errMsg}`, '출고 요청 수정 실패');
-      return { success: false, errorMessage: errMsg };
-    }
   };
 
   const saveSmartReturn = async (data: SmartReturnData) => {
@@ -5270,7 +3505,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         returnAssets.forEach(a => {
           modelCountsMap[a.modelName] = (modelCountsMap[a.modelName] || 0) + 1;
         });
-        // 🌟 [전사 표준 헌장 2.2 자동 상속 및 무누락/무잡음 원칙] 출고 시 장착 옵션 및 보양은 cargoItems 메타데이터로 보존하고, 배차 특이사항(closingMemo) 및 원문(memo)에는 옵션을 주입하지 않음
+        const cargoItems = JSON.stringify(Object.entries(modelCountsMap).map(([modelName, count]) => ({ modelName, count })));
+
+        // 🌟 [전사 표준 헌장 2.2 자동 상속 및 무누락/무잡음 원칙] 출고 시 장착 옵션 및 보양 정확 상속
         const outboundDelivery = db.deliveries.find(d => d.contractId === contract.id && d.type === 'OUTBOUND');
 
         let rawPaidOptions = (data as any).paidOptions;
@@ -5295,14 +3532,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
         const cleanProtection = (rawProtection && rawProtection !== '없음' && rawProtection !== 'NONE') ? String(rawProtection).trim() : 'NONE';
 
-        const cargoItems = JSON.stringify(
-          Object.entries(modelCountsMap).map(([modelName, count], idx) => ({
-            modelName,
-            count,
-            ...(cleanPaidOptions ? { paidOptions: cleanPaidOptions } : {}),
-            ...(idx === 0 && cleanProtection !== 'NONE' ? { requestMeta: { protection: cleanProtection } } : {})
-          }))
-        );
+        // 잡음(Cruft) 방지: 불필요한 옵션이 없으면 해당 태그 자체를 생성하지 않음
+        const optionMemoParts: string[] = [];
+        if (cleanPaidOptions) {
+          optionMemoParts.push(`[회수옵션] ${cleanPaidOptions}`);
+        }
+        if (cleanProtection !== 'NONE') {
+          optionMemoParts.push(`[무상옵션] ${cleanProtection}`);
+        }
+        const optionMemoStr = optionMemoParts.length > 0 ? `${optionMemoParts.join(' | ')} | ` : '';
 
         const createdReturnDelivery = db.insertRow<Delivery>('deliveries', {
           contractId: data.contractId,
@@ -5329,9 +3567,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           reconciliationStatus: 'PENDING',
           cargoItems,
           isCostSettled: false,
-          rawText: (data.note || '').trim(),
-          memo: appendDispatchStaffTag(`${contactInfoMemo}${data.note || ''}`.trim()),
-          closingMemo: '',
+          memo: `${contactInfoMemo}${optionMemoStr}${data.note || ''}`.trim(),
+          closingMemo: `[회수조건] 유상옵션: ${cleanPaidOptions || '없음'} | 보양: ${cleanProtection}`,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
@@ -5373,7 +3610,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           driverContact: '',
           deliveryCost: 0,
           isCostSettled: false,
-          memo: appendDispatchStaffTag(`[외주정비회수] 정비건: ${data.repairId || '-'} / 외주업체: ${data.vendorId || '-'} | ${data.note || ''}`),
+          memo: `[외주정비회수] 정비건: ${data.repairId || '-'} / 외주업체: ${data.vendorId || '-'} | ${data.note || ''}`,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString()
         });
@@ -5526,9 +3763,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       assetNo: assetData.assetNo || '',
       serialNo: assetData.serialNo || '',
       manufacturer: assetData.manufacturer || '',
-      manufactureYear: normalizeManufactureYear(assetData.manufactureYear),
+      manufactureYear: assetData.manufactureYear || '',
       ownerType: 'OWNED',
-      yard: assetData.yard || '용인',
       status: 'AVAILABLE',
       monthlyRentalFee: assetData.monthlyRentalFee || 0,
       dailyRentalFee: assetData.dailyRentalFee || 0,
@@ -5580,9 +3816,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         assetNo: assetData.assetNo || '',
         serialNo: assetData.serialNo || '',
         manufacturer: assetData.manufacturer || '',
-        manufactureYear: normalizeManufactureYear(assetData.manufactureYear),
+        manufactureYear: assetData.manufactureYear || '',
         ownerType: 'OWNED',
-        yard: assetData.yard || '용인',
         status: 'AVAILABLE',
         monthlyRentalFee: assetData.monthlyRentalFee || 0,
         dailyRentalFee: assetData.dailyRentalFee || 0,
@@ -5623,7 +3858,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return createdList;
   };
 
-  // 자산 매각 계약번호 전용 채번기
+  // 자산 매각 계약번호 전용 채번기 (SALE-YYYYMMDD-NNN)
   const generateNextSaleContractNo = (): string => {
     const todayYmd = new Date().toISOString().split('T')[0].replace(/-/g, '');
     let maxSeq = 0;
@@ -5674,7 +3909,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const billingYm = payload.disposalDate.slice(0, 7);
       const dayNum = parseInt(payload.disposalDate.slice(8, 10), 10) || 30;
 
-      // 3. 헌장 2.1 & 2.2: 매각 계약 생성 (5대 계약 조건 포함)
+      // 3. 헌장 2.1 & 2.2: 매각 계약(Sale Contract) 생성 (5대 계약 조건 포함)
       const contract = db.insertRow<Contract>('contracts', {
         contractNo,
         contractType: 'SALE',
@@ -5740,7 +3975,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           updatedAt: new Date().toISOString()
         });
 
-        // 4-3. 헌장 1.2 무누락 DB 저장: 자산 입출고 이력 영구 기록
+        // 4-3. 헌장 1.2 무누락 DB 저장: 자산 입출고 이력(DISPOSAL) 영구 기록
         db.insertRow<AssetInOutLog>('assetInOutLogs', {
           assetId: asset.id,
           assetNo: asset.assetNo,
@@ -5754,7 +3989,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
-      // 5. 1회성 매각 청구서 및 상세 발행 (과세 10% 분리, 총액 100% 일치)
+      // 5. 1회성 매각 청구서(billings) 및 상세(billingDetails) 발행 (과세 10% 분리, 총액 100% 일치)
       const vat = Math.round(totalSalePrice * 0.1);
       const grandTotal = totalSalePrice + vat;
 
@@ -5771,8 +4006,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         updatedAt: new Date().toISOString()
       });
 
-      await db.awaitPendingWrites();
-
       for (const summary of soldAssetSummaries) {
         db.insertRow<BillingDetail>('billingDetails', {
           billingId: billing.id,
@@ -5786,7 +4019,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         });
       }
 
-      // 6. 계약 이력 기록
+      // 6. 계약 이력(contractHistory) 기록
       db.insertRow<ContractHistory>('contractHistory', {
         contractId: contract.id,
         changeType: 'ASSET_SOLD',
@@ -5827,7 +4060,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             ? `분할 지급 (계약금: ₩${(payload.saleTerms.installmentDownAmount || 0).toLocaleString()}원 / 잔금: ₩${(payload.saleTerms.installmentBalanceAmount || 0).toLocaleString()}원, 잔금납기: ${payload.saleTerms.installmentBalanceDueDate || '-'})`
             : `일시불 완납 (${payload.saleTerms?.lumpSumDueTerm === 'DELIVERY' ? '장비 인도일 완납' : payload.saleTerms?.lumpSumDueTerm === '7_DAYS' ? '계약일로부터 7일 이내' : payload.saleTerms?.lumpSumDueTerm === '14_DAYS' ? '계약일로부터 14일 이내' : payload.saleTerms?.lumpSumDueTerm === 'MONTH_10' ? '익월 10일 완납' : '계약 체결 즉시 완납'})`;
 
-          const deliveryTermsText = `${payload.saleTerms?.deliveryLocationType === 'BUYER_SITE' ? '매수처 지정지 하차도' : '당사 주기장 상차도'} (${payload.saleTerms?.freightBearer === 'SELLER' ? '당사 운송부담' : '매수자 운송부담'}) / 인도예정일: ${payload.saleTerms?.deliveryDate || payload.disposalDate}`;
+          const deliveryTermsText = `${payload.saleTerms?.deliveryLocationType === 'BUYER_SITE' ? '매수처 지정지 하차도' : '당사 주기장 상차도(FOB)'} (${payload.saleTerms?.freightBearer === 'SELLER' ? '당사 운송부담' : '매수자 운송부담'}) / 인도예정일: ${payload.saleTerms?.deliveryDate || payload.disposalDate}`;
 
           const body = `
 안녕하세요, ${customer.name} 담당자님.
@@ -5846,7 +4079,7 @@ ${tenantCorp}입니다.
 - 입금 계좌: ${payload.saleTerms?.bankAccount ? payload.saleTerms.bankAccount : tenantAccount}
 - 결제 조건: ${paymentTermsText}
 - 인도 조건: ${deliveryTermsText}
-${payload.saleTerms?.useStandardAsIsClause ? '- 특약: 현상태 인수 및 소유권 유보(대금 완납 시 이전)\n' : ''}
+${payload.saleTerms?.useStandardAsIsClause ? '- 특약: 현상태 인수(As-Is) 및 소유권 유보(대금 완납 시 이전)\n' : ''}
 [매각 장비 상세 내역]
 ${soldAssetSummaries.map((s, idx) => `${idx + 1}. 관리번호: ${s.assetNo} / 모델명: ${s.modelName} / 매각단가: ₩${s.salePrice.toLocaleString()}원`).join('\n')}
 
@@ -5854,7 +4087,6 @@ ${payload.memo ? `\n[특이사항 / 메모]\n${payload.memo}\n` : ''}
 
 감사합니다.
 ${currentTenant?.corporateName || tenantCorp} 배상
-연락처: ${currentUser?.name || ''} ${(currentUser as any)?.mobile || currentUser?.phone || currentTenant?.tel || '031-334-5295'}
           `.trim();
 
           await emailService.sendEmail(
@@ -5898,49 +4130,34 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
   const registerRentedAsset = async (assetData: Partial<Asset>) => {
     let result;
-    const { isReactivating, ...cleanAssetData } = assetData as any;
-    const sanitizedMonthlyFee = Math.max(0, Number(cleanAssetData.monthlyRentFee) || 0);
-    const sanitizedDailyFee = cleanAssetData.dailyRentFee ? Math.max(0, Number(cleanAssetData.dailyRentFee)) : Math.floor(sanitizedMonthlyFee / 30);
+    const sanitizedMonthlyFee = Math.max(0, Number(assetData.monthlyRentFee) || 0);
+    const sanitizedDailyFee = assetData.dailyRentFee ? Math.max(0, Number(assetData.dailyRentFee)) : Math.floor(sanitizedMonthlyFee / 30);
 
-    const existing = db.assets.find(a => a.assetNo === cleanAssetData.assetNo || (cleanAssetData.id && a.id === cleanAssetData.id));
-    const resolvedOwnership = cleanAssetData.antiEntrapmentOwnership || existing?.antiEntrapmentOwnership || 'NONE';
+    const existing = db.assets.find(a => a.assetNo === assetData.assetNo || (assetData.id && a.id === assetData.id));
+    const resolvedOwnership = assetData.antiEntrapmentOwnership || existing?.antiEntrapmentOwnership || 'NONE';
     const ownershipLabel = resolvedOwnership === 'VENDOR' ? '임차처 소유(탈거금지)' : resolvedOwnership === 'OURS' ? '당사 소유(회수대상)' : '미장착';
-    const targetModelName = (cleanAssetData.modelName || existing?.modelName || '').trim();
-    const resolvedManufacturer = db.resolveAssetManufacturer(targetModelName, cleanAssetData.manufacturer || existing?.manufacturer);
-    const resolvedManufactureYear = normalizeManufactureYear(cleanAssetData.manufactureYear ?? existing?.manufactureYear ?? '');
 
     if (existing) {
-      const wasReturned = Boolean(isReactivating || existing.status === 'RENTED_RETURNED' || existing.actualRentReturnDate);
-      const nextStatus =
-        wasReturned
-          ? (cleanAssetData.status && cleanAssetData.status !== 'RENTED_RETURNED' ? cleanAssetData.status : 'AVAILABLE')
-          : cleanAssetData.status || existing.status || 'AVAILABLE';
       result = db.updateRow<Asset>('assets', existing.id, {
-        ...cleanAssetData,
-        vendorAssetNo: cleanAssetData.vendorAssetNo || existing.vendorAssetNo || '',
-        serialNo: cleanAssetData.serialNo ?? existing.serialNo ?? '',
-        manufacturer: resolvedManufacturer,
-        manufactureYear: resolvedManufactureYear,
+        ...assetData,
+        vendorAssetNo: assetData.vendorAssetNo || existing.vendorAssetNo || '',
         ownerType: 'RENTED',
-        yard: cleanAssetData.yard || existing.yard || '용인',
         antiEntrapmentOwnership: resolvedOwnership,
-        status: nextStatus,
+        status: 'AVAILABLE',
         monthlyRentFee: sanitizedMonthlyFee,
         dailyRentFee: sanitizedDailyFee,
-        actualRentReturnDate: wasReturned ? '' : (cleanAssetData.actualRentReturnDate ?? existing.actualRentReturnDate ?? ''),
+        actualRentReturnDate: '', // 과거 실제 반납일 초기화 (재임차 활성화)
         updatedAt: new Date().toISOString()
       });
     } else {
       result = db.insertRow<Asset>('assets', {
         modelName: assetData.modelName || '',
-        assetNo: assetData.assetNo || '',
-        vendorId: assetData.vendorId || '',
-        vendorAssetNo: assetData.vendorAssetNo || '',
-        serialNo: assetData.serialNo || '',
-        manufacturer: resolvedManufacturer,
-        manufactureYear: resolvedManufactureYear,
+          assetNo: assetData.assetNo || '',
+          vendorId: assetData.vendorId || '',
+          vendorAssetNo: assetData.vendorAssetNo || '',
+          serialNo: assetData.serialNo || '',
+        manufacturer: assetData.manufacturer || '',
         ownerType: 'RENTED',
-        yard: assetData.yard || '용인',
         antiEntrapmentOwnership: resolvedOwnership,
         status: 'AVAILABLE',
         renter: assetData.renter || '',
@@ -6104,10 +4321,9 @@ ${currentTenant?.corporateName || tenantCorp} 배상
   const deleteConsumable = async (id: string) => {
     try {
       const hasLogs = db.consumableLogs.some(l => l.consumableId === id);
-      const hasVehicleStock = db.mechanicConsumableStocks.some(s => s.consumableId === id && s.stockQty > 0);
       
-      if (hasLogs || hasVehicleStock) {
-        showErrorModal('수불 이력이 있거나 차량에 불출된 재고가 있어 삭제할 수 없습니다. 관리자에게 문의하여 단종 처리하세요.', '삭제 불가');
+      if (hasLogs) {
+        showErrorModal('수불 이력이 있어 삭제할 수 없습니다. 관리자에게 문의하여 단종 처리하세요.', '삭제 불가');
         throw new Error('삭제 불가');
       }
 
@@ -6243,304 +4459,9 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     }
   };
 
-  const transferConsumableToMechanic = async (mechanicId: string, consumableId: string, quantity: number, memo?: string): Promise<void> => {
-    try {
-      if (quantity <= 0) {
-        showErrorModal('불출 수량은 1개 이상이어야 합니다.');
-        throw new Error('불출 수량은 1개 이상이어야 합니다.');
-      }
-      const consumable = db.consumables.find(c => c.id === consumableId);
-      if (!consumable || consumable.stockQty < quantity) {
-        const msg = `본사 재고가 부족합니다. (본사 현재고: ${consumable?.stockQty || 0}개)`;
-        showErrorModal(`⚠️ ${msg}`);
-        throw new Error(msg);
-      }
-
-      const mechanic = db.users.find(u => u.id === mechanicId);
-      const mechanicName = mechanic?.name || '정비사';
-
-      let remainingQtyToDeduct = quantity;
-      const lots = db.consumableLots
-        .filter(l => l.consumableId === consumableId && l.currentQty > 0)
-        .sort((a, b) => new Date(a.inboundDate).getTime() - new Date(b.inboundDate).getTime());
-
-      for (const lot of lots) {
-        if (remainingQtyToDeduct <= 0) break;
-        const deductQty = Math.min(lot.currentQty, remainingQtyToDeduct);
-        
-        // 1. 본사 재고 차감
-        db.updateRow<ConsumableLot>('consumableLots', lot.id, {
-          currentQty: lot.currentQty - deductQty,
-          updatedAt: new Date().toISOString()
-        });
-
-        // 2. 기사 차량 재고 증가
-        const existingStock = db.mechanicConsumableStocks.find(s => s.mechanicId === mechanicId && s.lotId === lot.id);
-        if (existingStock) {
-          db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', existingStock.id, {
-            stockQty: existingStock.stockQty + deductQty,
-            updatedAt: new Date().toISOString()
-          });
-        } else {
-          const newId = `mcs-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
-          db.insertRow<MechanicConsumableStock>('mechanicConsumableStocks', {
-            id: newId,
-            mechanicId,
-            consumableId,
-            lotId: lot.id,
-            stockQty: deductQty,
-            updatedAt: new Date().toISOString()
-          });
-        }
-
-        // 3. 수불 로그 기록
-        db.insertRow<ConsumableLog>('consumableLogs', {
-          consumableId,
-          lotId: lot.id,
-          type: 'TRANSFER_TO_VEHICLE',
-          quantity: deductQty,
-          unitPrice: lot.unitPrice,
-          userId: currentUser?.id,
-          mechanicId,
-          fromLocation: '주기장 재고',
-          toLocation: `${mechanicName} 차량`,
-          actionDate: new Date().toISOString().split('T')[0],
-          description: memo || `[차량 불출] 주기장 ➔ ${mechanicName} 차량 이동 (${deductQty}개)`,
-          createdAt: new Date().toISOString()
-        });
-
-        remainingQtyToDeduct -= deductQty;
-      }
-
-      if (remainingQtyToDeduct > 0) {
-        throw new Error('Lot 데이터 무결성 오류: 총 재고는 충분하나 Lot 재고의 합이 부족합니다.');
-      }
-
-      // HQ 마스터 재고 차감
-      db.updateRow<Consumable>('consumables', consumableId, {
-        stockQty: consumable.stockQty - quantity,
-        updatedAt: new Date().toISOString()
-      });
-
-      await db.awaitPendingWrites();
-      refreshAllData();
-    } catch (err: any) {
-      showErrorModal(`⚠️ 차량 불출 처리 실패:\n${err?.message || err}`);
-      throw err;
-    }
-  };
-
-  const returnConsumableToHq = async (
-    mechanicId: string, 
-    consumableId: string, 
-    quantity: number, 
-    memo?: string,
-    isDefective: boolean = false,
-    disposition: 'REBUILD' | 'SCRAP' | 'VENDOR_WARRANTY' = 'REBUILD'
-  ): Promise<void> => {
-    try {
-      if (quantity <= 0) {
-        showErrorModal('반납 수량은 1개 이상이어야 합니다.');
-        throw new Error('반납 수량은 1개 이상이어야 합니다.');
-      }
-      
-      const mechStocks = db.mechanicConsumableStocks
-        .filter(s => s.mechanicId === mechanicId && s.consumableId === consumableId && s.stockQty > 0);
-      
-      const totalMechStock = mechStocks.reduce((sum, s) => sum + s.stockQty, 0);
-
-      if (totalMechStock < quantity) {
-        const msg = `차량 보유 재고가 부족합니다. (차량 현재고: ${totalMechStock}개)`;
-        showErrorModal(`⚠️ ${msg}`);
-        throw new Error(msg);
-      }
-
-      const consumable = db.consumables.find(c => c.id === consumableId);
-      const mechanic = db.users.find(u => u.id === mechanicId);
-      const mechanicName = mechanic?.name || '정비사';
-
-      // Sort mechanic stocks by inboundDate of their lot (FIFO from vehicle)
-      mechStocks.sort((a, b) => {
-        const lotA = db.consumableLots.find(l => l.id === a.lotId);
-        const lotB = db.consumableLots.find(l => l.id === b.lotId);
-        return new Date(lotA?.inboundDate || 0).getTime() - new Date(lotB?.inboundDate || 0).getTime();
-      });
-
-      let remainingQty = quantity;
-
-      for (const stock of mechStocks) {
-        if (remainingQty <= 0) break;
-        const deductQty = Math.min(stock.stockQty, remainingQty);
-        const lot = db.consumableLots.find(l => l.id === stock.lotId);
-
-        // 1. 기사 차량 재고 차감
-        db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', stock.id, {
-          stockQty: stock.stockQty - deductQty,
-          updatedAt: new Date().toISOString()
-        });
-
-        // 2. 신품 정상 반납 vs 고품 격리 처리
-        if (!isDefective) {
-          if (lot) {
-            db.updateRow<ConsumableLot>('consumableLots', lot.id, {
-              currentQty: lot.currentQty + deductQty,
-              updatedAt: new Date().toISOString()
-            });
-          }
-        } else {
-          const todayStr = new Date().toISOString().split('T')[0].replace(/-/g, '');
-          const newPartNo = `COL-${todayStr}-${Math.floor(1000 + Math.random() * 9000)}`;
-          db.insertRow<CollectedPart>('collectedParts', {
-            id: `col-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-            partNo: newPartNo,
-            consumableId,
-            lotId: lot?.id,
-            modelName: consumable?.modelName || '부품',
-            mechanicId,
-            mechanicName,
-            quantity: deductQty,
-            disposition,
-            status: 'RECEIVED',
-            receivedDate: new Date().toISOString().split('T')[0],
-            memo: memo || `[고품 수거] ${mechanicName} 차량 반납 (${disposition})`,
-            createdAt: new Date().toISOString()
-          });
-        }
-
-        db.insertRow<ConsumableLog>('consumableLogs', {
-          consumableId,
-          lotId: lot?.id,
-          type: 'RETURN_TO_HQ',
-          quantity: deductQty,
-          unitPrice: lot?.unitPrice || consumable?.unitPrice || 0,
-          userId: currentUser?.id,
-          mechanicId,
-          fromLocation: `${mechanicName} 차량`,
-          toLocation: !isDefective ? '주기장 재고' : `고품 격리실 (${disposition})`,
-          actionDate: new Date().toISOString().split('T')[0],
-          description: memo || (!isDefective 
-            ? `[주기장 반납] ${mechanicName} 차량 ➔ 주기장 재고 회수 (${deductQty}개)`
-            : `[고품 반납] ${mechanicName} 차량 ➔ 고품 격리 (${disposition}, ${deductQty}개)`),
-          createdAt: new Date().toISOString()
-        });
-
-        remainingQty -= deductQty;
-      }
-
-      if (!isDefective && consumable) {
-        db.updateRow<Consumable>('consumables', consumableId, {
-          stockQty: consumable.stockQty + quantity,
-          updatedAt: new Date().toISOString()
-        });
-      }
-
-      await db.awaitPendingWrites();
-      refreshAllData();
-    } catch (err: any) {
-      showErrorModal(`⚠️ 본사 반납 처리 실패:\n${err?.message || err}`);
-      throw err;
-    }
-  };
-
-  const transferConsumableBetweenMechanics = async (
-    fromMechanicId: string,
-    toMechanicId: string,
-    consumableId: string,
-    quantity: number,
-    memo?: string
-  ): Promise<void> => {
-    try {
-      if (fromMechanicId === toMechanicId) {
-        showErrorModal('동일한 정비사 차량 간에는 이동할 수 없습니다.');
-        throw new Error('동일한 정비사 차량 간에는 이동할 수 없습니다.');
-      }
-      if (quantity <= 0) {
-        showErrorModal('이동 수량은 1개 이상이어야 합니다.');
-        throw new Error('이동 수량은 1개 이상이어야 합니다.');
-      }
-
-      const fromStocks = db.mechanicConsumableStocks
-        .filter(s => s.mechanicId === fromMechanicId && s.consumableId === consumableId && s.stockQty > 0);
-      
-      const totalFromStock = fromStocks.reduce((sum, s) => sum + s.stockQty, 0);
-
-      if (totalFromStock < quantity) {
-        const msg = `양도 정비사 차량의 보유 재고가 부족합니다. (현재고: ${totalFromStock}개)`;
-        showErrorModal(`⚠️ ${msg}`);
-        throw new Error(msg);
-      }
-
-      const fromUser = db.users.find(u => u.id === fromMechanicId);
-      const toUser = db.users.find(u => u.id === toMechanicId);
-      const consumable = db.consumables.find(c => c.id === consumableId);
-
-      // Sort by inboundDate (FIFO)
-      fromStocks.sort((a, b) => {
-        const lotA = db.consumableLots.find(l => l.id === a.lotId);
-        const lotB = db.consumableLots.find(l => l.id === b.lotId);
-        return new Date(lotA?.inboundDate || 0).getTime() - new Date(lotB?.inboundDate || 0).getTime();
-      });
-
-      let remainingQty = quantity;
-
-      for (const stock of fromStocks) {
-        if (remainingQty <= 0) break;
-        const deductQty = Math.min(stock.stockQty, remainingQty);
-        const lot = db.consumableLots.find(l => l.id === stock.lotId);
-
-        // 1. 양도 차량 재고 차감
-        db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', stock.id, {
-          stockQty: stock.stockQty - deductQty,
-          updatedAt: new Date().toISOString()
-        });
-
-        // 2. 양수 차량 재고 증가
-        const toStock = db.mechanicConsumableStocks.find(s => s.mechanicId === toMechanicId && s.lotId === lot?.id);
-        if (toStock) {
-          db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', toStock.id, {
-            stockQty: toStock.stockQty + deductQty,
-            updatedAt: new Date().toISOString()
-          });
-        } else {
-          db.insertRow<MechanicConsumableStock>('mechanicConsumableStocks', {
-            id: `mcs-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-            mechanicId: toMechanicId,
-            consumableId,
-            lotId: lot?.id || '',
-            stockQty: deductQty,
-            updatedAt: new Date().toISOString()
-          });
-        }
-
-        // 3. 수불 로그 기록
-        db.insertRow<ConsumableLog>('consumableLogs', {
-          consumableId,
-          lotId: lot?.id,
-          type: 'TRANSFER_TO_VEHICLE',
-          quantity: deductQty,
-          unitPrice: lot?.unitPrice || consumable?.unitPrice || 0,
-          userId: currentUser?.id,
-          mechanicId: toMechanicId,
-          fromLocation: `${fromUser?.name || '정비사'} 차량`,
-          toLocation: `${toUser?.name || '정비사'} 차량`,
-          actionDate: new Date().toISOString().split('T')[0],
-          description: memo || `[차량 간 융통] ${fromUser?.name} 차량 ➔ ${toUser?.name} 차량 (${deductQty}개)`,
-          createdAt: new Date().toISOString()
-        });
-
-        remainingQty -= deductQty;
-      }
-
-      await db.awaitPendingWrites();
-      refreshAllData();
-    } catch (err: any) {
-      showErrorModal(`⚠️ 차량 간 부품 융통 처리 실패:\n${err?.message || err}`);
-      throw err;
-    }
-  };
 
   const createStocktakingAudit = async (
-    targetType: 'HQ' | 'VEHICLE',
+    targetType: 'HQ' | 'VEHICLE' = 'HQ',
     mechanicId?: string,
     memo?: string
   ): Promise<StocktakingAudit> => {
@@ -6553,98 +4474,57 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       let mechanicName: string | undefined;
       let vehicleNo: string | undefined;
 
-      if (targetType === 'VEHICLE') {
-        if (!mechanicId) throw new Error('차량 실사의 경우 담당 정비사를 지정해야 합니다.');
-        const mech = db.users.find(u => u.id === mechanicId);
-        mechanicName = mech?.name;
-        const corpVehicle = db.corporateVehicles.find(v => v.primaryDriverId === mechanicId);
-        vehicleNo = corpVehicle?.vehicleNo || (mech as any)?.vehicleNo || '';
-      }
-
       const newAuditId = `stk-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`;
       
       const itemsToInsert: StocktakingAuditItem[] = [];
       let totalSystemQty = 0;
       let totalSystemAmount = 0;
 
-      if (targetType === 'HQ') {
-        // 1. 소모품 스냅샷
-        db.consumables.forEach(c => {
-          const sysQty = c.stockQty || 0;
-          const uPrice = c.unitPrice || 0;
-          totalSystemQty += sysQty;
-          totalSystemAmount += sysQty * uPrice;
+      // 1. 소모품 스냅샷
+      db.consumables.forEach(c => {
+        const sysQty = c.stockQty || 0;
+        const uPrice = c.unitPrice || 0;
+        totalSystemQty += sysQty;
+        totalSystemAmount += sysQty * uPrice;
 
-          itemsToInsert.push({
-            id: `sti-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            auditId: newAuditId,
-            itemType: 'CONSUMABLE',
-            consumableId: c.id,
-            modelName: c.modelName,
-            unit: c.unit,
-            unitPrice: uPrice,
-            systemQty: sysQty,
-            actualQty: sysQty,
-            diffQty: 0,
-            diffAmount: 0
-          });
+        itemsToInsert.push({
+          id: `sti-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          auditId: newAuditId,
+          itemType: 'CONSUMABLE',
+          consumableId: c.id,
+          modelName: c.modelName,
+          unit: c.unit,
+          unitPrice: uPrice,
+          systemQty: sysQty,
+          actualQty: sysQty,
+          diffQty: 0,
+          diffAmount: 0
         });
+      });
 
-        // 2. 비가동 장비 스냅샷
-        const nonOpAssets = db.assets.filter(a => ['AVAILABLE', 'REPAIRING', 'RENTED_RETURNED'].includes(a.status));
-        nonOpAssets.forEach(a => {
-          const sysQty = 1;
-          const uPrice = 0;
-          totalSystemQty += sysQty;
-          totalSystemAmount += sysQty * uPrice;
+      // 2. 비가동 장비 스냅샷
+      const nonOpAssets = db.assets.filter(a => ['AVAILABLE', 'REPAIRING', 'RENTED_RETURNED'].includes(a.status));
+      nonOpAssets.forEach(a => {
+        const sysQty = 1;
+        const uPrice = 0;
+        totalSystemQty += sysQty;
+        totalSystemAmount += sysQty * uPrice;
 
-          itemsToInsert.push({
-            id: `sti-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            auditId: newAuditId,
-            itemType: 'ASSET',
-            assetId: a.id,
-            assetNo: a.assetNo,
-            modelName: a.modelName,
-            unit: '대',
-            unitPrice: uPrice,
-            systemQty: sysQty,
-            actualQty: sysQty,
-            diffQty: 0,
-            diffAmount: 0
-          });
+        itemsToInsert.push({
+          id: `sti-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          auditId: newAuditId,
+          itemType: 'ASSET',
+          assetId: a.id,
+          assetNo: a.assetNo,
+          modelName: a.modelName,
+          unit: '대',
+          unitPrice: uPrice,
+          systemQty: sysQty,
+          actualQty: sysQty,
+          diffQty: 0,
+          diffAmount: 0
         });
-
-      } else if (targetType === 'VEHICLE' && mechanicId) {
-        const mechStocks = db.mechanicConsumableStocks.filter(s => s.mechanicId === mechanicId && s.stockQty > 0);
-        const grouped = mechStocks.reduce((acc, s) => {
-          if (!acc[s.consumableId]) acc[s.consumableId] = 0;
-          acc[s.consumableId] += s.stockQty;
-          return acc;
-        }, {} as Record<string, number>);
-
-        Object.keys(grouped).forEach(cId => {
-          const sysQty = grouped[cId];
-          const consumable = db.consumables.find(c => c.id === cId);
-          if (!consumable) return;
-          const uPrice = consumable.unitPrice || 0;
-          totalSystemQty += sysQty;
-          totalSystemAmount += sysQty * uPrice;
-
-          itemsToInsert.push({
-            id: `sti-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            auditId: newAuditId,
-            itemType: 'CONSUMABLE',
-            consumableId: consumable.id,
-            modelName: consumable.modelName,
-            unit: consumable.unit,
-            unitPrice: uPrice,
-            systemQty: sysQty,
-            actualQty: sysQty,
-            diffQty: 0,
-            diffAmount: 0
-          });
-        });
-      }
+      });
 
       if (itemsToInsert.length === 0) {
         throw new Error('실사 대상 품목/장비가 없습니다.');
@@ -6786,62 +4666,28 @@ ${currentTenant?.corporateName || tenantCorp} 배상
             }
           } else if (item.consumableId) {
             // 소모품 처리
-            if (audit.targetType === 'HQ') {
-              const c = db.consumables.find(con => con.id === item.consumableId);
-              if (c) {
-                db.updateRow<Consumable>('consumables', c.id, {
-                  stockQty: item.actualQty,
-                  updatedAt: new Date().toISOString()
-                });
-                let diff = item.diffQty; 
-                const lots = db.consumableLots
-                  .filter(l => l.consumableId === item.consumableId)
-                  .sort((a, b) => new Date(a.inboundDate).getTime() - new Date(b.inboundDate).getTime());
-                  
-                if (diff < 0) {
-                  let toDeduct = Math.abs(diff);
-                  for (const lot of lots.filter(l => l.currentQty > 0)) {
-                    if (toDeduct <= 0) break;
-                    const deduct = Math.min(lot.currentQty, toDeduct);
-                    db.updateRow<ConsumableLot>('consumableLots', lot.id, { currentQty: lot.currentQty - deduct, updatedAt: new Date().toISOString() });
-                    toDeduct -= deduct;
-                  }
-                } else if (diff > 0 && lots.length > 0) {
-                  const newestLot = lots[lots.length - 1];
-                  db.updateRow<ConsumableLot>('consumableLots', newestLot.id, { currentQty: newestLot.currentQty + diff, updatedAt: new Date().toISOString() });
-                }
-              }
-            } else {
-              const mechStocks = db.mechanicConsumableStocks
-                .filter(s => s.mechanicId === audit.mechanicId && s.consumableId === item.consumableId)
-                .sort((a, b) => {
-                  const lotA = db.consumableLots.find(l => l.id === a.lotId);
-                  const lotB = db.consumableLots.find(l => l.id === b.lotId);
-                  return new Date(lotA?.inboundDate || 0).getTime() - new Date(lotB?.inboundDate || 0).getTime();
-                });
-
-              let diff = item.diffQty;
-              if (mechStocks.length === 0) {
-                const newestLot = db.consumableLots.filter(l => l.consumableId === item.consumableId).sort((a, b) => new Date(b.inboundDate).getTime() - new Date(a.inboundDate).getTime())[0];
-                db.insertRow<MechanicConsumableStock>('mechanicConsumableStocks', {
-                  id: `mcs-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
-                  mechanicId: audit.mechanicId!,
-                  consumableId: item.consumableId,
-                  lotId: newestLot?.id || '',
-                  stockQty: item.actualQty,
-                  updatedAt: new Date().toISOString()
-                });
-              } else if (diff < 0) {
+            const c = db.consumables.find(con => con.id === item.consumableId);
+            if (c) {
+              db.updateRow<Consumable>('consumables', c.id, {
+                stockQty: item.actualQty,
+                updatedAt: new Date().toISOString()
+              });
+              let diff = item.diffQty; 
+              const lots = db.consumableLots
+                .filter(l => l.consumableId === item.consumableId)
+                .sort((a, b) => new Date(a.inboundDate).getTime() - new Date(b.inboundDate).getTime());
+                
+              if (diff < 0) {
                 let toDeduct = Math.abs(diff);
-                for (const stock of mechStocks.filter(s => s.stockQty > 0)) {
+                for (const lot of lots.filter(l => l.currentQty > 0)) {
                   if (toDeduct <= 0) break;
-                  const deduct = Math.min(stock.stockQty, toDeduct);
-                  db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', stock.id, { stockQty: stock.stockQty - deduct, updatedAt: new Date().toISOString() });
+                  const deduct = Math.min(lot.currentQty, toDeduct);
+                  db.updateRow<ConsumableLot>('consumableLots', lot.id, { currentQty: lot.currentQty - deduct, updatedAt: new Date().toISOString() });
                   toDeduct -= deduct;
                 }
-              } else if (diff > 0) {
-                const newestStock = mechStocks[mechStocks.length - 1];
-                db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', newestStock.id, { stockQty: newestStock.stockQty + diff, updatedAt: new Date().toISOString() });
+              } else if (diff > 0 && lots.length > 0) {
+                const newestLot = lots[lots.length - 1];
+                db.updateRow<ConsumableLot>('consumableLots', newestLot.id, { currentQty: newestLot.currentQty + diff, updatedAt: new Date().toISOString() });
               }
             }
 
@@ -6901,30 +4747,8 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     }
   };
 
-  const processCollectedPart = async (
-    partId: string, 
-    actionStatus: 'IN_PROCESS' | 'COMPLETED', 
-    actionMemo?: string
-  ): Promise<void> => {
-    try {
-      const part = db.collectedParts.find(p => p.id === partId);
-      if (!part) throw new Error('수거 고품을 찾을 수 없습니다.');
 
-      db.updateRow<CollectedPart>('collectedParts', partId, {
-        status: actionStatus,
-        actionDate: actionStatus === 'COMPLETED' ? new Date().toISOString().split('T')[0] : part.actionDate,
-        actionMemo: actionMemo || part.actionMemo
-      });
-
-      await db.awaitPendingWrites();
-      refreshAllData();
-    } catch (err: any) {
-      showErrorModal(`⚠️ 고품 사후처리 갱신 실패:\n${err?.message || err}`);
-      throw err;
-    }
-  };
-
-  // ─── [전사 정비 & AS 단일 물리 통합 핵심 비즈니스 로직] ─────────
+  // ─── [전사 정비 & AS 단일 물리 통합 핵심 비즈니스 로직 (1-A, 2-B, 3-B, 4-A)] ─────────
   const createFieldAsTicket = async (data: Partial<Repair>): Promise<Repair> => {
     try {
       const now = new Date();
@@ -6958,14 +4782,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         }
       }
 
-      const isExplicitUnknownAsset =
-        resolvedAssetNo === '관리번호 모름' || resolvedAssetNo === '관리번호모름';
-
-      if (
-        !isExplicitUnknownAsset &&
-        resolvedContractId &&
-        (!resolvedAssetId || resolvedAssetId === '현장확인' || resolvedAssetNo === '현장확인')
-      ) {
+      if (resolvedContractId && (!resolvedAssetId || resolvedAssetId === '현장확인' || resolvedAssetNo === '현장확인')) {
         const cas = db.contractAssets.filter(ca => ca.contractId === resolvedContractId && ca.status !== 'RETURNED');
         if (cas.length === 1 && cas[0].assetId) {
           const singleAsset = db.assets.find(a => a.id === cas[0].assetId);
@@ -6977,7 +4794,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         }
       }
 
-      // 💡 도로명 상세 주소 자동 역추적 및 매핑 (T맵/내비 연동 단일 진실의 원천)
+      // 💡 도로명 상세 주소(siteAddress) 자동 역추적 및 매핑 (T맵/내비 연동 단일 진실의 원천)
       let resolvedSiteAddress = data.siteAddress?.trim();
       if (!resolvedSiteAddress) {
         resolvedSiteAddress = resolveSiteDetailedAddress({
@@ -7024,8 +4841,8 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         siteName: data.siteName || '',
         siteAddress: resolvedSiteAddress || '',
         assetId: resolvedAssetId || '',
-        assetNo: resolvedAssetNo || '관리번호 모름',
-        modelName: resolvedModelName || (isExplicitUnknownAsset ? '' : '고소작업대'),
+        assetNo: resolvedAssetNo || '현장확인',
+        modelName: resolvedModelName || '고소작업대',
         locationDetail: data.locationDetail || (resolvedSiteAddress ? resolvedSiteAddress : ''),
         reporterName: data.reporterName || '',
         reporterContact: data.reporterContact || '',
@@ -7158,57 +4975,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     }
   };
 
-  const recordAsRouteEvent = async (params: {
-    eventType: AsRouteEventType;
-    ticketId?: string;
-    nextTicketId?: string;
-    nextSiteCustomName?: string;
-    sourcingType?: AsPartsSourcingType;
-    sourcingTargetName?: string;
-    partName?: string;
-    revisitDate?: string;
-    memo?: string;
-    mechanicId?: string;
-    mechanicName?: string;
-  }): Promise<AsRouteLog> => {
-    try {
-      const targetTicket = params.ticketId ? db.repairs.find(r => r.id === params.ticketId) || null : null;
-      const targetNextTicket = params.nextTicketId ? db.repairs.find(r => r.id === params.nextTicketId) || null : null;
-      const resolvedMechanicId =
-        params.mechanicId ||
-        currentUser?.id ||
-        targetTicket?.mechanicId ||
-        targetTicket?.assignedMechanicId ||
-        'u-mechanic';
-      const matchedUser = db.users.find(u => u.id === resolvedMechanicId);
-      const resolvedMechanicName =
-        params.mechanicName ||
-        matchedUser?.name ||
-        currentUser?.name ||
-        targetTicket?.mechanicName ||
-        '담당기사';
-
-      const createdLog = await recordAsRouteStep({
-        eventType: params.eventType,
-        mechanicId: resolvedMechanicId,
-        mechanicName: resolvedMechanicName,
-        ticket: targetTicket,
-        nextTicket: targetNextTicket,
-        nextSiteCustomName: params.nextSiteCustomName,
-        sourcingType: params.sourcingType,
-        sourcingTargetName: params.sourcingTargetName,
-        partName: params.partName,
-        revisitDate: params.revisitDate,
-        memo: params.memo,
-      });
-      refreshAllData();
-      return createdLog;
-    } catch (err: any) {
-      showErrorModal(`동선 기록 저장 실패:\n${err?.message || err}`);
-      throw err;
-    }
-  };
-
   const completeFieldAsTicket = async (ticketId: string, data: {
     mechanicId: string;
     actionTaken: string;
@@ -7229,10 +4995,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     degradationScore?: number;
     durationMinutes?: number;
     spentManHours?: number;
-    assetId?: string;
-    assetNo?: string;
-    modelName?: string;
-    visitDate?: string;
   }): Promise<void> => {
     try {
       const ticket = db.repairs.find(t => t.id === ticketId);
@@ -7240,180 +5002,33 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
       const mechanic = db.users.find(u => u.id === data.mechanicId);
       const mechanicName = mechanic?.name || ticket.mechanicName || '담당기사';
-      const nowIso = new Date().toISOString();
-      const actionDateStr = data.visitDate || ticket.visitDate || nowIso.split('T')[0];
 
-      // 0. 대상 자산(assetId / assetNo / modelName) 정밀 매핑 및 다단계 자동 추적
-      const rawInputAssetId = (data.assetId ?? ticket.assetId ?? '').trim();
-      const rawInputAssetNo = (data.assetNo ?? ticket.assetNo ?? '').trim();
-      let matchedAsset = rawInputAssetId
-        ? db.assets.find(a => a.id === rawInputAssetId)
-        : undefined;
-
-      if (!matchedAsset && rawInputAssetNo && rawInputAssetNo !== '현장확인' && rawInputAssetNo !== '전체장비') {
-        matchedAsset = db.assets.find(
-          a => (a.assetNo || '').trim().toUpperCase() === rawInputAssetNo.toUpperCase()
-        );
-      }
-
-      // 미지정('현장확인' 등)인 경우 계약 또는 동일 현장의 단일 활성 대여 자산 자동 역추적
-      if (!matchedAsset && (!rawInputAssetNo || rawInputAssetNo === '현장확인')) {
-        if (ticket.contractId) {
-          const activeCas = (db.contractAssets || []).filter(
-            ca => ca.contractId === ticket.contractId && ca.status !== 'RETURNED' && ca.assetId
-          );
-          if (activeCas.length === 1 && activeCas[0].assetId) {
-            matchedAsset = db.assets.find(a => a.id === activeCas[0].assetId);
-          }
-        }
-        if (!matchedAsset && (ticket.siteId || ticket.siteName)) {
-          const siteContracts = (db.contracts || []).filter(c => {
-            if (c.status === 'COMPLETED') return false;
-            if (ticket.siteId && c.siteId === ticket.siteId) return true;
-            if (ticket.customerId && c.customerId !== ticket.customerId) return false;
-            const siteObj = c.siteId ? (db.customerSites || []).find(s => s.id === c.siteId) : undefined;
-            return Boolean(ticket.siteName && siteObj?.name && siteObj.name.trim() === ticket.siteName.trim());
-          });
-          const siteContractIds = new Set(siteContracts.map(c => c.id));
-          const activeSiteCas = (db.contractAssets || []).filter(
-            ca => siteContractIds.has(ca.contractId) && ca.status !== 'RETURNED' && ca.assetId
-          );
-          const uniqueAssetIds = Array.from(new Set(activeSiteCas.map(ca => ca.assetId).filter(Boolean)));
-          if (uniqueAssetIds.length === 1 && uniqueAssetIds[0]) {
-            matchedAsset = db.assets.find(a => a.id === uniqueAssetIds[0]);
-          }
-        }
-      }
-
-      const resolvedAssetId = matchedAsset?.id || (rawInputAssetId || undefined);
-      const resolvedAssetNo = matchedAsset?.assetNo || (rawInputAssetNo || '현장확인');
-      const resolvedModelName =
-        matchedAsset?.modelName ||
-        data.modelName ||
-        ticket.modelName ||
-        ticket.locationDetail ||
-        '고소작업대';
-
-      // 1. 소모품 차량 재고 다중 로트(FIFO) 유효성 검사 및 차감 + 정비소모품(repairConsumables) 매핑
-      let totalPartsCost = 0;
+      // 1. 소모품 재고 차감 및 출고 로그 기록
       if (data.partsUsed && data.partsUsed.length > 0) {
-        // 1-1. 동일 품목 중복 선택 합산 검증 및 기사 차량 내 가용 로트 총합 검증
-        const requiredByConsumable = new Map<string, { qty: number; modelName: string }>();
         for (const part of data.partsUsed) {
-          if (!part.quantity || part.quantity <= 0) {
-            throw new Error(`사용 부품("${part.modelName}")의 수량은 1개 이상이어야 합니다.`);
-          }
-          const prev = requiredByConsumable.get(part.consumableId);
-          requiredByConsumable.set(part.consumableId, {
-            qty: (prev?.qty || 0) + part.quantity,
-            modelName: part.modelName || prev?.modelName || '소모품'
-          });
-        }
-
-        for (const [consId, reqInfo] of requiredByConsumable.entries()) {
-          const mechStocks = db.mechanicConsumableStocks.filter(
-            s => s.mechanicId === data.mechanicId && s.consumableId === consId && (s.stockQty || 0) > 0
-          );
-          const totalAvailableQty = mechStocks.reduce((acc, s) => acc + (s.stockQty || 0), 0);
-          if (totalAvailableQty < reqInfo.qty) {
-            throw new Error(`⚠️ [차량 재고 부족] ${mechanicName} 기사의 차량 재고에 "${reqInfo.modelName}" 품목이 부족합니다.\n(현재 적재: ${totalAvailableQty}개 / 사용 필요: ${reqInfo.qty}개)\n\n[소모품 관리 ➔ 차량별 이동재고] 메뉴에서 주기장 재고를 차량으로 먼저 불출(이동) 등록해 주시기 바랍니다.`);
-          }
-        }
-
-        // 기존에 동일 티켓으로 등록된 repairConsumables가 있으면 중복 누적 방지를 위해 정리
-        const prevRepairConsumables = (db.repairConsumables || []).filter(rc => rc.repairId === ticket.id);
-        for (const prevRc of prevRepairConsumables) {
-          db.deleteRow('repairConsumables', prevRc.id);
-        }
-
-        // 1-2. 실제 차감 수행 (로트 입고일 기준 선입선출 FIFO 차감 및 targetAssetId / lotId 무누락 기록)
-        for (const part of data.partsUsed) {
-          const cMaster = db.consumables.find(c => c.id === part.consumableId);
-          const fallbackUnitPrice = part.unitPrice ?? cMaster?.unitPrice ?? 0;
-          let remainingToDeduct = part.quantity;
-          let partActualCost = 0;
-          let primaryLotId: string | undefined = undefined;
-
-          const mechStocks = db.mechanicConsumableStocks
-            .filter(s => s.mechanicId === data.mechanicId && s.consumableId === part.consumableId && (s.stockQty || 0) > 0)
-            .sort((a, b) => {
-              const lotA = db.consumableLots.find(l => l.id === a.lotId);
-              const lotB = db.consumableLots.find(l => l.id === b.lotId);
-              return new Date(lotA?.inboundDate || 0).getTime() - new Date(lotB?.inboundDate || 0).getTime();
+          if (!part.quantity || part.quantity <= 0) continue;
+          const c = db.consumables.find(item => item.id === part.consumableId);
+          if (c) {
+            db.updateRow<Consumable>('consumables', c.id, {
+              stockQty: Math.max(0, (c.stockQty || 0) - part.quantity),
+              updatedAt: new Date().toISOString()
             });
 
-          for (const stock of mechStocks) {
-            if (remainingToDeduct <= 0) break;
-            const deductQty = Math.min(stock.stockQty, remainingToDeduct);
-            const lot = stock.lotId ? db.consumableLots.find(l => l.id === stock.lotId) : undefined;
-            const lotUnitPrice = lot?.unitPrice ?? fallbackUnitPrice;
-            if (!primaryLotId && stock.lotId) primaryLotId = stock.lotId;
-
-            db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', stock.id, {
-              stockQty: stock.stockQty - deductQty,
-              updatedAt: nowIso
-            });
-
-            // 소모품 출고 로그 기록 (대상 자산 ID 및 로트 ID 1:1 매핑)
+            // 소모품 출고 로그 기록
             db.insertRow<ConsumableLog>('consumableLogs', {
               consumableId: part.consumableId,
-              lotId: stock.lotId,
               type: 'OUTBOUND',
-              quantity: deductQty,
-              unitPrice: lotUnitPrice,
-              targetAssetId: resolvedAssetId,
+              quantity: part.quantity,
+              unitPrice: part.unitPrice || c.unitPrice || 0,
               userId: currentUser?.id,
               mechanicId: data.mechanicId,
-              fromLocation: `${mechanicName} 차량`,
-              toLocation: `현장AS (${ticket.siteName || ''} / ${resolvedAssetNo})`,
-              actionDate: actionDateStr,
-              description: `[현장AS 조치 소진] ${resolvedAssetNo} 수리 사용 (${ticket.ticketNo || ticket.id})`,
-              createdAt: nowIso
+              fromLocation: '소모품 창고',
+              toLocation: `정비AS (${ticket.siteName || ''} / ${ticket.assetNo || ''})`,
+              actionDate: new Date().toISOString().split('T')[0],
+              description: `[정비AS 조치 소진] ${ticket.assetNo || ''} 수리 사용 (${ticket.ticketNo || ticket.id})`,
+              createdAt: new Date().toISOString()
             });
-
-            partActualCost += lotUnitPrice * deductQty;
-            remainingToDeduct -= deductQty;
           }
-
-          const finalUnitPrice = part.quantity > 0 ? Math.round(partActualCost / part.quantity) : fallbackUnitPrice;
-          totalPartsCost += partActualCost;
-
-          // 정비-소모품 매핑 테이블(repairConsumables) 무누락 기록
-          db.insertRow<RepairConsumable>('repairConsumables', {
-            repairId: ticket.id,
-            consumableId: part.consumableId,
-            lotId: primaryLotId,
-            quantity: part.quantity,
-            unitPrice: finalUnitPrice,
-            cost: partActualCost
-          });
-        }
-      }
-
-      // 1-3. 현장 수거 부품(고품)이 있는 경우 고품 관리 대장(collectedParts) 동기화
-      if (data.collectedParts && data.collectedParts.length > 0) {
-        const ymdCompact = actionDateStr.replace(/-/g, '');
-        for (const cp of data.collectedParts) {
-          if (!cp.partName || !cp.partName.trim()) continue;
-          const matchedCons = db.consumables.find(
-            c => c.modelName.trim().toLowerCase() === cp.partName.trim().toLowerCase()
-          );
-          const newPartNo = `COL-${ymdCompact}-${Math.floor(1000 + Math.random() * 9000)}`;
-          db.insertRow<CollectedPart>('collectedParts', {
-            id: `col-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-            partNo: newPartNo,
-            consumableId: matchedCons?.id || '',
-            modelName: cp.partName.trim(),
-            mechanicId: data.mechanicId,
-            mechanicName,
-            quantity: Math.max(1, cp.quantity || 1),
-            disposition: cp.status === 'DISPOSED' ? 'SCRAP' : 'REBUILD',
-            status: cp.status === 'DISPOSED' ? 'COMPLETED' : 'RECEIVED',
-            receivedDate: actionDateStr,
-            actionDate: cp.status === 'DISPOSED' ? actionDateStr : undefined,
-            memo: `[현장AS 고품수거] ${ticket.siteName || ''} / 장비: ${resolvedAssetNo} (${ticket.ticketNo || ticket.id})`,
-            createdAt: nowIso
-          });
         }
       }
 
@@ -7449,11 +5064,8 @@ ${currentTenant?.corporateName || tenantCorp} 배상
           customerName: ticket.customerName,
           siteId: ticket.siteId,
           siteName: ticket.siteName,
-          siteAddress: ticket.siteAddress,
-          contractId: ticket.contractId,
-          assetId: resolvedAssetId,
-          assetNo: resolvedAssetNo,
-          modelName: resolvedModelName,
+          assetId: ticket.assetId,
+          assetNo: ticket.assetNo,
           locationDetail: ticket.locationDetail,
           reporterName: ticket.reporterName,
           reporterContact: ticket.reporterContact,
@@ -7463,7 +5075,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
           errorCode: ticket.errorCode,
           priority: ticket.priority,
           status: 'SCHEDULED',
-          requestDate: nowIso.split('T')[0],
+          requestDate: new Date().toISOString().split('T')[0],
           visitDate: data.revisitDate || new Date(Date.now() + 86400000).toISOString().split('T')[0],
           scheduleDate: data.revisitDate || new Date(Date.now() + 86400000).toISOString().split('T')[0],
           mechanicId: data.mechanicId,
@@ -7475,24 +5087,18 @@ ${currentTenant?.corporateName || tenantCorp} 배상
           parentRepairId: ticket.id,
           parentTicketId: ticket.id,
           memo: `이전 AS 티켓(${ticket.ticketNo || ticket.id}) 1차 점검 후 연계 생성됨`,
-          createdAt: nowIso,
-          updatedAt: nowIso
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         });
         revisitRepairId = chainedTicket.id;
       } else if (data.resolutionType === 'GUIDED_END') {
         finalStatus = 'GUIDED';
       }
 
-      // 3. 현재 티켓 완료/종결 업데이트 (대상 자산 매핑 및 투입 소모품 원가 totalCost 반영)
+      // 3. 현재 티켓 완료/종결 업데이트
       const sanitizedBillableAmount = Math.max(0, Number(data.billableAmount) || 0);
-      const prevTicketCost = ticket.totalCost || 0;
       db.updateRow<Repair>('repairs', ticketId, {
         status: finalStatus,
-        assetId: resolvedAssetId,
-        assetNo: resolvedAssetNo,
-        modelName: resolvedModelName,
-        visitDate: actionDateStr,
-        repairDate: actionDateStr,
         mechanicId: data.mechanicId,
         assignedMechanicId: data.mechanicId,
         mechanicName,
@@ -7500,7 +5106,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         resolutionType: data.resolutionType,
         partsUsed: data.partsUsed || [],
         collectedParts: data.collectedParts || [],
-        totalCost: totalPartsCost,
         billableType: data.billableType,
         billableAmount: sanitizedBillableAmount,
         billableToCustomer: data.billableType === 'BILLABLE',
@@ -7518,31 +5123,9 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         degradationScore: data.degradationScore !== undefined ? data.degradationScore : ticket.degradationScore,
         durationMinutes: data.durationMinutes !== undefined ? data.durationMinutes : ticket.durationMinutes,
         spentManHours: data.spentManHours !== undefined ? data.spentManHours : ticket.spentManHours,
-        completedDate: nowIso,
-        updatedAt: nowIso
+        completedDate: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       });
-
-      // 3-1. 대상 자산의 누적 수리비(cumRepairCost) 정밀 반영
-      if (matchedAsset && (totalPartsCost > 0 || prevTicketCost > 0)) {
-        const nextCumRepairCost = Math.max(0, (matchedAsset.cumRepairCost || 0) - prevTicketCost) + totalPartsCost;
-        db.updateRow<Asset>('assets', matchedAsset.id, {
-          cumRepairCost: nextCumRepairCost,
-          updatedAt: nowIso
-        });
-      }
-
-      // 🚐 현장AS 완료 시 일자별 동선 대장에 '작업 완료(WORK_COMPLETE)' 자동 기록
-      try {
-        await recordAsRouteStep({
-          eventType: 'WORK_COMPLETE',
-          mechanicId: data.mechanicId || currentUser?.id || ticket.mechanicId || 'u-mechanic',
-          mechanicName,
-          ticket: db.repairs.find(r => r.id === ticketId) || ticket,
-          memo: data.actionTaken || undefined,
-        });
-      } catch (routeErr) {
-        console.warn('Auto WORK_COMPLETE route log skipped:', routeErr);
-      }
 
       // 🟢 선행 AS 출동 ToDo 원자적 자동 상계
       await clearHandoverTasks({
@@ -7582,21 +5165,21 @@ ${currentTenant?.corporateName || tenantCorp} 배상
           type: 'EXCHANGE',
           dispatchCategory: '교환',
           status: 'PENDING',
-          requestDate: nowIso.split('T')[0],
+          requestDate: new Date().toISOString().split('T')[0],
           originAddress: originYardAddress,
           pickupType: 'HQ_YARD',
           destinationAddress: ticket.locationDetail || ticket.siteName || '현장',
           dropoffType: 'CUSTOMER_SITE',
           deliveryCost: 0,
-          memo: appendDispatchStaffTag(`[현장AS 대차 요청] 회수대상 자산: ${resolvedAssetNo || '현장고장장비'} / 현장: ${ticket.siteName || ''} (${ticket.customerName || ''}) / 사유: ${data.actionTaken || '현장 수리불능 대차'}`),
-          createdAt: nowIso,
-          updatedAt: nowIso
+          memo: `[현장AS 대차 요청] 회수대상 자산: ${ticket.assetNo || '현장고장장비'} / 현장: ${ticket.siteName || ''} (${ticket.customerName || ''}) / 사유: ${data.actionTaken || '현장 수리불능 대차'}`,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
         });
 
         // 🚀 대차 배차 지시 ToDo 발행
         await issueHandoverTask({
           category: 'DISPATCH_REQUEST',
-          title: `[대차 교환 배차] ${ticket.customerName || '고객사'} (${resolvedAssetNo || '장비'})`,
+          title: `[대차 교환 배차] ${ticket.customerName || '고객사'} (${ticket.assetNo || '장비'})`,
           content: `현장 수리불능 대차 요청. 신규 장비 출고 및 고장 장비 회수 왕복 1건 배차 처리. (현장: ${ticket.siteName || '-'})`,
           targetDept: 'DISPATCH',
           priority: 'URGENT',
@@ -7608,62 +5191,32 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         });
       }
 
-      // 4. 자산 이력(assetInOutLogs)에 정비 사건 및 사용 소모품 내역 무누락 DB 저장 (repairId 1:1 매핑으로 중복 방지)
-      if (matchedAsset || (resolvedAssetNo && resolvedAssetNo !== '현장확인' && resolvedAssetNo !== '전체장비')) {
-        const partsSummaryText =
-          data.partsUsed && data.partsUsed.length > 0
-            ? ` / 사용소모품: ${data.partsUsed.map(p => `${p.modelName} ${p.quantity}개`).join(', ')}${totalPartsCost > 0 ? ` (₩${totalPartsCost.toLocaleString()})` : ''}`
-            : '';
-        const statusLabel =
-          finalStatus === 'COMPLETED' ? '조치완료' : finalStatus === 'REVISIT' ? '1차조치/재방문' : '안내종결';
-        const logMemo = `[현장AS ${statusLabel}] ${ticket.ticketNo || ''} ${ticket.issueDescription || '현장점검'} ➔ ${data.actionTaken}${partsSummaryText} (정비사: ${mechanicName})`;
-
-        const existingAssetLog = (db.assetInOutLogs || []).find(l => l.repairId === ticket.id);
-        if (existingAssetLog) {
-          db.updateRow<AssetInOutLog>('assetInOutLogs', existingAssetLog.id, {
-            assetId: matchedAsset?.id || resolvedAssetId || `asset-${resolvedAssetNo}`,
-            assetNo: resolvedAssetNo,
-            modelName: resolvedModelName,
-            eventDate: actionDateStr,
-            customerId: ticket.customerId,
-            customerName: ticket.customerName,
-            siteId: ticket.siteId,
-            siteName: ticket.siteName,
-            maintenanceScore: data.degradationScore ?? ticket.degradationScore ?? 0,
-            memo: logMemo,
-          });
-        } else {
-          db.insertRow<AssetInOutLog>('assetInOutLogs', {
-            assetId: matchedAsset?.id || resolvedAssetId || `asset-${resolvedAssetNo}`,
-            assetNo: resolvedAssetNo,
-            modelName: resolvedModelName,
-            type: 'REPAIR',
-            eventDate: actionDateStr,
-            customerId: ticket.customerId,
-            customerName: ticket.customerName,
-            siteId: ticket.siteId,
-            siteName: ticket.siteName,
-            repairId: ticket.id,
-            maintenanceScore: data.degradationScore ?? ticket.degradationScore ?? 0,
-            memo: logMemo,
-            createdAt: nowIso
-          });
-        }
+      // 4. 자산 이력(AssetInOutLog)에 정비 사건 무누락 DB 저장
+      const targetAssetNo = ticket.assetNo;
+      if (targetAssetNo && targetAssetNo !== '현장확인' && targetAssetNo !== '전체장비') {
+        const matchedAsset = db.assets.find(a => a.assetNo === targetAssetNo);
+        db.insertRow<AssetInOutLog>('assetInOutLogs', {
+          assetId: matchedAsset?.id || ticket.assetId || `asset-${targetAssetNo}`,
+          assetNo: targetAssetNo,
+          modelName: matchedAsset?.modelName || ticket.locationDetail || '고소작업대',
+          type: 'REPAIR',
+          eventDate: new Date().toISOString().split('T')[0],
+          customerId: ticket.customerId,
+          customerName: ticket.customerName,
+          siteId: ticket.siteId,
+          siteName: ticket.siteName,
+        });
       }
 
-      // 5. 계약 이력에 AS 발생 및 조치 사건 무누락 DB 저장 (양방향 완벽 추적성)
+      // 5. 계약 이력(ContractHistory)에 AS 발생 및 조치 사건 무누락 DB 저장 (양방향 완벽 추적성)
       if (ticket.contractId) {
-        const partsSummaryShort =
-          data.partsUsed && data.partsUsed.length > 0
-            ? `, 사용부품: ${data.partsUsed.map(p => `${p.modelName}×${p.quantity}`).join(', ')}`
-            : '';
         db.insertRow<ContractHistory>('contract_history', {
           id: `ch-as-${ticket.id}-${Date.now()}`,
           contractId: ticket.contractId,
           changeType: 'AS_SERVICE',
-          changeDate: actionDateStr,
-          description: `[현장 AS ${finalStatus === 'COMPLETED' ? '완료' : '조치'}] ${data.actionTaken} (${resolvedAssetNo || '현장장비'}, 정비사: ${mechanicName}${partsSummaryShort}${data.billableAmount && data.billableAmount > 0 ? `, 유상수리비 ₩${data.billableAmount.toLocaleString()}` : ''})`,
-          createdAt: nowIso
+          changeDate: new Date().toISOString().split('T')[0],
+          description: `[현장 AS ${finalStatus === 'COMPLETED' ? '완료' : '조치'}] ${data.actionTaken} (${ticket.assetNo || '현장장비'}, 정비사: ${mechanicName}${data.billableAmount && data.billableAmount > 0 ? `, 유상수리비 ₩${data.billableAmount.toLocaleString()}` : ''})`,
+          createdAt: new Date().toISOString()
         });
       }
 
@@ -7675,7 +5228,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         broadcastWorkNotification({
           type: 'EXCHANGE',
           title: '대차 교체 의뢰 등록',
-          body: `${ticket.customerName || '고객사'} (${ticket.siteName || '현장'}) ${resolvedAssetNo || '장비'} 현장수리불능 대차요청`,
+          body: `${ticket.customerName || '고객사'} (${ticket.siteName || '현장'}) ${ticket.assetNo || '장비'} 현장수리불능 대차요청`,
           url: '/admin/dispatch',
           targetDepts: ['DISPATCH', 'YARD', 'ADMIN', 'EXECUTIVE']
         }).catch(console.warn);
@@ -7868,7 +5421,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
           }
         }
 
-        // 🌟 자산 마스터 기준 현장 및 고객사 역추적
+        // 🌟 자산 마스터 기준 현장 및 고객사 역추적 (Back-tracking)
         if (matchedAsset) {
           if ((!matchedSite || !site || site === '미지정현장' || site === '일반 현장') && matchedAsset.currentSiteId) {
             const foundSite = db.customerSites.find(s => s.id === matchedAsset.currentSiteId);
@@ -7937,7 +5490,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
         newRepairs.push(repairRow);
 
-        // 💡 자산 생애주기 이력 로그 동시 기록 (관리번호가 식별되는 장비)
+        // 💡 자산 생애주기 이력 로그(AssetInOutLog) 동시 기록 (관리번호가 식별되는 장비)
         if (finalAssetNo && finalAssetNo !== '현장확인' && finalAssetNo !== '전체장비') {
           newAssetLogs.push({
             id: `aiog-band-${idx + 1}`,
@@ -8075,7 +5628,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     const effectiveQty = (req.receivedQty && req.receivedQty > 0) ? req.receivedQty : req.requestedQty;
     const totalAmount = effectiveQty * (req.unitPrice || 0);
 
-    // 1. 월말 매입 정산 마스터 레코드 생성
+    // 1. 월말 매입 정산 마스터 레코드 (PurchaseSettlement) 생성
     const settlementId = db.generateNextId('purchaseSettlements', db.purchaseSettlements);
     const settlement = db.insertRow<PurchaseSettlement>('purchaseSettlements', {
       id: settlementId,
@@ -8093,7 +5646,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       updatedAt: nowIso
     });
 
-    // 2. 월말 매입 정산 1:1 상세 항목 생성
+    // 2. 월말 매입 정산 1:1 상세 항목 (PurchaseSettlementItem) 생성
     const settlementItemId = db.generateNextId('purchaseSettlementItems', db.purchaseSettlementItems);
     db.insertRow<PurchaseSettlementItem>('purchaseSettlementItems', {
       id: settlementItemId,
@@ -8249,7 +5802,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     const contractNo = generateNextContractNo(contractData.startDate);
     ensureCustomerContactExists(contractData.customerId, contractData.contactId);
     
-    // ⚠️ 외래키 제약조건 위반 방지: 선행 sites/contacts/customer 레코드가 Supabase 원격 DB에 먼저 100% 저장되도록 동기 대기!
+    // ⚠️ 외래키(Foreign Key) 제약조건 위반 방지: 선행 sites/contacts/customer 레코드가 Supabase 원격 DB에 먼저 100% 저장되도록 동기 대기!
     try {
       await db.awaitPendingWrites();
     } catch (err: any) {
@@ -8267,7 +5820,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       updatedAt: new Date().toISOString()
     });
 
-    // ⚠️ 외래키 제약조건 위반 방지: contract가 Supabase 원격 DB에 먼저 100% 생성되도록 1차 동기 대기!
+    // ⚠️ 외래키(Foreign Key) 제약조건 위반 방지: contract가 Supabase 원격 DB에 먼저 100% 생성되도록 1차 동기 대기!
     try {
       await db.awaitPendingWrites();
     } catch (err: any) {
@@ -8275,40 +5828,21 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     }
 
     const nowIso = new Date().toISOString();
-    const createdCargoMap = new Map<string, { modelName: string; count: number; contractAssetIds: string[]; monthlyRentalFee: number; dailyRentalFee: number }>();
-    const createdInspIdsForDelivery: string[] = [];
-
     assetsList.forEach(item => {
-      const resolvedModel = item.expectedModel || (item.assetId ? db.assets.find(a => a.id === item.assetId)?.modelName : undefined) || '미지정';
       const insertedCA = db.insertRow<ContractAsset>('contractAssets', {
         contractId: contract.id,
         assetId: item.assetId || undefined,
-        status: 'ASSIGNED',
-        expectedModel: resolvedModel,
+        expectedModel: item.expectedModel || undefined,
         monthlyRentalFee: item.monthlyRentalFee,
         dailyRentalFee: item.dailyRentalFee,
         startDate: contractData.startDate,
-        firstStartDate: contractData.startDate,
         endDate: contractData.endDate,
         createdAt: nowIso
       });
 
-      if (insertedCA?.id) {
-        const grp = createdCargoMap.get(resolvedModel) || {
-          modelName: resolvedModel,
-          count: 0,
-          contractAssetIds: [],
-          monthlyRentalFee: Number(item.monthlyRentalFee) || 0,
-          dailyRentalFee: Number(item.dailyRentalFee) || 0
-        };
-        grp.count += 1;
-        grp.contractAssetIds.push(insertedCA.id);
-        createdCargoMap.set(resolvedModel, grp);
-      }
-
       if (item.assetId) {
         db.updateRow<Asset>('assets', item.assetId, {
-          // 💡 헌장 1.3 준수: 계약 체결 시점에는 대여중로 변경하지 않고 ASSIGNED(출고대기) 유지, 출고 검수 승인 마감 시점에 RENTED로 전이됨!
+          // 💡 헌장 1.3 준수: 계약 체결 시점에는 RENTED(대여중)로 변경하지 않고 ASSIGNED(출고대기) 유지, 출고 검수 승인 마감 시점에 RENTED로 전이됨!
           status: 'ASSIGNED',
           currentCustomerId: contractData.customerId,
           currentSiteId: contractData.siteId,
@@ -8319,7 +5853,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
           updatedAt: nowIso
         });
         // ✅ 고아 레코드 방지: assetId가 있는 슬롯 생성 시 출고검수 의뢰 자동 연동 생성
-        const createdInsp = db.insertRow<OutboundInspection>('outboundInspections', {
+        db.insertRow<OutboundInspection>('outboundInspections', {
           contractId: contract.id,
           contractAssetId: insertedCA.id,
           assetId: item.assetId,
@@ -8327,7 +5861,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
           createdAt: nowIso,
           updatedAt: nowIso
         });
-        if (createdInsp?.id) createdInspIdsForDelivery.push(createdInsp.id);
       }
     });
 
@@ -8341,175 +5874,25 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     });
 
     const today = new Date().toISOString().split('T')[0];
-    const targetStart = contractData.startDate || today;
-    const targetSite = contractData.siteId ? db.sites.find(s => s.id === contractData.siteId) : undefined;
-    const createdDelivery = db.insertRow<Delivery>('deliveries', {
+    db.insertRow<Delivery>('deliveries', {
       contractId: contract.id,
-      destinationAddress: targetSite?.address || customer?.address || undefined,
-      cargoItems: createdCargoMap.size > 0 ? JSON.stringify(Array.from(createdCargoMap.values())) : undefined,
       type: 'OUTBOUND',
       dispatchCategory: '출고',
       status: 'REQUESTED',
       requestDate: today,
-      loadingDate: targetStart,
+      loadingDate: today,
       loadingTimeSlot: '오전',
-      unloadingDate: targetStart,
+      unloadingDate: today,
       unloadingTimeSlot: '오전',
       deliveryCost: 0,
       isCostSettled: false,
-      memo: appendDispatchStaffTag('신규 계약 체결에 따른 출고 의뢰'),
+      memo: '신규 계약 체결에 따른 출고 의뢰',
       closingMemo: '출고 파이프라인 자동 지시건',
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     });
-    if (createdDelivery?.id && createdInspIdsForDelivery.length > 0) {
-      createdInspIdsForDelivery.forEach(inspId => {
-        db.updateRow<OutboundInspection>('outboundInspections', inspId, { deliveryId: createdDelivery.id });
-      });
-    }
 
-    await db.awaitPendingWrites();
-    refreshAllData();
-    return contract;
-  };
-
-  const getPendingCustomerOrContractBlockReason = (contractId?: string, customerId?: string): string | null => {
-    const targetContract = contractId ? db.contracts.find(c => c.id === contractId) : undefined;
-    const resolvedCustomerId = customerId || targetContract?.customerId;
-    const targetCustomer = resolvedCustomerId ? db.customers.find(c => c.id === resolvedCustomerId) : undefined;
-    const pendingRequests = ((db as any).approvalRequests || []).filter((r: any) => r.status === 'PENDING');
-
-    if (targetCustomer) {
-      const hasCustomerPendingReq = pendingRequests.some((r: any) =>
-        (r.target_record_id === targetCustomer.id || r.targetRecordId === targetCustomer.id) &&
-        (r.payload?.eventCode === 'CUSTOMER_REGISTRATION' || r.target_table === 'customers' || r.targetTable === 'customers')
-      );
-      if (hasCustomerPendingReq || targetCustomer.transactionStatus === 'BLOCKED_ALL') {
-        return `고객사(${targetCustomer.name})의 [고객 등록] 결재가 아직 승인되지 않았거나 거래차단 상태이므로 배차·장비할당·출고 업무를 진행할 수 없습니다.`;
-      }
-    }
-
-    if (targetContract) {
-      const hasContractSignPendingReq = targetContract.approvalStatus === 'PENDING' || pendingRequests.some((r: any) =>
-        (r.target_record_id === targetContract.id || r.targetRecordId === targetContract.id) &&
-        r.payload?.eventCode === 'CONTRACT_SIGN'
-      );
-      if (hasContractSignPendingReq) {
-        return `해당 계약(${targetContract.contractNo || targetContract.id})의 [계약 체결] 결재가 아직 승인 대기 중이므로 배차·장비할당·출고 업무를 진행할 수 없습니다.`;
-      }
-    }
-
-    return null;
-  };
-
-  const rescindContract = async (params: {
-    contractId: string;
-    reason: string;
-    freightOption: 'NONE' | 'CUSTOMER' | 'OURS';
-    customerFreightAmount?: number;
-  }) => {
-    const { contractId, reason, freightOption, customerFreightAmount = 0 } = params;
-    const contract = db.contracts.find(c => c.id === contractId);
-    if (!contract) {
-      showErrorModal('해제 대상 계약을 찾을 수 없습니다.');
-      throw new Error('해제 대상 계약을 찾을 수 없습니다.');
-    }
-    const nowIso = new Date().toISOString();
-    const today = nowIso.split('T')[0];
-    const effectiveRescindDate = contract.startDate || today;
-
-    // 1. 계약 본체 상태 COMPLETED(해제 종결) 및 무효화 업데이트
-    db.updateRow<Contract>('contracts', contractId, {
-      status: 'COMPLETED',
-      endDate: effectiveRescindDate,
-      approvalStatus: 'APPROVED',
-      updatedAt: nowIso
-    });
-
-    // 2. 연결된 체결 자산 일괄 원상복구 (렌탈료 0원 소급 무효화 + 실물 자산 즉시 임대가능 AVAILABLE 전환)
-    const linkedContractAssets = db.contractAssets.filter(ca => ca.contractId === contractId);
-    linkedContractAssets.forEach(ca => {
-      db.updateRow<ContractAsset>('contractAssets', ca.id, {
-        status: 'RETURNED',
-        monthlyRentalFee: 0,
-        dailyRentalFee: 0,
-        endDate: effectiveRescindDate,
-        actualReturnDate: effectiveRescindDate,
-        updatedAt: nowIso
-      });
-      if (ca.assetId) {
-        db.updateRow<Asset>('assets', ca.assetId, {
-          status: 'AVAILABLE',
-          currentCustomerId: '',
-          currentSiteId: '',
-          contractStart: '',
-          contractEnd: '',
-          updatedAt: nowIso
-        });
-      }
-    });
-
-    // 3. 미완료 출고검수 레코드 삭제
-    db.outboundInspections
-      .filter(ins => ins.contractId === contractId && ins.status !== 'COMPLETED')
-      .forEach(ins => db.deleteRow('outboundInspections', ins.id));
-
-    // 4. 연결된 배차/출고 요청 취소 처리
-    const linkedDeliveries = db.deliveries.filter(d => d.contractId === contractId && d.status !== 'CANCELLED');
-    linkedDeliveries.forEach(d => {
-      db.updateRow<Delivery>('deliveries', d.id, {
-        status: 'CANCELLED',
-        updatedAt: nowIso
-      });
-    });
-
-    // 5. 기발행 미수금/청구서 중 렌탈료·유상옵션 청구 0원 소급 무효화
-    const linkedBillings = db.billings.filter(b => b.contractId === contractId && b.status !== 'PAID' && b.status !== 'REJECTED');
-    linkedBillings.forEach(b => {
-      db.updateRow<Billing>('billings', b.id, {
-        status: 'REJECTED',
-        totalAmount: 0,
-        rejectReason: `[계약의 해제] 렌탈료·유상옵션 청구 0원 소급 무효화 (${reason})`,
-        updatedAt: nowIso
-      });
-    });
-
-    // 6. 기발생 운송비(회차비) 고객 청구 선택 시 운송비 채권(Receivable) 생성
-    if (freightOption === 'CUSTOMER' && customerFreightAmount > 0) {
-      db.insertRow<Receivable>('receivables', {
-        contractId: contract.id,
-        customerId: contract.customerId,
-        type: 'TRANSPORT',
-        occurredDate: today,
-        totalAmount: customerFreightAmount,
-        billedAmount: 0,
-        status: 'PENDING',
-        displayName: '계약 해제 회차 운송비',
-        internalDescription: `[계약의 해제 고객 귀책 운송비] ${reason}`,
-        createdAt: nowIso,
-        updatedAt: nowIso
-      });
-    }
-
-    // 7. 계약 변경 이력 기록
-    const freightLabel = freightOption === 'CUSTOMER'
-      ? `기발생 운송비 고객 청구 (₩${customerFreightAmount.toLocaleString()})`
-      : freightOption === 'OURS'
-      ? '기발생 운송비 당사 부담'
-      : '기발생 운송비 없음';
-    db.insertRow<ContractHistory>('contractHistory', {
-      contractId: contract.id,
-      changeType: 'TERMINATE',
-      changeDate: today,
-      prevEndDate: contract.endDate,
-      newEndDate: effectiveRescindDate,
-      description: `[계약의 해제] 체결 자산 임대가능 원상복구 및 렌탈료 0원 소급 무효화 (${freightLabel}) / 사유: ${reason}`,
-      createdAt: nowIso
-    });
-
-    await db.awaitPendingWrites();
-    refreshAllData();
-  };
+    await db.awaitPendingWrites(); refreshAllData(); };
 
   const extendContract = async (contractId: string, newEndDate: string, description: string) => {
     const contract = db.contracts.find(c => c.id === contractId);
@@ -8527,26 +5910,17 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     }
 
     const prevEnd = contract.endDate;
-    const allContractCAs = db.contractAssets.filter(ca => ca.contractId === contractId && ca.status !== 'SOLD');
-    const nonReturnedCAs = allContractCAs.filter(ca => ca.status !== 'RETURNED');
-    const cAssets = nonReturnedCAs.length > 0 ? nonReturnedCAs : allContractCAs;
 
     db.updateRow<Contract>('contracts', contractId, {
       endDate: newEndDate,
-      status: (contract.status === 'COMPLETED' && nonReturnedCAs.length === 0) ? 'COMPLETED' : 'EXTENDED',
+      status: 'EXTENDED',
       updatedAt: new Date().toISOString()
     });
 
-    cAssets.forEach(ca => {
-      const caUpdates: Partial<ContractAsset> = {
-        endDate: newEndDate,
-        updatedAt: new Date().toISOString()
-      };
-      if (ca.status === 'RETURNED' && ca.actualReturnDate) {
-        caUpdates.actualReturnDate = newEndDate !== '미정' ? newEndDate : '';
-      }
-      db.updateRow<ContractAsset>('contractAssets', ca.id, caUpdates);
-      if (ca.assetId && ca.status !== 'RETURNED') {
+    const cAssets = db.contractAssets.filter(ca => ca.contractId === contractId && ca.status !== 'RETURNED' && ca.status !== 'SOLD');
+      cAssets.forEach(ca => {
+        db.updateRow<ContractAsset>('contractAssets', ca.id, { endDate: newEndDate });
+      if (ca.assetId) {
         db.updateRow<Asset>('assets', ca.assetId, {
           contractEnd: newEndDate,
           updatedAt: new Date().toISOString()
@@ -8619,7 +5993,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         scheduledDate: newEndDate,
         deliveryCost: 0,
         isCostSettled: false,
-        memo: appendDispatchStaffTag('계약 조기 단축/만료에 따른 회수 하차'),
+        memo: '계약 조기 단축/만료에 따른 회수 하차',
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -8721,36 +6095,16 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       targetContract = existingTargetContract;
       isTargetExisting = true;
       // 만약 승계 대상 자산의 종료일이 기존 계약 만료일보다 길다면 부모 계약 만료일 동적 확장
-      // 💡 기존 양수 계약에 영업담당자가 비어있는 경우에만 원 계약의 최초 영업담당자를 승계하며, 이미 지정된 담당자는 절대 덮어쓰지 않음
       const currentTargetEnd = targetContract.endDate;
-      const needEndExtend = Boolean(currentTargetEnd && oldEndDate && (currentTargetEnd === '미정' || oldEndDate > currentTargetEnd));
-      const needSalespersonFill = !targetContract.salespersonId && Boolean(oldContract.salespersonId);
-      if (needEndExtend || needSalespersonFill) {
-        const updatedTarget = db.updateRow<Contract>('contracts', targetContract.id, {
-          ...(needEndExtend ? { endDate: oldEndDate } : {}),
-          ...(needSalespersonFill ? { salespersonId: oldContract.salespersonId } : {}),
+      if (currentTargetEnd && oldEndDate && (currentTargetEnd === '미정' || oldEndDate > currentTargetEnd)) {
+        db.updateRow<Contract>('contracts', targetContract.id, {
+          endDate: oldEndDate,
           updatedAt: new Date().toISOString()
         });
-        if (updatedTarget) targetContract = updatedTarget;
       }
     } else {
       const newContractNo = generateNextContractNo(nextDay);
       ensureCustomerContactExists(successorCustomerId, successorContactId);
-      // 💡 최초 영업담당자 보존 원칙: 원 계약의 salespersonId가 있으면 그대로 유지, 만약 비어있으면 선행 계약(predecessorContractId) 체인을 역추적하여 최초 영업담당자를 유지함
-      let inheritedSalespersonId = oldContract.salespersonId;
-      if (!inheritedSalespersonId && oldContract.predecessorContractId) {
-        let curPredId: string | undefined = oldContract.predecessorContractId;
-        const visited = new Set<string>();
-        while (curPredId && !visited.has(curPredId)) {
-          visited.add(curPredId);
-          const pred = db.contracts.find(c => c.id === curPredId);
-          if (pred?.salespersonId) {
-            inheritedSalespersonId = pred.salespersonId;
-            break;
-          }
-          curPredId = pred?.predecessorContractId;
-        }
-      }
       targetContract = db.insertRow<Contract>('contracts', {
         contractNo: newContractNo,
         customerId: successorCustomerId,
@@ -8763,7 +6117,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         paymentDueDay: oldContract.paymentDueDay,
         paymentDueMonthOffset: oldContract.paymentDueMonthOffset,
         lateInterestRate: oldContract.lateInterestRate || 0,
-        salespersonId: inheritedSalespersonId,
+        salespersonId: oldContract.salespersonId,
         status: 'ACTIVE',
         predecessorContractId: oldContract.id,
         predecessorContractNo: oldContract.contractNo,
@@ -8794,7 +6148,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         monthlyRentalFee: ca.monthlyRentalFee,
         dailyRentalFee: ca.dailyRentalFee,
         startDate: nextDay,
-        firstStartDate: ca.firstStartDate || ca.startDate || nextDay,
         endDate: oldEndDate,
         status: ca.status,
         predecessorContractId: contractId,
@@ -8839,7 +6192,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
     await db.awaitPendingWrites(); refreshAllData(); };
 
-  // Feature 6) 동일 고객 현장간 장비 이동
+  // Feature 6) 동일 고객 현장간 장비 이동 (Site Transfer / Relocation)
   const relocateContractAsset = async (params: {
     contractAssetId: string;
     targetSiteId: string;
@@ -8904,7 +6257,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
     // 1. 1현장(출발 계약) 처리
     if (isSameDayImmediateMove) {
-      // 개시일 당일 즉시 이동: 출발 현장 사용일수 0일이므로 출발 계약 슬롯 삭제 (청구 0일 보장)
       db.deleteRow('contractAssets', sourceCA.id);
 
       db.insertRow<ContractHistory>('contractHistory', {
@@ -8917,7 +6269,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         createdAt: nowIso
       });
     } else {
-      // 중도 현장 이동: 1현장 슬롯의 endDate를 이동 전일(relocationDate - 1일)로 단축 마감
       db.updateRow<ContractAsset>('contractAssets', sourceCA.id, {
         endDate: sourceEndDate
       });
@@ -8942,20 +6293,11 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     );
 
     if (remainingSourceCAs.length === 0) {
-      if (isSameDayImmediateMove) {
-        // 1현장에 다른 체결 자산이 전혀 없고 개시 당일 즉시 타 현장으로 이동한 경우: 1현장 계약은 사용 0일이므로 COMPLETED 종결 처리 (청구 슬롯 0건으로 청구 0일 보장)
-        db.updateRow<Contract>('contracts', sourceContract.id, {
-          status: 'COMPLETED',
-          endDate: relocationDate,
-          updatedAt: nowIso
-        });
-      } else {
-        db.updateRow<Contract>('contracts', sourceContract.id, {
-          status: 'COMPLETED',
-          endDate: sourceEndDate,
-          updatedAt: nowIso
-        });
-      }
+      db.updateRow<Contract>('contracts', sourceContract.id, {
+        status: 'COMPLETED',
+        endDate: isSameDayImmediateMove ? relocationDate : sourceEndDate,
+        updatedAt: nowIso
+      });
     } else {
       const maxRemainingEndDate = remainingSourceCAs.map(ca => ca.endDate).filter(Boolean).sort().pop();
       if (maxRemainingEndDate && sourceContract.endDate !== maxRemainingEndDate) {
@@ -8991,7 +6333,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       destinationContract = db.insertRow<Contract>('contracts', {
         contractNo: newContractNo,
         customerId: sourceContract.customerId,
-        customerName: sourceContract.customerName,
         contactId: sourceContract.contactId,
         siteId: targetSiteId,
         startDate: relocationStartDate,
@@ -9000,7 +6341,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         statementClosingDay: sourceContract.statementClosingDay,
         paymentDueDay: sourceContract.paymentDueDay,
         paymentDueMonthOffset: sourceContract.paymentDueMonthOffset,
-        freightBillingStandard: sourceContract.freightBillingStandard,
         lateInterestRate: sourceContract.lateInterestRate || 0,
         salespersonId: sourceContract.salespersonId,
         status: 'ACTIVE',
@@ -9020,7 +6360,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       monthlyRentalFee: sourceCA.monthlyRentalFee,
       dailyRentalFee: sourceCA.dailyRentalFee,
       startDate: relocationStartDate,
-      firstStartDate: sourceCA.firstStartDate || relocationStartDate,
       endDate: oldEndDate,
       predecessorContractId: sourceContract.id,
       predecessorContractAssetId: isSameDayImmediateMove ? sourceCA.predecessorContractAssetId : sourceCA.id,
@@ -9039,7 +6378,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       createdAt: nowIso
     });
 
-    // 5. 자산 마스터: currentSiteId 2현장으로 동기화 & contractEnd 갱신
+    // 5. 자산 마스터 (assets): currentSiteId 2현장으로 동기화 & contractEnd 갱신
     if (sourceCA.assetId) {
       db.updateRow<Asset>('assets', sourceCA.assetId, {
         currentSiteId: targetSiteId,
@@ -9078,7 +6417,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         billableToCustomer: isCustPaid,
         billableCustomerId: isCustPaid ? sourceContract.customerId : undefined,
         isCostSettled: false,
-        memo: appendDispatchStaffTag(`[현장간 장비 이동] ${sourceSiteName} ➔ ${targetSiteName} (${assetNo} / ${modelName})${reason ? ' | 사유: ' + reason : ''}`),
+        memo: `[현장간 장비 이동] ${sourceSiteName} ➔ ${targetSiteName} (${assetNo} / ${modelName})${reason ? ' | 사유: ' + reason : ''}`,
         cargoItems: JSON.stringify([{ modelName, count: 1 }]),
         createdAt: nowIso,
         updatedAt: nowIso
@@ -9133,10 +6472,10 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
     const nowIso = new Date().toISOString();
 
-    // 1. 단가 자동 상속: 해당 계약 내 동일 장비의 이전 슬롯 단가 (미지정 시 0원 유지, 하드코딩 단가 금지)
+    // 1. 단가 자동 상속: 해당 계약 내 동일 장비의 이전 슬롯 단가 또는 자산 기본 단가
     const prevCA = db.contractAssets.find(ca => ca.contractId === contractId && ca.assetId === assetId);
-    const feeMonth = monthlyRentalFee !== undefined ? monthlyRentalFee : (prevCA?.monthlyRentalFee ?? 0);
-    const feeDay = dailyRentalFee !== undefined ? dailyRentalFee : (prevCA?.dailyRentalFee ?? (feeMonth > 0 ? Math.round(feeMonth / 30) : 0));
+    const feeMonth = monthlyRentalFee !== undefined ? monthlyRentalFee : (prevCA?.monthlyRentalFee || 600000);
+    const feeDay = dailyRentalFee !== undefined ? dailyRentalFee : (prevCA?.dailyRentalFee || Math.round(feeMonth / 30));
 
     // 2. 만료일 결정 (부모 계약 만료일 또는 전달받은 종료일)
     const finalEndDate = expectedEndDate || contract.endDate || '';
@@ -9163,12 +6502,11 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       monthlyRentalFee: feeMonth,
       dailyRentalFee: feeDay,
       startDate: redeployDate,
-      firstStartDate: prevCA?.firstStartDate || prevCA?.startDate || redeployDate,
       endDate: finalEndDate,
       createdAt: nowIso
     });
 
-    // 5. 계약 이력에 [수리완료 재투입] 재출고 기록
+    // 5. 계약 이력(contractHistory)에 [수리완료 재투입] 재출고 기록
     db.insertRow<ContractHistory>('contractHistory', {
       contractId: contract.id,
       changeType: 'REGISTER',
@@ -9178,7 +6516,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       createdAt: nowIso
     });
 
-    // 6. 자산 마스터: 상태 RENTED 전환 및 고객/현장/기간 동기화
+    // 6. 자산 마스터 (assets): 상태 RENTED 전환 및 고객/현장/기간 동기화
     db.updateRow<Asset>('assets', asset.id, {
       status: 'RENTED',
       currentCustomerId: contract.customerId,
@@ -9217,7 +6555,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         billableToCustomer: isCustPaid,
         billableCustomerId: isCustPaid ? contract.customerId : undefined,
         isCostSettled: false,
-        memo: appendDispatchStaffTag(`[수리완료 재투입 배차] ${asset.assetNo} (${asset.modelName}) ➔ ${site?.name || '현장'}${reason ? ' | 사유: ' + reason : ''}`),
+        memo: `[수리완료 재투입 배차] ${asset.assetNo} (${asset.modelName}) ➔ ${site?.name || '현장'}${reason ? ' | 사유: ' + reason : ''}`,
         cargoItems: JSON.stringify([{ modelName: asset.modelName, count: 1 }]),
         createdAt: nowIso,
         updatedAt: nowIso
@@ -9238,23 +6576,19 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       return;
     }
 
-    const prevEnd = ca.status === 'RETURNED' ? (ca.actualReturnDate || ca.endDate) : ca.endDate;
+    const prevEnd = ca.endDate;
     const isExtension = prevEnd && endDate > prevEnd;
     const isShortening = prevEnd && endDate < prevEnd;
 
-    // 1. 개별 계약 자산 슬롯 기간 갱신 (반납완료 자산인 경우 actualReturnDate도 함께 갱신하여 청구 반영 보장)
-    const caUpdates: Partial<ContractAsset> = {
+    // 1. 개별 계약 자산 슬롯 기간 갱신
+    db.updateRow<ContractAsset>('contractAssets', caId, {
       startDate,
       endDate,
       updatedAt: new Date().toISOString()
-    };
-    if (ca.status === 'RETURNED' && ca.actualReturnDate) {
-      caUpdates.actualReturnDate = endDate !== '미정' ? endDate : '';
-    }
-    db.updateRow<ContractAsset>('contractAssets', caId, caUpdates);
+    });
 
-    // 2. 자산 마스터의 contractEnd 동기화 (헌장 1.2: 이미 반납완료된 물리 장비 마스터는 타 계약 운용 보호를 위해 제외)
-    if (ca.assetId && ca.status !== 'RETURNED') {
+    // 2. 자산 마스터의 contractEnd 동기화 (헌장 1.2: 자산 효과적 운용)
+    if (ca.assetId) {
       db.updateRow<Asset>('assets', ca.assetId, {
         contractEnd: endDate,
         updatedAt: new Date().toISOString()
@@ -9264,27 +6598,16 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     // 3. 부모 계약의 전체 기간 및 상태 동기 보정 (제4원칙: 자산들의 합집합 구간 자동 확장)
     const parentContract = db.contracts.find(c => c.id === ca.contractId);
     if (parentContract) {
-      const allContractCAs = db.contractAssets.filter(item => item.contractId === ca.contractId && item.status !== 'SOLD');
-      const nonReturnedCAs = allContractCAs.filter(item => item.status !== 'RETURNED');
-      const siblingCAs = allContractCAs.filter(item => item.id !== caId);
-      const allEndDates = [
-        endDate,
-        ...siblingCAs.map(item => (item.status === 'RETURNED' ? (item.actualReturnDate || item.endDate) : item.endDate)).filter(Boolean) as string[]
-      ];
-      const maxEndDate = allEndDates.includes('미정')
-        ? '미정'
-        : allEndDates.reduce((max, cur) => (cur > max ? cur : max), endDate);
+      const siblingCAs = db.contractAssets.filter(item => item.contractId === ca.contractId && item.id !== caId);
+      const allEndDates = [endDate, ...siblingCAs.map(item => item.endDate).filter(Boolean)];
+      const maxEndDate = allEndDates.reduce((max, cur) => (cur > max ? cur : max), endDate);
       const allStartDates = [startDate, ...siblingCAs.map(item => item.startDate).filter(Boolean)];
       const minStartDate = allStartDates.reduce((min, cur) => (cur < min ? cur : min), startDate);
-
-      const nextStatus = (parentContract.status === 'COMPLETED' && nonReturnedCAs.length === 0)
-        ? 'COMPLETED'
-        : (isExtension ? 'EXTENDED' : isShortening ? 'SHORTENED' : parentContract.status);
 
       db.updateRow<Contract>('contracts', parentContract.id, {
         startDate: minStartDate,
         endDate: maxEndDate,
-        status: nextStatus,
+        status: isExtension ? 'EXTENDED' : isShortening ? 'SHORTENED' : parentContract.status,
         updatedAt: new Date().toISOString()
       });
     }
@@ -9313,18 +6636,12 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     let createdInspectionId: string | null = null;
 
     try {
-      if (!origCa) throw new Error('해당 계약 슬롯을 찾을 수 없습니다.');
+      if (!origCa) throw new Error('해당 계약 슬롯(contractAsset)을 찾을 수 없습니다.');
 
       let contract = db.contracts.find(c => c.id === origCa.contractId);
       if (!contract && db.isSupabaseConnected()) {
         await db.pullTableFromSupabase('contracts');
         contract = db.contracts.find(c => c.id === origCa.contractId);
-      }
-
-      const blockReason = getPendingCustomerOrContractBlockReason(origCa.contractId, contract?.customerId);
-      if (blockReason) {
-        showErrorModal(blockReason, '결재 미승인 업무 제한');
-        throw new Error(blockReason);
       }
 
       if (!origAsset) throw new Error('할당할 대상 장비를 찾을 수 없습니다.');
@@ -9334,7 +6651,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       // 1. ContractAsset 업데이트 (실물 장비 ID 할당, 기존 계약의 expectedModel 보존)
       db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
         assetId: assetId,
-        status: 'ASSIGNED',
         expectedModel: origCa.expectedModel || origAsset?.modelName
       });
 
@@ -9350,92 +6666,16 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
       db.updateRow<Asset>('assets', assetId, assetUpdatePayload);
 
-      // 3. 출고 검수/정비 작업 의뢰 생성 (연결 배차 ID 자동 매칭 및 중복 방지)
-      const extractCaIdsFromDeliv = (d: Delivery): string[] => {
-        if (!d.cargoItems) return [];
-        try {
-          const raw = typeof d.cargoItems === 'string' ? JSON.parse(d.cargoItems) : d.cargoItems;
-          if (!Array.isArray(raw)) return [];
-          const ids: string[] = [];
-          raw.forEach((ci: any) => {
-            if (Array.isArray(ci?.contractAssetIds)) ids.push(...ci.contractAssetIds.filter(Boolean));
-          });
-          return ids;
-        } catch {
-          return [];
-        }
-      };
-      const matchedDelivery = db.deliveries.find(d =>
-        d.status !== 'CANCELLED' &&
-        (d.type === 'OUTBOUND' || d.type === 'EXCHANGE') &&
-        (!d.contractId || d.contractId === origCa.contractId) &&
-        extractCaIdsFromDeliv(d).includes(origCa.id)
-      ) || db.deliveries.find(d =>
-        d.status !== 'CANCELLED' &&
-        (d.type === 'OUTBOUND' || d.type === 'EXCHANGE') &&
-        d.contractId === origCa.contractId &&
-        d.status !== 'DELIVERED'
-      );
-      db.outboundInspections
-        .filter(i => i.contractAssetId === origCa.id && i.status !== 'COMPLETED')
-        .forEach(i => db.deleteRow('outboundInspections', i.id));
+      // 3. 출고 검수/정비 작업 의뢰 생성
       const createdInsp = db.insertRow<OutboundInspection>('outboundInspections', {
         contractId: origCa.contractId,
         contractAssetId: origCa.id,
         assetId: assetId,
-        deliveryId: matchedDelivery?.id,
         status: 'PENDING',
         createdAt: nowIso,
         updatedAt: nowIso
       });
       createdInspectionId = createdInsp.id;
-
-      // 3-1. 장비 할당 완료 여부 확인 -> [장비 할당] ToDo 상계 및 [출고 검수] ToDo 발행
-      try {
-        const targetEntityId = matchedDelivery?.id || origCa.contractId;
-        const remainingUnassigned = db.contractAssets.filter(
-          c => c.contractId === origCa.contractId && c.status !== 'RETURNED' && c.status !== 'SOLD' && c.status !== 'RENTED' && !c.assetId
-        );
-        if (remainingUnassigned.length === 0) {
-          await clearHandoverTasks({
-            entityId: targetEntityId,
-            category: 'ASSET_ASSIGNMENT' as any,
-            completedByUserId: currentUser?.id,
-            completedByName: currentUser?.name,
-            completionAction: 'ASSET_ASSIGNED'
-          });
-        }
-        const existingPdiTodo = db.todos.find(
-          t =>
-            !t.isCompleted &&
-            ((t.taskCategory || '').includes('INSPECTION') || (t.taskCategory || '').includes('PDI')) &&
-            (t.entityId === targetEntityId || t.relatedEntityId === targetEntityId)
-        );
-        if (!existingPdiTodo) {
-          const custObj = contract?.customerId ? db.customers.find(c => c.id === contract.customerId) : undefined;
-          const siteObj = contract?.siteId ? db.sites.find(s => s.id === contract.siteId) : undefined;
-          const pendingInspCount = db.outboundInspections.filter(
-            i => (matchedDelivery ? i.deliveryId === matchedDelivery.id : i.contractId === origCa.contractId) && (i.status === 'PENDING' || i.status === 'IN_PROGRESS')
-          ).length;
-          const spUser = contract?.salespersonId ? db.users.find(u => u.id === contract.salespersonId) : undefined;
-          const spName = spUser?.name || (contract as any)?.salespersonName || currentUser?.name || '영업부';
-          await issueHandoverTask({
-            category: 'OUTBOUND_PDI_INSPECTION',
-            title: `[출고 검수] ${custObj?.name || '고객사'} (${pendingInspCount || 1}대 검수 대기${matchedDelivery?.driverName ? ` · ${matchedDelivery.driverName} 배정` : ''})`,
-            content: `${siteObj?.name || '현장'} | 상차예정: ${(matchedDelivery?.loadingDate || contract?.startDate || '').slice(0, 10) || '미정'}`,
-            targetDept: 'YARD',
-            priority: 'HIGH',
-            dueDate: (matchedDelivery?.loadingDate || contract?.startDate || '').slice(0, 10) || undefined,
-            actionUrl: `/admin/outbound_inspections?deliveryId=${matchedDelivery?.id || ''}&contractId=${origCa.contractId}`,
-            entityType: 'INSPECTION',
-            entityId: targetEntityId,
-            senderId: contract?.salespersonId || currentUser?.id,
-            senderName: spName
-          });
-        }
-      } catch (todoErr) {
-        console.warn('assignAssetToContract todo sync warning:', todoErr);
-      }
 
       // 4. Supabase 원격 DB 쓰기 100% 완결 동기 대기 (실패 시 catch 블록에서 자동 롤백!)
       await db.awaitPendingWrites();
@@ -9443,7 +6683,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     } catch (err: any) {
       console.error('assignAssetToContract error & Rollback:', err);
 
-      // 💥 DB 저장 실패 시 로컬 DB 및 UI State를 100% 이전 상태로 자동 롤백!
+      // 💥 DB 저장 실패 시 로컬 DB 및 UI State를 100% 이전 상태로 자동 롤백 (Rollback Execution)!
       if (caSnapshot) {
         db.updateRow<ContractAsset>('contractAssets', contractAssetId, caSnapshot);
       }
@@ -9483,12 +6723,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       for (const pair of pairs) {
         const origCa = db.contractAssets.find(c => c.id === pair.contractAssetId);
         if (!origCa) throw new Error(`계약 슬롯(${pair.contractAssetId})을 찾을 수 없습니다.`);
-        const cObj = db.contracts.find(c => c.id === origCa.contractId);
-        const blockReason = getPendingCustomerOrContractBlockReason(origCa.contractId, cObj?.customerId);
-        if (blockReason) {
-          showErrorModal(blockReason, '결재 미승인 업무 제한');
-          throw new Error(blockReason);
-        }
         caSnapshots.push({ id: origCa.id, snapshot: { ...origCa } });
 
         const origAsset = db.assets.find(a => a.id === pair.assetId);
@@ -9505,7 +6739,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         // 2-1. contractAssets 업데이트 (기존 계약의 expectedModel 절대 보존)
         db.updateRow<ContractAsset>('contractAssets', origCa.id, {
           assetId: origAsset.id,
-          status: 'ASSIGNED',
           expectedModel: origCa.expectedModel || origAsset.modelName
         });
 
@@ -9521,45 +6754,15 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
         db.updateRow<Asset>('assets', origAsset.id, assetUpdatePayload);
 
-        // 2-3. 출고 검수 의뢰 생성 (연결 배차 ID 자동 매칭 및 중복 방지)
-      const extractCaIdsFromDeliv = (d: Delivery): string[] => {
-        if (!d.cargoItems) return [];
-        try {
-          const raw = typeof d.cargoItems === 'string' ? JSON.parse(d.cargoItems) : d.cargoItems;
-          if (!Array.isArray(raw)) return [];
-          const ids: string[] = [];
-          raw.forEach((ci: any) => {
-            if (Array.isArray(ci?.contractAssetIds)) ids.push(...ci.contractAssetIds.filter(Boolean));
-          });
-          return ids;
-        } catch {
-          return [];
-        }
-      };
-      const matchedDelivery = db.deliveries.find(d =>
-        d.status !== 'CANCELLED' &&
-        (d.type === 'OUTBOUND' || d.type === 'EXCHANGE') &&
-        (!d.contractId || d.contractId === origCa.contractId) &&
-        extractCaIdsFromDeliv(d).includes(origCa.id)
-      ) || db.deliveries.find(d =>
-        d.status !== 'CANCELLED' &&
-        (d.type === 'OUTBOUND' || d.type === 'EXCHANGE') &&
-        d.contractId === origCa.contractId &&
-        d.status !== 'DELIVERED'
-      );
-      db.outboundInspections
-        .filter(i => i.contractAssetId === origCa.id && i.status !== 'COMPLETED')
-        .forEach(i => db.deleteRow('outboundInspections', i.id));
+        // 2-3. 출고 검수 의뢰 생성
         const createdInsp = db.insertRow<OutboundInspection>('outboundInspections', {
           contractId: origCa.contractId,
           contractAssetId: origCa.id,
           assetId: origAsset.id,
-          deliveryId: matchedDelivery?.id,
           status: 'PENDING',
           createdAt: nowIso,
           updatedAt: nowIso
         });
-        createdInspectionIds.push(createdInsp.id);
         // 2-4. 🌟 [패키지 서류 무결성]: 기존 슬롯에 다른 장비가 배정되어 있었는데 교체된 경우 ToDo 발행
         if (origCa.assetId && origCa.assetId !== origAsset.id) {
           try {
@@ -9574,60 +6777,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
             console.warn('계약서패키지 재발송 ToDo 발행 경고 (무시):', taskErr);
           }
         }
-      }
-
-      // 2-5. 일괄 할당된 계약/배차건에 대해 [장비 할당] ToDo 상계 및 [출고 검수] ToDo 발행
-      try {
-        const affectedContractIds = Array.from(new Set(pairs.map(p => db.contractAssets.find(c => c.id === p.contractAssetId)?.contractId).filter(Boolean))) as string[];
-        for (const cid of affectedContractIds) {
-          const contract = db.contracts.find(c => c.id === cid);
-          const matchedDeliv = db.deliveries.find(
-            d => d.contractId === cid && d.status !== 'CANCELLED' && (d.type === 'OUTBOUND' || d.type === 'EXCHANGE') && d.status !== 'DELIVERED'
-          );
-          const targetEntityId = matchedDeliv?.id || cid;
-          const remainingUnassigned = db.contractAssets.filter(
-            c => c.contractId === cid && c.status !== 'RETURNED' && c.status !== 'SOLD' && c.status !== 'RENTED' && !c.assetId
-          );
-          if (remainingUnassigned.length === 0) {
-            await clearHandoverTasks({
-              entityId: targetEntityId,
-              category: 'ASSET_ASSIGNMENT' as any,
-              completedByUserId: currentUser?.id,
-              completedByName: currentUser?.name,
-              completionAction: 'ASSET_ASSIGNED'
-            });
-          }
-          const existingPdiTodo = db.todos.find(
-            t =>
-              !t.isCompleted &&
-              ((t.taskCategory || '').includes('INSPECTION') || (t.taskCategory || '').includes('PDI')) &&
-              (t.entityId === targetEntityId || t.relatedEntityId === targetEntityId)
-          );
-          if (!existingPdiTodo) {
-            const custObj = contract?.customerId ? db.customers.find(c => c.id === contract.customerId) : undefined;
-            const siteObj = contract?.siteId ? db.sites.find(s => s.id === contract.siteId) : undefined;
-            const pendingInspCount = db.outboundInspections.filter(
-              i => (matchedDeliv ? i.deliveryId === matchedDeliv.id : i.contractId === cid) && (i.status === 'PENDING' || i.status === 'IN_PROGRESS')
-            ).length;
-            const spUser = contract?.salespersonId ? db.users.find(u => u.id === contract.salespersonId) : undefined;
-            const spName = spUser?.name || (contract as any)?.salespersonName || currentUser?.name || '영업부';
-            await issueHandoverTask({
-              category: 'OUTBOUND_PDI_INSPECTION',
-              title: `[출고 검수] ${custObj?.name || '고객사'} (${pendingInspCount || pairs.length}대 검수 대기${matchedDeliv?.driverName ? ` · ${matchedDeliv.driverName} 배정` : ''})`,
-              content: `${siteObj?.name || '현장'} | 상차예정: ${(matchedDeliv?.loadingDate || contract?.startDate || '').slice(0, 10) || '미정'}`,
-              targetDept: 'YARD',
-              priority: 'HIGH',
-              dueDate: (matchedDeliv?.loadingDate || contract?.startDate || '').slice(0, 10) || undefined,
-              actionUrl: `/admin/outbound_inspections?deliveryId=${matchedDeliv?.id || ''}&contractId=${cid}`,
-              entityType: 'INSPECTION',
-              entityId: targetEntityId,
-              senderId: contract?.salespersonId || currentUser?.id,
-              senderName: spName
-            });
-          }
-        }
-      } catch (todoErr) {
-        console.warn('batchAssignAssetsToContract todo sync warning:', todoErr);
       }
 
       // 3. 단 1회의 원격 DB 쓰기 완결 동기 대기 & 단 1회의 전역 리렌더링!
@@ -9664,16 +6813,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     const origAssetId = origCa.assetId;
     const origAsset = db.assets.find(a => a.id === origAssetId);
 
-    // 🔴 [절차적 무결성 가드]: 이미 출고검수가 완료(COMPLETED)되었거나 운송대기(AWAITING_TRANSPORT)/대여중(RENTED)인 장비는 할당 취소 차단
-    const completedInsp = db.outboundInspections.find(
-      i => (i.contractAssetId === contractAssetId || (i.contractId === origCa.contractId && i.assetId === origAssetId)) && i.status === 'COMPLETED'
-    );
-    if (completedInsp || origCa.status === 'RENTED' || origCa.status === 'AWAITING_TRANSPORT' || origAsset?.status === 'RENTED' || origAsset?.status === 'AWAITING_TRANSPORT') {
-      const msg = '이미 출고검수가 완료되어 운송대기 또는 대여중으로 전환된 장비는 할당을 취소할 수 없습니다.\n장비를 변경하려면 먼저 [출고 검수] 메뉴에서 [출고 승인 취소]를 수행해 주십시오.';
-      showErrorModal(msg, '장비 할당 취소 불가 (출고검수 완료 상태)');
-      throw new Error(msg);
-    }
-
     const caSnapshot = { ...origCa };
     const assetSnapshot = origAsset ? { ...origAsset } : null;
 
@@ -9682,11 +6821,10 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
       // 1. ContractAsset 에서 assetId 명시적 NULL 제거 (Supabase DB 반영 보장)
       db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
-        assetId: null as any,
-        status: 'ASSIGNED'
+        assetId: null as any
       });
 
-      // 2. Asset 상태를 임대가능 로 복원 및 계약 연결 명시적 NULL 해제
+      // 2. Asset 상태를 AVAILABLE (임대가능) 로 복원 및 계약 연결 명시적 NULL 해제
       if (origAsset) {
         db.updateRow<Asset>('assets', origAssetId, {
           status: 'AVAILABLE',
@@ -9698,9 +6836,9 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         });
       }
 
-      // 3. 아직 완료되지 않은 출고 검수 의뢰건 전체 삭제
+      // 3. 아직 대기 중(PENDING)인 출고 검수 의뢰건 전체 삭제
       const pendingInsps = db.outboundInspections.filter(
-        i => (i.contractAssetId === contractAssetId || (i.contractId === origCa.contractId && i.assetId === origAssetId)) && i.status !== 'COMPLETED'
+        i => (i.contractAssetId === contractAssetId || (i.contractId === origCa.contractId && i.assetId === origAssetId)) && i.status === 'PENDING'
       );
       pendingInsps.forEach(i => db.deleteRow('outboundInspections', i.id));
 
@@ -9750,21 +6888,13 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       for (const caId of contractAssetIds) {
         const origCa = db.contractAssets.find(c => c.id === caId);
         if (origCa && origCa.assetId) {
-          const origAsset = db.assets.find(a => a.id === origCa.assetId);
-          const completedInsp = db.outboundInspections.find(
-            i => (i.contractAssetId === caId || (i.contractId === origCa.contractId && i.assetId === origCa.assetId)) && i.status === 'COMPLETED'
-          );
-          if (completedInsp || origCa.status === 'RENTED' || origCa.status === 'AWAITING_TRANSPORT' || origAsset?.status === 'RENTED' || origAsset?.status === 'AWAITING_TRANSPORT') {
-            const msg = `장비(${origAsset?.assetNo || origCa.expectedModel})는 이미 출고검수가 완료되어 운송대기 또는 대여중 상태이므로 할당을 취소할 수 없습니다.\n[출고 검수]에서 검수 롤백을 먼저 수행해 주십시오.`;
-            showErrorModal(msg, '일괄 할당 취소 불가 (출고검수 완료 포함)');
-            throw new Error(msg);
-          }
           caSnapshots.push({ id: origCa.id, snapshot: { ...origCa } });
+          const origAsset = db.assets.find(a => a.id === origCa.assetId);
           if (origAsset) {
             assetSnapshots.push({ id: origAsset.id, snapshot: { ...origAsset } });
           }
           const pendingInsp = db.outboundInspections.find(
-            i => (i.contractAssetId === caId || (i.contractId === origCa.contractId && i.assetId === origCa.assetId)) && i.status !== 'COMPLETED'
+            i => (i.contractAssetId === caId || (i.contractId === origCa.contractId && i.assetId === origCa.assetId)) && i.status === 'PENDING'
           );
           if (pendingInsp) {
             deletedInspectionIds.push({ id: pendingInsp.id, row: { ...pendingInsp } });
@@ -9778,8 +6908,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         if (origCa && origCa.assetId) {
           const origAssetId = origCa.assetId;
           db.updateRow<ContractAsset>('contractAssets', caId, {
-            assetId: null as any,
-            status: 'ASSIGNED'
+            assetId: null as any
           });
           db.updateRow<Asset>('assets', origAssetId, {
             status: 'AVAILABLE',
@@ -9790,7 +6919,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
             updatedAt: nowIso
           });
           const pendingInsps = db.outboundInspections.filter(
-            i => (i.contractAssetId === caId || (i.contractId === origCa.contractId && i.assetId === origAssetId)) && i.status !== 'COMPLETED'
+            i => (i.contractAssetId === caId || (i.contractId === origCa.contractId && i.assetId === origAssetId)) && i.status === 'PENDING'
           );
           pendingInsps.forEach(i => {
             deletedInspectionIds.push({ id: i.id, row: { ...i } });
@@ -9861,7 +6990,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       const today = new Date().toISOString().split('T')[0];
       const nowIso = new Date().toISOString();
 
-      // 1. 기존 장비: 수리정비중 선택 시 REPAIRING 전환, 아니면 임대가능 유지!
+      // 1. 기존 장비: 수리정비중(REPAIRING) 선택 시 REPAIRING 전환, 아니면 임대가능(AVAILABLE) 유지!
       // 💡 [전사 정책]: 출고검수 탈락 교체 시 사유 유무와 무관하게 정비점수 가산 (지정 점수 또는 기본 5점)
       const targetStatus = markOldAsRepairing ? 'REPAIRING' : 'AVAILABLE';
       const penaltyToAdd = typeof customPenaltyScore === 'number' && !isNaN(customPenaltyScore) ? customPenaltyScore : 5;
@@ -9880,14 +7009,14 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         currentSiteId: undefined,
         contractStart: undefined,
         contractEnd: undefined,
-        note: appendedNote, // 🌟 자산 정비필요항목에만 정확히 저장
+        note: appendedNote, // 🌟 자산 정비필요항목(note)에만 정확히 저장
         // 🌟 memo(일반 자산 비고: 임차처/결제조건 등)는 절대 오염시키지 않고 원본 100% 보존!
         updatedAt: nowIso
       };
 
       db.updateRow<Asset>('assets', oldAssetId, oldPayload);
 
-      // 1-1. 🌟 [주기장 정비 연계]: 수리정비중 전환 시 주기장 정비 대장 티켓 1:1 자동 발행 (헌장 1.2 무누락 저장)
+      // 1-1. 🌟 [주기장 정비 연계]: 수리정비중 전환 시 주기장 정비 대장(repairs) 티켓 1:1 자동 발행 (헌장 1.2 무누락 저장)
       if (markOldAsRepairing) {
         createdRepairId = db.generateNextId('repairs', db.repairs);
         db.insertRow<Repair>('repairs', {
@@ -9937,10 +7066,9 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         }
       }
 
-      // 2. 대체 장비: 현재 검수 단계(IN_PROGRESS면 출고검수, 아니면 출고대기) 상태 상속 및 계약 정보 매핑
-      const inheritedReplacementStatus = inspOrig?.status === 'IN_PROGRESS' ? 'OUTBOUND_INSPECTION' : 'ASSIGNED';
+      // 2. 대체 장비: 배차지정(ASSIGNED)으로 전환 및 계약 정보 매핑
       db.updateRow<Asset>('assets', newAssetId, {
-        status: inheritedReplacementStatus,
+        status: 'ASSIGNED',
         currentCustomerId: oldAssetOrig.currentCustomerId,
         currentSiteId: oldAssetOrig.currentSiteId,
         contractStart: oldAssetOrig.contractStart,
@@ -9948,14 +7076,13 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         updatedAt: nowIso
       });
 
-      // 3. 계약 슬롯 assetId 교체
+      // 3. 계약 슬롯(contractAssets) assetId 교체
       db.updateRow<ContractAsset>('contractAssets', contractAssetId, {
         assetId: newAssetId,
-        expectedModel: newAssetOrig.modelName,
-        status: inheritedReplacementStatus
+        expectedModel: newAssetOrig.modelName
       });
 
-      // 4. 출고 검수 의뢰건 assetId 교체 (없으면 신규 생성하여 검수 누락 방지)
+      // 4. 출고 검수 의뢰건(outboundInspections) assetId 교체 (없으면 신규 생성하여 검수 누락 방지)
       if (inspOrig) {
         db.updateRow<OutboundInspection>('outboundInspections', inspOrig.id, {
           assetId: newAssetId,
@@ -10081,7 +7208,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
           monthlyRentalFee: ca.monthlyRentalFee,
           dailyRentalFee: ca.dailyRentalFee,
           startDate: exchangeDate,
-          firstStartDate: ca.firstStartDate || ca.startDate || exchangeDate,
           endDate: originalEndDate || contract.endDate,
           createdAt: new Date().toISOString()
         });
@@ -10107,7 +7233,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         requestDate: exchangeDate,
         deliveryCost: 0,
         isCostSettled: false,
-        memo: appendDispatchStaffTag(`장비 교체 의뢰 (구: ${oldAsset?.assetNo || '미상'} -> 신: ${newAsset?.assetNo || '미상'})`),
+        memo: `장비 교체 의뢰 (구: ${oldAsset?.assetNo || '미상'} -> 신: ${newAsset?.assetNo || '미상'})`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       });
@@ -10136,12 +7262,11 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       const endOfMonth = new Date(year, month, 0);
 
       // 해당 월에 활성 상태인 계약 전체 탐색 (계약 단위 독립 생성 - E-1 원칙, 매각 계약 원천 배제)
-      // 💡 종료(COMPLETED)된 계약이라도 기간 연장 등으로 인해 아직 최종 만료일(endDate)까지 청구가 완료되지 않은 경우 포함
       const activeContracts = db.contracts.filter(c => {
-        if ((c.contractType || 'RENTAL') !== 'RENTAL') return false; // 🚫 자산 매각 계약 원천 배제
-        if (c.status === 'COMPLETED' && c.lastBilledPeriodEnd && c.endDate && c.endDate !== '미정' && c.lastBilledPeriodEnd >= c.endDate) return false;
+        if ((c.contractType || 'RENTAL') !== 'RENTAL') return false; // 🚫 자산 매각 계약(SALE) 원천 배제
+        if (c.status === 'COMPLETED') return false;
         const contractStart = new Date(c.startDate);
-        const contractEnd = c.endDate && c.endDate !== '미정' ? new Date(c.endDate) : null;
+        const contractEnd = c.endDate ? new Date(c.endDate) : null;
         if (contractStart > endOfMonth) return false;
         if (contractEnd && contractEnd < startOfMonth) return false;
         return true;
@@ -10368,430 +7493,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     return newRcv.id;
   };
 
-  /**
-   * 입고 자산 파손·불량 상태(증상별 사진 최대 2장, 증상별 예상 수리비용)를
-   * 외상미수금 대장에 1개의 청구건으로 통합 기록하고 영업사원에게 전달/협상 Todo를 발행한다.
-   */
-  const registerInboundDefectClaimReceivable = async (payload: {
-    existingReceivableId?: string;
-    assetId?: string;
-    assetNo: string;
-    modelName?: string;
-    ownerType?: 'OWN' | 'RENTED';
-    vendorName?: string;
-    customerId?: string;
-    customerName: string;
-    siteId?: string;
-    siteName: string;
-    siteAddress?: string;
-    contractId?: string;
-    contractNo?: string;
-    outboundDate?: string;
-    inboundDate: string;
-    billingDay?: number;
-    salespersonId?: string;
-    salespersonName?: string;
-    customerContactName?: string;
-    customerPhone?: string;
-    customerEmail?: string;
-    inspectorMemo?: string;
-    defectItems: InboundClaimDefectItem[];
-    negotiationMemo?: string;
-  }): Promise<string> => {
-    const now = new Date().toISOString();
-    const sanitizedDefectItems: InboundClaimDefectItem[] = (payload.defectItems || []).map((item, idx) => ({
-      id: item.id || `DEF-${idx + 1}`,
-      checkitemId: item.checkitemId || undefined,
-      category: (item.category || '입고불량').trim(),
-      symptomName: (item.symptomName || `불량 증상 ${idx + 1}`).trim(),
-      estimatedCost: Math.max(0, Math.round(Number(item.estimatedCost) || 0)),
-      agreedCost: Math.max(
-        0,
-        Math.round(Number(item.agreedCost !== undefined ? item.agreedCost : item.estimatedCost) || 0)
-      ),
-      photos: Array.isArray(item.photos) ? item.photos.filter(Boolean).slice(0, 2) : [],
-      memo: (item.memo || '').trim()
-    }));
-
-    if (sanitizedDefectItems.length === 0) {
-      throw new Error('최소 1개 이상의 불량 증상을 입력해 주십시오.');
-    }
-
-    const initialEstimatedAmount = sanitizedDefectItems.reduce(
-      (sum, item) => sum + (item.estimatedCost || 0),
-      0
-    );
-    const allPhotos = sanitizedDefectItems.flatMap(item => item.photos || []);
-
-    const existingRcv = payload.existingReceivableId
-      ? db.receivables.find(r => r.id === payload.existingReceivableId)
-      : undefined;
-    const receivableId = existingRcv ? existingRcv.id : db.generateNextId('RCV', db.receivables);
-    const existingRepair = existingRcv?.repairId
-      ? db.repairs.find(r => r.id === existingRcv.repairId)
-      : undefined;
-    const repairId = existingRepair ? existingRepair.id : db.generateNextId('RPR', db.repairs);
-
-    // 자산번호 기준으로 누락된 계약/현장/고객 연락처/임차처 컨텍스트 자동 보완
-    const autoLookup = lookupRecentInboundInfoByAsset(payload.assetNo, {
-      assets: db.assets,
-      assetInOutLogs: db.assetInOutLogs,
-      contractAssets: db.contractAssets,
-      contracts: db.contracts,
-      deliveries: db.deliveries,
-      repairs: db.repairs,
-      customers: db.customers,
-      sites: db.sites,
-      users: db.users,
-      vendors: db.vendors
-    });
-
-    const resolvedInspectorMemo = (payload.inspectorMemo ?? payload.negotiationMemo ?? '').trim();
-    const displayName = `[수리비 청구] ${payload.assetNo} 입고 파손·불량 수리비 (${sanitizedDefectItems.length}건)`;
-
-    const claimMeta: InboundDefectClaimMeta = {
-      kind: 'INBOUND_DEFECT_CLAIM_V1',
-      receivableId,
-      repairId,
-      assetId: payload.assetId || autoLookup?.assetId,
-      assetNo: payload.assetNo,
-      modelName: payload.modelName || autoLookup?.modelName || '',
-      ownerType: payload.ownerType || autoLookup?.ownerType || 'OWN',
-      vendorName: payload.vendorName || autoLookup?.vendorName || undefined,
-      customerId: payload.customerId || autoLookup?.customerId,
-      customerName: payload.customerName || autoLookup?.customerName || '미지정 고객',
-      siteId: payload.siteId || autoLookup?.siteId,
-      siteName: payload.siteName || autoLookup?.siteName || '미지정 현장',
-      siteAddress: payload.siteAddress || autoLookup?.siteAddress || '',
-      contractId: payload.contractId || autoLookup?.contractId,
-      contractNo: payload.contractNo || autoLookup?.contractNo,
-      outboundDate: payload.outboundDate || autoLookup?.outboundDate || undefined,
-      inboundDate: payload.inboundDate || autoLookup?.inboundDate || now.slice(0, 10),
-      billingDay: payload.billingDay || autoLookup?.billingDay,
-      salespersonId: payload.salespersonId || autoLookup?.salespersonId,
-      salespersonName: payload.salespersonName || autoLookup?.salespersonName,
-      customerContactName: payload.customerContactName || autoLookup?.customerContactName || undefined,
-      customerPhone: payload.customerPhone || autoLookup?.customerPhone || undefined,
-      customerEmail: payload.customerEmail || autoLookup?.customerEmail || undefined,
-      registeredById: currentUser?.id,
-      registeredByName: currentUser?.name || '출고팀',
-      registeredAt: existingRcv?.createdAt || now,
-      inspectorMemo: resolvedInspectorMemo,
-      displayName,
-      initialEstimatedAmount,
-      agreedAmount: initialEstimatedAmount,
-      negotiationStatus: 'PENDING_NEGOTIATION',
-      negotiationMemo: payload.negotiationMemo || '',
-      defectItems: sanitizedDefectItems
-    };
-
-    const symptomSummaryText = sanitizedDefectItems
-      .map(d => `${d.symptomName}(₩${(d.estimatedCost || 0).toLocaleString()})`)
-      .join(', ');
-
-    const internalDescription = `[입고불량 수리비] ${payload.assetNo} (${claimMeta.customerName} / ${claimMeta.siteName}) - ${symptomSummaryText}`;
-
-    // 1. 연결된 Repair 레코드를 먼저 생성/갱신하여 FK(receivables.repairId -> repairs.id) 무결성 및 defectsJson 영속성 보장
-    if (existingRepair) {
-      db.updateRow<Repair>('repairs', repairId, {
-        assetId: payload.assetId || existingRepair.assetId,
-        assetNo: payload.assetNo,
-        modelName: payload.modelName || existingRepair.modelName,
-        contractId: payload.contractId || existingRepair.contractId,
-        customerId: payload.customerId || existingRepair.customerId,
-        customerName: payload.customerName || existingRepair.customerName,
-        siteId: payload.siteId || existingRepair.siteId,
-        siteName: payload.siteName || existingRepair.siteName,
-        issueCategory: sanitizedDefectItems[0]?.category || '입고불량',
-        issueDescription: internalDescription,
-        billableType: 'BILLABLE',
-        billableAmount: initialEstimatedAmount,
-        billableToCustomer: true,
-        isCustomerFault: true,
-        evidenceImages: allPhotos,
-        defectsJson: JSON.stringify(claimMeta),
-        memo: payload.negotiationMemo || existingRepair.memo,
-        updatedAt: now
-      } as any);
-    } else {
-      db.insertRow<Repair>('repairs', {
-        id: repairId,
-        ticketNo: repairId,
-        workCategory: 'YARD_INTERNAL',
-        workLocation: 'YARD',
-        stockSource: 'YARD_STOCK',
-        source: 'INBOUND_INSPECTION',
-        repairType: 'INTERNAL',
-        priority: 'URGENT',
-        assetId: payload.assetId || undefined,
-        assetNo: payload.assetNo,
-        modelName: payload.modelName || undefined,
-        contractId: payload.contractId || undefined,
-        customerId: payload.customerId || undefined,
-        customerName: payload.customerName || undefined,
-        siteId: payload.siteId || undefined,
-        siteName: payload.siteName || undefined,
-        reporterName: currentUser?.name || '출고팀',
-        issueCategory: sanitizedDefectItems[0]?.category || '입고불량',
-        degradationScore: 0,
-        issueDescription: internalDescription,
-        requestDate: payload.inboundDate || now.slice(0, 10),
-        status: 'REQUESTED',
-        partsUsed: [],
-        collectedParts: [],
-        consumables: [],
-        timelineLogs: [],
-        timelineEvents: [],
-        billableType: 'BILLABLE',
-        billableAmount: initialEstimatedAmount,
-        billableToCustomer: true,
-        totalCost: initialEstimatedAmount,
-        costTotal: initialEstimatedAmount,
-        isCustomerFault: true,
-        isWaived: false,
-        waivedAmount: 0,
-        evidenceImages: allPhotos,
-        defectsJson: JSON.stringify(claimMeta),
-        memo: payload.negotiationMemo || '',
-        createdAt: now,
-        updatedAt: now
-      } as any);
-    }
-
-    // 2. 외상미수금 대장에 1개의 청구건(Receivable)으로 기록
-    const finalTotalAmount = Math.max(existingRcv?.billedAmount || 0, initialEstimatedAmount);
-    if (existingRcv) {
-      db.updateRow<Receivable>('receivables', receivableId, {
-        contractId: payload.contractId || existingRcv.contractId,
-        customerId: payload.customerId || existingRcv.customerId,
-        assetNo: payload.assetNo,
-        type: 'REPAIR',
-        totalAmount: finalTotalAmount,
-        internalDescription,
-        displayName,
-        occurredDate: payload.inboundDate || existingRcv.occurredDate || now.slice(0, 10),
-        repairId,
-        claimMeta,
-        updatedAt: now
-      });
-    } else {
-      db.insertRow<Receivable>('receivables', {
-        id: receivableId,
-        contractId: payload.contractId || undefined,
-        customerId: payload.customerId || undefined,
-        assetNo: payload.assetNo,
-        type: 'REPAIR',
-        totalAmount: finalTotalAmount,
-        billedAmount: 0,
-        internalDescription,
-        displayName,
-        occurredDate: payload.inboundDate || now.slice(0, 10),
-        status: 'PENDING',
-        repairId,
-        claimMeta,
-        createdAt: now,
-        updatedAt: now
-      });
-    }
-
-    saveLocalClaimMetaCache(receivableId, claimMeta);
-
-    // 3. 영업사원에게 파손 수리비 고객 전달 및 협상 Todo 발행
-    await issueHandoverTask({
-      category: 'CLAIM_DAMAGE_BILLING',
-      title: `[입고불량 수리비 협상·전달] ${payload.customerName} (${payload.siteName}) - ${payload.assetNo}`,
-      content: `입고 불량 증상 ${sanitizedDefectItems.length}건(예상 수리비 ₩${initialEstimatedAmount.toLocaleString()})이 등록되었습니다. PDF 내역서를 고객에게 전달(이메일/카톡)하고 수리비를 합의해 주십시오.`,
-      priority: 'HIGH',
-      targetDept: 'SALES',
-      assignedUserId: payload.salespersonId || undefined,
-      dueDate: now.slice(0, 10),
-      actionUrl: '/receivables',
-      entityType: 'RECEIVABLE',
-      entityId: receivableId,
-      senderId: currentUser?.id,
-      senderName: currentUser?.name || '출고팀'
-    });
-
-    await db.awaitPendingWrites();
-    refreshAllData();
-    return receivableId;
-  };
-
-  /**
-   * 영업사원의 고객 전달(이메일/카톡), 수리비 협상 조정 및 최종 합의 완료 처리
-   * 최종 합의 완료 시 외상미수금액(totalAmount)을 합의 금액으로 확정하고 청구담당자에게 Todo를 발행한다.
-   */
-  const updateReceivableClaimNegotiation = async (payload: {
-    receivableId: string;
-    agreedAmount: number;
-    negotiationStatus: ClaimNegotiationStatus;
-    defectItems?: InboundClaimDefectItem[];
-    negotiationMemo?: string;
-    displayName?: string;
-    sentChannel?: 'EMAIL' | 'KAKAO_SHARE' | 'PDF_DOWNLOAD';
-    sentToEmail?: string;
-  }): Promise<void> => {
-    const rcv = db.receivables.find(r => r.id === payload.receivableId);
-    if (!rcv) {
-      throw new Error('대상 외상미수금 청구건을 찾을 수 없습니다.');
-    }
-
-    const now = new Date().toISOString();
-    const currentMeta = resolveReceivableClaimMeta(rcv, {
-      repairs: db.repairs,
-      assets: db.assets,
-      customers: db.customers,
-      sites: db.sites,
-      contracts: db.contracts,
-      contractAssets: db.contractAssets,
-      users: db.users,
-      vendors: db.vendors
-    });
-
-    const newTotalAmount = Math.max(
-      rcv.billedAmount || 0,
-      Math.round(Number(payload.agreedAmount) || 0)
-    );
-
-    const updatedDefectItems: InboundClaimDefectItem[] = (
-      payload.defectItems ||
-      currentMeta?.defectItems ||
-      []
-    ).map((item, idx) => ({
-      ...item,
-      id: item.id || `DEF-${idx + 1}`,
-      photos: Array.isArray(item.photos) ? item.photos.filter(Boolean).slice(0, 2) : [],
-      estimatedCost: Math.max(0, Math.round(Number(item.estimatedCost) || 0)),
-      agreedCost:
-        item.agreedCost !== undefined
-          ? Math.max(0, Math.round(Number(item.agreedCost) || 0))
-          : Math.max(0, Math.round(Number(item.estimatedCost) || 0))
-    }));
-
-    const updatedDisplayName =
-      payload.displayName?.trim()
-        ? payload.displayName.trim()
-        : payload.negotiationStatus === 'AGREED'
-          ? `[수리비 합의완료] ${currentMeta?.assetNo || rcv.assetNo || ''} 입고 파손·불량 수리비 (${updatedDefectItems.length}건)`
-          : rcv.displayName;
-
-    const updatedMeta: InboundDefectClaimMeta = {
-      ...currentMeta,
-      kind: 'INBOUND_DEFECT_CLAIM_V1',
-      receivableId: rcv.id,
-      repairId: rcv.repairId || currentMeta?.repairId,
-      assetId: currentMeta?.assetId,
-      assetNo: rcv.assetNo || currentMeta?.assetNo || '',
-      modelName: currentMeta?.modelName || '',
-      ownerType: currentMeta?.ownerType,
-      vendorName: currentMeta?.vendorName,
-      customerId: rcv.customerId || currentMeta?.customerId,
-      customerName: currentMeta?.customerName || '미지정 고객',
-      siteId: currentMeta?.siteId,
-      siteName: currentMeta?.siteName || '미지정 현장',
-      siteAddress: currentMeta?.siteAddress,
-      contractId: rcv.contractId || currentMeta?.contractId,
-      contractNo: currentMeta?.contractNo,
-      outboundDate: currentMeta?.outboundDate,
-      inboundDate: currentMeta?.inboundDate || rcv.occurredDate,
-      billingDay: currentMeta?.billingDay,
-      salespersonId: currentMeta?.salespersonId,
-      salespersonName: currentMeta?.salespersonName,
-      customerContactName: currentMeta?.customerContactName,
-      customerPhone: currentMeta?.customerPhone,
-      customerEmail: currentMeta?.customerEmail,
-      registeredById: currentMeta?.registeredById,
-      registeredByName: currentMeta?.registeredByName,
-      registeredAt: currentMeta?.registeredAt || rcv.createdAt,
-      inspectorMemo: currentMeta?.inspectorMemo,
-      displayName: updatedDisplayName,
-      initialEstimatedAmount:
-        currentMeta?.initialEstimatedAmount !== undefined
-          ? currentMeta.initialEstimatedAmount
-          : rcv.totalAmount,
-      agreedAmount: newTotalAmount,
-      negotiationStatus: payload.negotiationStatus,
-      sentAt: payload.sentChannel ? now : currentMeta?.sentAt,
-      sentChannel: payload.sentChannel || currentMeta?.sentChannel,
-      sentToEmail: payload.sentToEmail || currentMeta?.sentToEmail,
-      agreedAt: payload.negotiationStatus === 'AGREED' ? now : currentMeta?.agreedAt,
-      agreedBy:
-        payload.negotiationStatus === 'AGREED'
-          ? currentUser?.name || '영업담당자'
-          : currentMeta?.agreedBy,
-      negotiationMemo:
-        payload.negotiationMemo !== undefined
-          ? payload.negotiationMemo
-          : currentMeta?.negotiationMemo || '',
-      defectItems: updatedDefectItems
-    };
-
-    // 연결된 Repair 업데이트
-    if (rcv.repairId) {
-      const existingRepair = db.repairs.find(r => r.id === rcv.repairId);
-      if (existingRepair) {
-        db.updateRow<Repair>('repairs', rcv.repairId, {
-          billableAmount: newTotalAmount,
-          defectsJson: JSON.stringify(updatedMeta),
-          memo: updatedMeta.negotiationMemo || updatedMeta.inspectorMemo || existingRepair.memo,
-          updatedAt: now
-        } as any);
-      }
-    }
-
-    db.updateRow<Receivable>('receivables', rcv.id, {
-      totalAmount: newTotalAmount,
-      displayName: updatedDisplayName,
-      claimMeta: updatedMeta,
-      status:
-        newTotalAmount <= (rcv.billedAmount || 0) && newTotalAmount > 0
-          ? 'CLEARED'
-          : (rcv.billedAmount || 0) > 0
-            ? 'PARTIAL'
-            : 'PENDING',
-      updatedAt: now
-    });
-
-    saveLocalClaimMetaCache(rcv.id, updatedMeta);
-
-    // 최종 합의 완료 시 영업부 협상 Todo 마감 및 청구담당자(ACCOUNTING)에게 당월 청구 반영 Todo 발행
-    if (payload.negotiationStatus === 'AGREED') {
-      await clearHandoverTasks({
-        entityId: rcv.id,
-        category: 'CLAIM_DAMAGE_BILLING',
-        completedByUserId: currentUser?.id,
-        completedByName: currentUser?.name || '영업담당자',
-        completionAction: '입고 불량 수리비 고객 최종 합의 완료'
-      });
-      if (rcv.repairId) {
-        await clearHandoverTasks({
-          entityId: rcv.repairId,
-          category: 'CLAIM_DAMAGE_BILLING',
-          completedByUserId: currentUser?.id,
-          completedByName: currentUser?.name || '영업담당자',
-          completionAction: '입고 불량 수리비 고객 최종 합의 완료'
-        });
-      }
-
-      await issueHandoverTask({
-        category: 'BILLABLE_REPAIR_BILLING',
-        title: `[당월 청구 반영] ${updatedMeta.customerName} (${updatedMeta.siteName}) - ${updatedMeta.assetNo} 합의 수리비 ₩${newTotalAmount.toLocaleString()}`,
-        content: `고객과 최종 합의된 입고 파손·불량 수리비(₩${newTotalAmount.toLocaleString()})가 외상미수금 대장에 확정되었습니다. 당월 청구 업무 시 포함하여 진행해 주십시오.`,
-        priority: 'HIGH',
-        targetDept: 'ACCOUNTING',
-        dueDate: now.slice(0, 10),
-        actionUrl: '/billings',
-        entityType: 'RECEIVABLE',
-        entityId: rcv.id,
-        senderId: currentUser?.id,
-        senderName: currentUser?.name || '영업담당자'
-      });
-    }
-
-    await db.awaitPendingWrites();
-    refreshAllData();
-  };
-
   /** 외상미수금 → 청구 상세 연동 (이번 달 청구할 금액 지정) */
     const linkReceivableToBilling = async (
     billingId: string,
@@ -10876,8 +7577,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       updatedAt: now
     });
 
-    await db.awaitPendingWrites();
-
     const standaloneTitle = `[단독 청구 - ${reason}] ${rcv.displayName || rcv.internalDescription}`;
     await linkReceivableToBilling(newBilling.id, rcv.id, remaining, standaloneTitle);
     
@@ -10892,10 +7591,10 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
     const liveContracts = db.contracts.filter(c => {
       if ((c.contractType || 'RENTAL') !== 'RENTAL') return false; 
-      if (c.status === 'COMPLETED' && c.lastBilledPeriodEnd && c.endDate && c.endDate !== '미정' && c.lastBilledPeriodEnd >= c.endDate) return false;
+      if (c.status === 'COMPLETED') return false;
       const cStart = new Date(c.startDate);
       if (cStart > endOfMonth) return false;
-      if (c.endDate && c.endDate !== '미정') {
+      if (c.endDate) {
         const cEnd = new Date(c.endDate);
         if (cEnd < startOfMonth) return false;
       }
@@ -10998,22 +7697,22 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     // 청구 기간 끝: 당월 billingDay
     const periodEnd = new Date(Date.UTC(year, month - 1, effectiveBillingDay));
 
-    // 청구 기간 시작: 전월일
+    // 청구 기간 시작: 전월 (billingDay+1)일
     const prevMonth = month === 1 ? 12 : month - 1;
     const prevYear = month === 1 ? year - 1 : year;
     const lastDayOfPrev = new Date(Date.UTC(prevYear, prevMonth, 0)).getUTCDate();
     const prevEffectiveBillingDay = Math.min(billingDay, lastDayOfPrev);
     const periodStart = new Date(Date.UTC(prevYear, prevMonth - 1, prevEffectiveBillingDay + 1));
 
-    // 실제 자산 사용 기간: 계약 startDate 보정
+    // 실제 자산 사용 기간: 계약 startDate 보정 (A-2)
     const contractStart = new Date(contractStartDate.includes('T') ? contractStartDate : `${contractStartDate}T00:00:00Z`);
     const actualStart = contractStart > periodStart ? contractStart : periodStart;
 
-    // 실제 자산 사용 기간: 계약 endDate 보정
+    // 실제 자산 사용 기간: 계약 endDate 보정 (A-3)
     const contractEnd = contractEndDate ? new Date(contractEndDate.includes('T') ? contractEndDate : `${contractEndDate}T00:00:00Z`) : null;
     const actualEnd = contractEnd && contractEnd < periodEnd ? contractEnd : periodEnd;
 
-    // 첫 달 / 마지막 달 판단 → 일할 계산 여부
+    // 첫 달 / 마지막 달 판단 → 일할 계산 여부 (B-2)
     const isFirstMonth = contractStart > periodStart && contractStart <= periodEnd;
     const isLastMonth = contractEnd
       ? contractEnd >= periodStart && contractEnd <= periodEnd
@@ -11035,11 +7734,11 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
   /**
    * 💡 계약별 직전 청구 마일스톤 메타데이터 동기화 (트리거 갱신 및 백필)
-   * - 최근 렌탈료 청구 발행일
-   * - 최근 청구 시작일
-   * - 최근 청구 종료일
-   * - 최근 청구 귀속월
-   * - 누적 발행 청구 건수
+   * - 최근 렌탈료 청구 발행일 (lastBillingDate)
+   * - 최근 청구 시작일 (lastBilledPeriodStart)
+   * - 최근 청구 종료일 (lastBilledPeriodEnd)
+   * - 최근 청구 귀속월 (lastBilledYm)
+   * - 누적 발행 청구 건수 (billingCount)
    */
   const syncContractBillingMilestones = (contractId?: string) => {
     const targetContracts = contractId 
@@ -11049,7 +7748,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     targetContracts.forEach(c => {
       const activeBillings = db.billings
         .filter(b => b.contractId === c.id && b.status !== 'REJECTED' && (!b.billingType || b.billingType === 'RENTAL'))
-        .sort((a, b) => (b.billingYm || '').localeCompare(a.billingYm || '') || (b.createdAt || '').localeCompare(a.createdAt || ''));
+        .sort((a, b) => (b.billingYm || '').localeCompare(a.billingYm || ''));
 
       const count = activeBillings.length;
       if (count === 0) {
@@ -11065,33 +7764,16 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       }
 
       const latestBilling = activeBillings[0];
-      const sameYmBillings = activeBillings.filter(b => b.billingYm === latestBilling.billingYm);
-      const sameYmBillingIds = new Set(sameYmBillings.map(b => b.id));
-      const sameYmRentalDetails = db.billingDetails.filter(bd => sameYmBillingIds.has(bd.billingId) && bd.contractAssetId);
+      const billingDay = c.billingDay || 25;
+      const { actualStart, actualEnd } = calcBillingPeriod(
+        latestBilling.billingYm,
+        billingDay,
+        c.startDate,
+        c.endDate
+      );
 
-      let parsedStart = '';
-      let parsedEnd = '';
-      sameYmRentalDetails.forEach(bd => {
-        const m = (bd.description || '').match(/(\d{4}-\d{2}-\d{2})\s*~\s*(\d{4}-\d{2}-\d{2})/);
-        if (m) {
-          if (!parsedStart || m[1] < parsedStart) parsedStart = m[1];
-          if (!parsedEnd || m[2] > parsedEnd) parsedEnd = m[2];
-        }
-      });
-
-      let startIso = parsedStart;
-      let endIso = parsedEnd;
-      if (!startIso || !endIso) {
-        const billingDay = c.billingDay || 25;
-        const { actualStart, actualEnd } = calcBillingPeriod(
-          latestBilling.billingYm,
-          billingDay,
-          c.startDate,
-          c.endDate
-        );
-        startIso = actualStart.toISOString().split('T')[0];
-        endIso = actualEnd.toISOString().split('T')[0];
-      }
+      const startIso = actualStart.toISOString().split('T')[0];
+      const endIso = actualEnd.toISOString().split('T')[0];
 
       db.updateRow<Contract>('contracts', c.id, {
         lastBillingDate: latestBilling.billingDate || latestBilling.createdAt?.split('T')[0],
@@ -11109,21 +7791,14 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     if (!c) return null;
 
     if ((c.contractType || 'RENTAL') !== 'RENTAL') {
-      throw new Error(`[계약 유형 오류] 계약 ${c.contractNo}는 자산 매각 계약입니다. 월 정기 렌탈료 청구 대상이 아닙니다.`);
+      throw new Error(`[계약 유형 오류] 계약 ${c.contractNo}는 자산 매각 계약(SALE)입니다. 월 정기 렌탈료 청구 대상이 아닙니다.`);
     }
 
-    // 중복 발행 감지: 동일 계약 + 동일 귀속월 활성 청구 존재 시 throw (부분 청구 또는 기간 연장 후 추가 정산 건은 제외)
+    // 중복 발행 감지 (J-3): 동일 계약 + 동일 귀속월 활성 청구 존재 시 throw (부분 청구는 제외)
     const existingActive = db.billings.find(
       b => b.contractId === c.id && b.billingYm === billingYm && b.status !== 'REJECTED' && !b.isPartial
     );
-    const hasUnbilledExtension = Boolean(
-      existingActive &&
-      c.lastBilledPeriodEnd &&
-      c.endDate &&
-      c.endDate !== '미정' &&
-      c.lastBilledPeriodEnd < c.endDate
-    );
-    if (existingActive && !selectedContractAssetIds && !hasUnbilledExtension) {
+    if (existingActive && !selectedContractAssetIds) {
       throw new Error(`[중복 경고] 계약 ${c.contractNo}의 ${billingYm} 청구서가 이미 존재합니다.\n상태: ${existingActive.status} / ID: ${existingActive.id}`);
     }
 
@@ -11139,28 +7814,13 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     let detailsList: Omit<BillingDetail, 'id' | 'billingId' | 'createdAt'>[] = [];
     let totalAmount = 0;
 
-    // 직전 청구 종료일 익일 계산 (동일 월 내 기간 연장 후 추가 정산 시 중복 청구 방지)
-    let nextDayAfterLastBilled = '';
-    if (hasUnbilledExtension && c.lastBilledPeriodEnd) {
-      const [py, pm, pd] = c.lastBilledPeriodEnd.slice(0, 10).split('-').map(Number);
-      const nextObj = new Date(Date.UTC(py, pm - 1, pd + 1));
-      nextDayAfterLastBilled = nextObj.toISOString().split('T')[0];
-    }
-
     // 1. 자산별 렌탈료 계산 (인터뷰 원칙 A, B, C 통합 적용)
     cAssets.forEach(ca => {
-      const effectiveCaStart = (nextDayAfterLastBilled && nextDayAfterLastBilled > ca.startDate)
-        ? nextDayAfterLastBilled
-        : ca.startDate;
-      const effectiveCaEnd = (ca.status === 'RETURNED' && ca.actualReturnDate && ca.actualReturnDate !== '미정')
-        ? (ca.endDate && ca.endDate !== '미정' && ca.endDate > ca.actualReturnDate ? ca.endDate : ca.actualReturnDate)
-        : (ca.endDate && ca.endDate !== '미정' ? ca.endDate : c.endDate);
-
       const { actualStart, actualEnd, isProRata } = calcBillingPeriod(
         billingYm,
         billingDay,
-        effectiveCaStart,
-        effectiveCaEnd
+        ca.startDate,
+        ca.endDate || c.endDate
       );
 
       if (actualStart > actualEnd) return; // 청구 기간 외 자산
@@ -11174,13 +7834,13 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       let calcDesc = '';
 
       if (isProRata) {
-        // 일할 계산: 30일 고정, 역일 기준
+        // 일할 계산: 30일 고정 (B-1), 역일 기준 (B-4)
         const diffMs = actualEnd.getTime() - actualStart.getTime();
         const days = Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
         rentalCost = calcProRataAmount(ca.monthlyRentalFee, ca.dailyRentalFee, days);
         calcDesc = `${actualStart.toISOString().split('T')[0]} ~ ${actualEnd.toISOString().split('T')[0]} 일할 청구 (${days}일 × ${(ca.dailyRentalFee > 0 ? ca.dailyRentalFee : ca.monthlyRentalFee / 30).toLocaleString()}원)`;
       } else {
-        // 중간 달: 월 정액
+        // 중간 달: 월 정액 (B-2)
         rentalCost = ca.monthlyRentalFee;
         const startStr = actualStart.toISOString().split('T')[0];
         const endStr = actualEnd.toISOString().split('T')[0];
@@ -11210,47 +7870,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       }
     });
 
-    // 2. 출고 요청 유상 옵션 자동 산출 ('월': 매월 가동 대수 × 단가, '건': 출고 건당 1회, '대': 해당 출고 대수 × 1회)
-    const { periodStart: contractPeriodStart, periodEnd: contractPeriodEnd } = calcBillingPeriod(
-      billingYm,
-      billingDay,
-      c.startDate,
-      c.endDate
-    );
-    const periodStartIso = contractPeriodStart.toISOString().split('T')[0];
-    const periodEndIso = contractPeriodEnd.toISOString().split('T')[0];
-
-    const paidOptionItems = calculatePaidOptionBillingItems({
-      contract: c,
-      billingYm,
-      periodStart: periodStartIso,
-      periodEnd: periodEndIso,
-      deliveries: db.deliveries,
-      contractAssets: db.contractAssets,
-      standardOptions: db.standardOptions,
-      billings: db.billings,
-      billingDetails: db.billingDetails,
-      selectedContractAssetIds,
-      sites: db.sites,
-      siteMasters: db.siteMasters,
-      customers: db.customers,
-    });
-
-    paidOptionItems.forEach(optItem => {
-      detailsList.push({
-        contractAssetId: undefined,
-        itemName: optItem.itemName,
-        quantity: optItem.quantity,
-        unitPrice: optItem.unitPrice,
-        amount: optItem.amount,
-        description: optItem.description,
-        internalDescription: optItem.description,
-        displayName: optItem.itemName,
-      });
-      totalAmount += optItem.amount;
-    });
-
-    // 2-1. 수리비 자동 합산 제거 (H-1 원칙: 수리비는 외상미수금 대장으로 분리 관리)
+    // 2. 수리비 자동 합산 제거 (H-1 원칙: 수리비는 외상미수금 대장으로 분리 관리)
     // → 담당자가 외상미수금 화면에서 수동으로 청구에 포함
 
     // 3. 선수금(예치금) 차감 반영 — 부분 청구가 아닌 경우에만 자동 차감 (I-1 원칙)
@@ -11276,24 +7896,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       }
     }
 
-    const unbilledTradeReceivables = (db.receivables || []).filter(r => {
-      if (
-        r.contractId !== c.id ||
-        r.status === 'CLEARED' ||
-        (r.totalAmount || 0) - (r.billedAmount || 0) <= 0 ||
-        !Boolean(r.internalDescription && r.internalDescription.includes('[유통출고:'))
-      ) {
-        return false;
-      }
-      const ymMatch = String(r.internalDescription || '').match(/(?:\[귀속월:|·\s*)(\d{4}-\d{2})/);
-      const rcvTargetYm = ymMatch ? ymMatch[1] : undefined;
-      if (rcvTargetYm && billingYm && rcvTargetYm > billingYm) {
-        return false;
-      }
-      return true;
-    });
-
-    if (detailsList.length === 0 && unbilledTradeReceivables.length === 0) return null;
+    if (detailsList.length === 0) return null;
 
     // 4. 청구서 생성 — 초기 상태 UNPAID (F-2 원칙: 거래명세서 발송 후 REQUESTED로 전환)
     const newBilling = db.insertRow<Billing>('billings', {
@@ -11309,8 +7912,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       updatedAt: new Date().toISOString()
     });
 
-    await db.awaitPendingWrites();
-
     detailsList.forEach(det => {
       db.insertRow<BillingDetail>('billingDetails', {
         ...det,
@@ -11319,14 +7920,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         updatedAt: new Date().toISOString()
       });
     });
-
-    // 5. 계약 연동 유통출고 미청구분이 있으면 당월 청구에 즉시 자동 병합
-    for (const rcv of unbilledTradeReceivables) {
-      const rem = (rcv.totalAmount || 0) - (rcv.billedAmount || 0);
-      if (rem > 0) {
-        await linkReceivableToBilling(newBilling.id, rcv.id, rem, rcv.displayName || rcv.internalDescription);
-      }
-    }
 
     // 💡 계약 메타데이터 트리거 자동 갱신 (최근 청구 발행일, 시작일, 종료일, 청구건수)
     syncContractBillingMilestones(c.id);
@@ -11344,11 +7937,9 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       const skippedContracts: { contractId: string; customerId: string; reason: string }[] = [];
 
       for (const item of dueContracts) {
-        // K-1: 미청구 외상미수금 존재 여부 체크 (일괄 청구 방어 로직 — 단, 계약 상세에서 당월 청구 합산으로 확정 등록된 [유통출고] 건은 자동 병합하므로 보류 대상에서 제외)
+        // K-1: 미청구 외상미수금 존재 여부 체크 (일괄 청구 방어 로직)
         const hasPendingReceivables = db.receivables.some(r => 
-          r.contractId === item.contract.id &&
-          r.status !== 'CLEARED' &&
-          !(r.internalDescription && r.internalDescription.includes('[유통출고:'))
+          r.contractId === item.contract.id && r.status !== 'CLEARED'
         );
 
         if (hasPendingReceivables) {
@@ -11357,7 +7948,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
             customerId: item.customer.id,
             reason: '미청구 외상미수금 존재'
           });
-          continue; // 해당 계약은 청구 건너뜀
+          continue; // 해당 계약은 청구 건너뜀 (SKIP)
         }
 
         const targetMonthlyYm = item.targetYm || ym;
@@ -11455,8 +8046,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       updatedAt: new Date().toISOString()
     });
 
-    await db.awaitPendingWrites();
-
     finalDetails.forEach(det => {
       db.insertRow<BillingDetail>('billingDetails', {
         ...det,
@@ -11549,8 +8138,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       createdAt: now,
       updatedAt: now
     });
-
-    await db.awaitPendingWrites();
 
     const childDetailId = 'bd_' + Date.now().toString() + '_' + Math.floor(Math.random()*1000) + 'c';
     db.insertRow<BillingDetail>('billingDetails', {
@@ -11656,28 +8243,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     const target = tenants.find(t => t.id === tenantId) || currentTenant;
     if (!target) return;
     await saveTenant({ id: target.id, allowCustomBillingStatement: enabled });
-  };
-
-  // 💡 테넌트별 렌탈 계약 연동 유통 출고(당월 청구 합산) 기능 활성화/비활성화 제어
-  const toggleTenantContractTradeOutbound = async (tenantId: string, enabled: boolean) => {
-    const target = tenants.find(t => t.id === tenantId) || currentTenant;
-    if (!target) return;
-    const curSf = Array.isArray(target.specialFeatures)
-      ? target.specialFeatures
-      : (Array.isArray(target.features?.specialFeatures) ? target.features.specialFeatures : []);
-    const nextSf = enabled
-      ? (curSf.includes('btn:contracts:trade_outbound') ? curSf : [...curSf, 'btn:contracts:trade_outbound'])
-      : curSf.filter(id => id !== 'btn:contracts:trade_outbound');
-    await saveTenant({
-      id: target.id,
-      allowContractTradeOutbound: enabled,
-      specialFeatures: nextSf,
-      features: {
-        ...(target.features || {}),
-        allowContractTradeOutbound: enabled,
-        specialFeatures: nextSf
-      }
-    });
   };
 
   // v2: 복수 입금건 연동 수납 처리
@@ -11819,6 +8384,28 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       }
     }
 
+    // 2-1. 보증금 상계 수납 건인 경우 해당 계약의 보증금 잔액 자동 원상 복원
+    if (payment.method === 'DEPOSIT_OFFSET' && payment.depositOffsetContractId) {
+      const c = db.contracts.find(cntr => cntr.id === payment.depositOffsetContractId);
+      if (c) {
+        const restoredDepositBal = (c.depositBalance || 0) + payment.amount;
+        const targetAmt = c.depositAmount || 0;
+        const newDepStatus: DepositStatus = restoredDepositBal >= targetAmt ? 'HELD' : (restoredDepositBal > 0 ? 'PARTIAL_OFFSET' : 'FULLY_OFFSET');
+        db.updateRow<Contract>('contracts', c.id, {
+          depositBalance: restoredDepositBal,
+          depositStatus: newDepStatus,
+          updatedAt: new Date().toISOString()
+        });
+        db.insertRow<ContractHistory>('contractHistory', {
+          contractId: c.id,
+          changeType: 'DEPOSIT_OFFSET',
+          changeDate: new Date().toISOString().split('T')[0],
+          description: `보증금 상계 수납 취소 환원: ₩${payment.amount.toLocaleString()}원 복구 (가용 보증금: ₩${restoredDepositBal.toLocaleString()}원, 상태: ${newDepStatus})`,
+          createdAt: new Date().toISOString()
+        });
+      }
+    }
+
     // 3. Payment 및 연결 행 상계(또는 기존 방식 삭제)
     reversePaymentRecord(payment, linkedLinks, '수납 취소');
 
@@ -11839,7 +8426,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         updatedAt: new Date().toISOString()
       });
 
-      // 5. 계약 이력 무누락 기록
+      // 5. 계약 이력(ContractHistory) 무누락 기록
       if (billing.contractId) {
         db.insertRow<ContractHistory>('contractHistory', {
           contractId: billing.contractId,
@@ -11861,6 +8448,219 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     for (const p of targetPayments) {
       await cancelPayment(p.id);
     }
+  };
+
+  // 🛡️ [보증금 라이프사이클 1단계]: 보증금 입금 확인 (통장 매핑 또는 직접 입금 확인)
+  const confirmContractDepositPayment = async (
+    contractId: string,
+    paidAmount: number,
+    paidDate: string,
+    bankTransactionId?: string,
+    memo?: string
+  ) => {
+    const contract = db.contracts.find(c => c.id === contractId);
+    if (!contract) throw new Error('계약을 찾을 수 없습니다.');
+    if (paidAmount <= 0) throw new Error('입금된 보증금은 1원 이상이어야 합니다.');
+
+    const currentBal = contract.depositBalance || 0;
+    const newDepositBalance = currentBal + paidAmount;
+    const nowIso = new Date().toISOString();
+
+    db.updateRow<Contract>('contracts', contract.id, {
+      depositBalance: newDepositBalance,
+      depositStatus: 'HELD',
+      depositPaidDate: paidDate,
+      depositBankTransactionId: bankTransactionId || contract.depositBankTransactionId,
+      depositMemo: memo || contract.depositMemo,
+      updatedAt: nowIso
+    });
+
+    db.insertRow<ContractHistory>('contractHistory', {
+      contractId: contract.id,
+      changeType: 'DEPOSIT_RECEIVED',
+      changeDate: paidDate,
+      description: `보증금 입금 확인: ₩${paidAmount.toLocaleString()}원 입금 (총 가용 보증금 잔액: ₩${newDepositBalance.toLocaleString()}원, 약정액: ₩${(contract.depositAmount || 0).toLocaleString()}원)${memo ? ` [비고: ${memo}]` : ''}`,
+      createdAt: nowIso
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  // 🛡️ [보증금 라이프사이클 2단계]: 수납 단계 단일 청구서 보증금 상계 처리
+  const offsetDepositForBilling = async (
+    billingId: string,
+    contractId: string,
+    offsetAmount: number,
+    offsetDate: string,
+    memo?: string
+  ) => {
+    const billing = db.billings.find(b => b.id === billingId);
+    const contract = db.contracts.find(c => c.id === contractId);
+    if (!billing) throw new Error('청구서를 찾을 수 없습니다.');
+    if (!contract) throw new Error('계약을 찾을 수 없습니다.');
+    if (offsetAmount <= 0) throw new Error('상계 금액은 1원 이상이어야 합니다.');
+
+    const availDeposit = contract.depositBalance || 0;
+    if (offsetAmount > availDeposit) {
+      throw new Error(`보증금 가용 잔액이 부족합니다. (가용 잔액: ₩${availDeposit.toLocaleString()}원 / 요청액: ₩${offsetAmount.toLocaleString()}원)`);
+    }
+
+    const supply = billing.totalAmount || 0;
+    const grandTotal = supply + Math.round(supply * 0.1);
+    const unpaid = Math.max(0, grandTotal - (billing.paidAmount || 0));
+    if (offsetAmount > unpaid) {
+      throw new Error(`청구서 미납액보다 큰 금액을 상계할 수 없습니다. (미납액: ₩${unpaid.toLocaleString()}원 / 요청액: ₩${offsetAmount.toLocaleString()}원)`);
+    }
+
+    const nowIso = new Date().toISOString();
+
+    // 1. 계약 보증금 잔액 차감
+    const newDepositBalance = Math.max(0, availDeposit - offsetAmount);
+    const newDepositStatus: DepositStatus = newDepositBalance === 0 ? 'FULLY_OFFSET' : 'PARTIAL_OFFSET';
+
+    db.updateRow<Contract>('contracts', contract.id, {
+      depositBalance: newDepositBalance,
+      depositStatus: newDepositStatus,
+      updatedAt: nowIso
+    });
+
+    // 2. Payment 수납 전표 발행 (method: 'DEPOSIT_OFFSET')
+    db.insertRow<Payment>('payments', {
+      billingId: billing.id,
+      paymentDate: offsetDate,
+      amount: offsetAmount,
+      method: 'DEPOSIT_OFFSET',
+      memo: memo || `보증금 상계 수납 (잔여보증금 ₩${newDepositBalance.toLocaleString()}원)`,
+      depositOffsetContractId: contract.id,
+      createdAt: nowIso
+    });
+
+    // 3. Billing 상태 갱신
+    const nextPaid = (billing.paidAmount || 0) + offsetAmount;
+    let nextStatus: Billing['status'] = 'UNPAID';
+    if (nextPaid >= grandTotal) nextStatus = 'PAID';
+    else if (nextPaid > 0) nextStatus = 'PARTIAL';
+
+    db.updateRow<Billing>('billings', billing.id, {
+      paidAmount: nextPaid,
+      status: nextStatus,
+      updatedAt: nowIso
+    });
+
+    // 4. 계약 이력 기록
+    db.insertRow<ContractHistory>('contractHistory', {
+      contractId: contract.id,
+      changeType: 'DEPOSIT_OFFSET',
+      changeDate: offsetDate,
+      description: `보증금 상계 처리: ${billing.billingYm} 청구분 ₩${offsetAmount.toLocaleString()}원 상계 (수납후 보증금 잔액: ₩${newDepositBalance.toLocaleString()}원, 상태: ${newDepositStatus})`,
+      createdAt: nowIso
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
+
+  // 🛡️ [보증금 라이프사이클 3단계]: 계약종료 시점 미납액 보증금 일괄 반제 + 잔액 고객 반환 원스톱 파이프라인
+  const settleContractDepositAndComplete = async (
+    contractId: string,
+    settleDate: string,
+    refundAccountInfo?: { bank: string; account: string; holder: string },
+    memo?: string
+  ): Promise<{ success: boolean; totalOffsetAmount: number; refundAmount: number; updatedBillingsCount: number }> => {
+    const contract = db.contracts.find(c => c.id === contractId);
+    if (!contract) throw new Error('계약을 찾을 수 없습니다.');
+
+    let availDeposit = contract.depositBalance || 0;
+    const nowIso = new Date().toISOString();
+
+    // 1. 해당 계약 산하의 모든 미납 청구서 조회 (오래된 청구부터 순차 반제)
+    const unpaidBillings = db.billings
+      .filter(b => b.contractId === contractId && b.status !== 'PAID' && b.status !== 'REJECTED')
+      .sort((a, b) => (a.billingDate || a.billingYm).localeCompare(b.billingDate || b.billingYm));
+
+    let totalOffsetAmount = 0;
+    let updatedBillingsCount = 0;
+
+    for (const b of unpaidBillings) {
+      if (availDeposit <= 0) break;
+
+      const supply = b.totalAmount || 0;
+      const grandTotal = supply + Math.round(supply * 0.1);
+      const unpaid = Math.max(0, grandTotal - (b.paidAmount || 0));
+      if (unpaid <= 0) continue;
+
+      const offsetAmt = Math.min(availDeposit, unpaid);
+      if (offsetAmt > 0) {
+        availDeposit -= offsetAmt;
+        totalOffsetAmount += offsetAmt;
+        updatedBillingsCount++;
+
+        // Payment 수납 전표 생성
+        db.insertRow<Payment>('payments', {
+          billingId: b.id,
+          paymentDate: settleDate,
+          amount: offsetAmt,
+          method: 'DEPOSIT_OFFSET',
+          memo: `[계약종료 최종정산] 보증금 자동 반제 상계 (청구월: ${b.billingYm})`,
+          depositOffsetContractId: contract.id,
+          createdAt: nowIso
+        });
+
+        // Billing 상태 갱신
+        const nextPaid = (b.paidAmount || 0) + offsetAmt;
+        const nextStatus: Billing['status'] = nextPaid >= grandTotal ? 'PAID' : 'PARTIAL';
+        db.updateRow<Billing>('billings', b.id, {
+          paidAmount: nextPaid,
+          status: nextStatus,
+          updatedAt: nowIso
+        });
+      }
+    }
+
+    // 2. 상계 후 남은 잔여 보증금 계산 및 반환
+    const refundAmount = availDeposit; // 미납 반제 후 남은 잔액
+    let finalDepositStatus: DepositStatus = 'FULLY_OFFSET';
+    if (refundAmount > 0) {
+      finalDepositStatus = 'REFUNDED';
+    } else if (contract.depositAmount && contract.depositAmount > 0) {
+      finalDepositStatus = 'FULLY_OFFSET';
+    } else {
+      finalDepositStatus = 'UNPAID';
+    }
+
+    // 3. 계약 상태 종료(COMPLETED) 및 보증금 반환 속성 영구 저장
+    db.updateRow<Contract>('contracts', contract.id, {
+      depositBalance: 0, // 전액 상계 소진되었거나 반환 완료됨
+      depositStatus: finalDepositStatus,
+      depositRefundedDate: refundAmount > 0 ? settleDate : undefined,
+      depositRefundAmount: refundAmount,
+      depositRefundBank: refundAccountInfo?.bank || contract.depositRefundBank,
+      depositRefundAccount: refundAccountInfo?.account || contract.depositRefundAccount,
+      depositRefundHolder: refundAccountInfo?.holder || contract.depositRefundHolder,
+      status: 'COMPLETED',
+      endDate: settleDate < contract.endDate ? settleDate : contract.endDate,
+      updatedAt: nowIso
+    });
+
+    // 4. 계약 이력 무누락 기록 (헌장 1.2 & 4.2 준수)
+    db.insertRow<ContractHistory>('contractHistory', {
+      contractId: contract.id,
+      changeType: refundAmount > 0 ? 'DEPOSIT_REFUNDED' : 'DEPOSIT_OFFSET',
+      changeDate: settleDate,
+      description: `계약 종료 및 보증금 최종 정산 완결: 미납 청구 ${updatedBillingsCount}건 총 ₩${totalOffsetAmount.toLocaleString()}원 보증금 자동 반제 + 잔여 보증금 ₩${refundAmount.toLocaleString()}원 고객 계좌 반환 송금 처리 (상태: ${finalDepositStatus})${memo ? ` [비고: ${memo}]` : ''}`,
+      createdAt: nowIso
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+
+    return {
+      success: true,
+      totalOffsetAmount,
+      refundAmount,
+      updatedBillingsCount
+    };
   };
 
   // 통장입금 등록 (입금내역으로 수납 재원 등록)
@@ -12558,15 +9358,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       vehiclesJson?: string;
     }
   ) => {
-    const existingDel = db.deliveries.find(d => d.id === deliveryId);
-    if (existingDel?.contractId) {
-      const blockReason = getPendingCustomerOrContractBlockReason(existingDel.contractId);
-      if (blockReason) {
-        showErrorModal(blockReason, '결재 미승인 배차 제한');
-        return;
-      }
-    }
-    const keepCompleted = existingDel?.status === 'DELIVERED' || existingDel?.status === 'COMPLETED';
     db.updateRow<Delivery>('deliveries', deliveryId, {
       scheduledDate: dispatchData.scheduledDate,
       transportCompany: dispatchData.transportCompany,
@@ -12576,7 +9367,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       driverContact: dispatchData.driverContact,
       deliveryCost: dispatchData.deliveryCost,
       vehicles: dispatchData.vehiclesJson,
-      status: keepCompleted ? existingDel.status : 'DISPATCHED',
+      status: 'DISPATCHED',
       updatedAt: new Date().toISOString()
     });
     refreshAllData();
@@ -12609,199 +9400,98 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     const delivery = db.deliveries.find(d => d.id === deliveryId);
     if (!delivery) return;
 
-    if (delivery.contractId) {
-      const blockReason = getPendingCustomerOrContractBlockReason(delivery.contractId);
-      if (blockReason) {
-        showErrorModal(blockReason, '결재 미승인 운송완료 제한');
-        throw new Error(blockReason);
-      }
-    }
-
-    const isOutboundLike =
-      delivery.type === 'OUTBOUND' ||
-      delivery.type === 'EXCHANGE' ||
-      delivery.dispatchCategory === '출고' ||
-      delivery.dispatchCategory === '교환';
-
-    // 🛡️ [절차적 무결성 가드레일]: 출고/교환 배차는 반드시 (1) 기사 배정 ➔ (2) 장비 할당 완료 ➔ (3) 출고 검수 승인을 거쳐야만 운송 완료 처리 가능
-    if (isOutboundLike && delivery.contractId) {
-      if (delivery.status === 'REQUESTED' || !delivery.driverName?.trim()) {
-        throw new Error('배차 기사 배정(배차 완료)이 선행되지 않은 출고 건은 운송 완료 처리할 수 없습니다.');
-      }
-
-      // 1. 해당 배차의 대상 계약자산 슬롯 추출
-      let parsedCargo: any[] = [];
-      try {
-        if (delivery.cargoItems) {
-          const raw = typeof delivery.cargoItems === 'string' ? JSON.parse(delivery.cargoItems) : delivery.cargoItems;
-          if (Array.isArray(raw)) parsedCargo = raw;
-        }
-      } catch {
-        parsedCargo = [];
-      }
-
-      const deliveryCaIds: string[] = [];
-      let totalRequestedCount = 0;
-      parsedCargo.forEach(ci => {
-        totalRequestedCount += Number(ci?.count) || 0;
-        if (Array.isArray(ci?.contractAssetIds)) {
-          deliveryCaIds.push(...ci.contractAssetIds.filter(Boolean));
-        }
-      });
-
-      let targetCas = deliveryCaIds.length > 0
-        ? db.contractAssets.filter(ca => deliveryCaIds.includes(ca.id))
-        : [];
-
-      // 레거시/초기 계약 배차 등 contractAssetIds가 비어있는 경우 해당 계약의 슬롯 참조
-      if (targetCas.length === 0) {
-        const allContractCas = db.contractAssets.filter(ca => ca.contractId === delivery.contractId && ca.status !== 'RETURNED');
-        const unassignedCas = allContractCas.filter(ca => !ca.assetId);
-        if (unassignedCas.length > 0) {
-          targetCas = unassignedCas;
-        } else {
-          targetCas = allContractCas;
-        }
-      }
-
-      if (targetCas.length === 0 && totalRequestedCount > 0) {
-        throw new Error(`해당 출고 요청(${totalRequestedCount}대)에 연결된 계약 자산 슬롯을 찾을 수 없어 운송 완료 처리할 수 없습니다.`);
-      }
-
-      // 2. 미할당 슬롯(assetId 누락) 검증
-      const unassignedSlots = targetCas.filter(ca => !ca.assetId);
-      if (unassignedSlots.length > 0) {
-        const missingModels = unassignedSlots.map(ca => ca.expectedModel || '미지정').join(', ');
-        throw new Error(
-          `[절차 차단: 장비 미할당]\n` +
-          `이 출고 건에 아직 장비가 할당되지 않은 슬롯이 ${unassignedSlots.length}대(${missingModels}) 남아 있습니다.\n\n` +
-          `반드시 [장비 할당] ➔ [출고 검수 승인]을 먼저 완료한 후 운송 완료 처리해 주십시오.`
-        );
-      }
-
-      // 3. 출고 검수 승인 완료(COMPLETED & 자산 AWAITING_TRANSPORT/RENTED 전환) 검증
-      const uninspectedAssets: string[] = [];
-      for (const ca of targetCas) {
-        const asset = db.assets.find(a => a.id === ca.assetId);
-        const matchedInsps = db.outboundInspections.filter(
-          ins =>
-            ins.contractAssetId === ca.id ||
-            (ins.deliveryId === delivery.id && ins.assetId === ca.assetId) ||
-            (ins.contractId === delivery.contractId && ins.assetId === ca.assetId)
-        );
-        const isInspCompleted = matchedInsps.length > 0
-          ? matchedInsps.some(ins => ins.status === 'COMPLETED' || (ins.status as string) === 'APPROVED')
-          : ((asset?.status === 'AWAITING_TRANSPORT' || asset?.status === 'RENTED') && (ca.status === 'AWAITING_TRANSPORT' || ca.status === 'RENTED'));
-        const isAssetReady = asset?.status === 'AWAITING_TRANSPORT' || asset?.status === 'RENTED';
-
-        if (!isInspCompleted || !isAssetReady) {
-          const label = asset ? `${asset.modelName}(${asset.assetNo})` : (ca.expectedModel || ca.id);
-          uninspectedAssets.push(label);
-        }
-      }
-
-      if (uninspectedAssets.length > 0) {
-        throw new Error(
-          `[절차 차단: 출고 검수 미완료]\n` +
-          `출고 검수 승인이 완료되지 않은 장비가 ${uninspectedAssets.length}대 존재합니다:\n` +
-          `• ${uninspectedAssets.join(', ')}\n\n` +
-          `[출고 검수] 메뉴에서 기능 점검 및 출고 승인을 먼저 완료해 주십시오.`
-        );
-      }
-    }
-
-    const nowObj = new Date();
-    const nowIso = nowObj.toISOString();
-    const todayLocalStr = `${nowObj.getFullYear()}-${String(nowObj.getMonth() + 1).padStart(2, '0')}-${String(nowObj.getDate()).padStart(2, '0')}`;
-    const effectiveUnloadingDate = (delivery.unloadingDate || delivery.loadingDate || delivery.scheduledDate || todayLocalStr).slice(0, 10);
-
-    // [헌장 1.3 준수 & 상차완료 ➔ 하차 예정일 자동 운송완료]:
-    // 상차완료 시 하차 예정일(effectiveUnloadingDate)이 오늘 이하이면 즉시 DELIVERED로 마감하고,
-    // 미래 하차 예정일이면 loadingCompletedAt 및 unloadingCompletedAt(하차예정일)을 기록하여 하차 예정일에 자동 DELIVERED 전환되도록 한다.
-    // 동시에 하차 예정일 = 운송 완료일 = 계약 개시일 = 청구 개시일로 체결자산/장비/입출고로그/계약 개시일을 100% 일치시킨다.
     db.updateRow<Delivery>('deliveries', deliveryId, {
-      status: effectiveUnloadingDate <= todayLocalStr ? 'DELIVERED' : 'DISPATCHED',
-      loadingCompletedAt: delivery.loadingCompletedAt || nowIso,
-      unloadingCompletedAt: effectiveUnloadingDate,
-      updatedAt: nowIso
+      status: 'COMPLETED',
+      updatedAt: new Date().toISOString()
     });
 
-    if (isOutboundLike && delivery.contractId) {
-      const syncCaIds = new Set<string>();
-      if (delivery.cargoItems) {
-        try {
-          const parsed = typeof delivery.cargoItems === 'string' ? JSON.parse(delivery.cargoItems) : delivery.cargoItems;
-          if (Array.isArray(parsed)) {
-            parsed.forEach((ci: any) => {
-              if (Array.isArray(ci?.contractAssetIds)) {
-                ci.contractAssetIds.forEach((id: string) => {
-                  if (id) syncCaIds.add(id);
-                });
-              }
+    const contract = delivery.contractId ? db.contracts.find(c => c.id === delivery.contractId) : null;
+    const customer = contract ? db.customers.find(c => c.id === contract.customerId) : null;
+    const site = contract ? db.sites.find(s => s.id === contract.siteId) : null;
+
+    // INBOUND (회수) 완료 시 장비를 대기중(AVAILABLE)으로 복원 및 계약 완료 처리
+    if (delivery.type === 'INBOUND' && delivery.contractId) {
+      const cAssets = db.contractAssets.filter(ca => ca.contractId === delivery.contractId);
+      cAssets.forEach(ca => {
+        if (ca.assetId) {
+          const asset = db.assets.find(a => a.id === ca.assetId);
+          db.updateRow<Asset>('assets', ca.assetId, {
+            status: 'AVAILABLE',
+            currentCustomerId: '',
+            currentSiteId: '',
+            contractStart: '',
+            contractEnd: '',
+            monthlyRentalFee: 0,
+            dailyRentalFee: 0,
+            updatedAt: new Date().toISOString()
+          });
+
+          if (asset) {
+            // 입고 이력 추가 (기본 점수 0, 특이사항 없음)
+            db.insertRow<AssetInOutLog>('assetInOutLogs', {
+              assetId: asset.id,
+              assetNo: asset.assetNo,
+              modelName: asset.modelName,
+              type: 'INBOUND',
+              eventDate: new Date().toISOString().split('T')[0],
+              customerId: contract?.customerId,
+              customerName: customer?.name || '',
+              siteId: contract?.siteId,
+              siteName: site?.name || '',
+              deliveryId: deliveryId,
+              maintenanceScore: asset.maintenanceScore || 0,
+              memo: '일반 배차 반납 입고',
+              createdAt: new Date().toISOString()
             });
           }
-        } catch {}
-      }
-      db.outboundInspections
-        .filter(ins => ins.deliveryId === delivery.id && ins.contractAssetId)
-        .forEach(ins => {
-          if (ins.contractAssetId) syncCaIds.add(ins.contractAssetId);
-        });
-
-      if (syncCaIds.size === 0) {
-        db.contractAssets
-          .filter(ca => ca.contractId === delivery.contractId && ca.status !== 'RETURNED' && ca.status !== 'SOLD')
-          .forEach(ca => syncCaIds.add(ca.id));
-      }
-
-      const loadDateStr = (delivery.loadingDate || delivery.scheduledDate || '').slice(0, 10);
-      syncCaIds.forEach(caId => {
-        const caObj = db.contractAssets.find(c => c.id === caId && c.contractId === delivery.contractId);
-        if (!caObj) return;
-        const shouldSyncFirstStart =
-          !caObj.firstStartDate ||
-          caObj.firstStartDate === caObj.startDate ||
-          caObj.firstStartDate === loadDateStr;
-        db.updateRow<ContractAsset>('contractAssets', caObj.id, {
-          status: 'RENTED',
-          startDate: effectiveUnloadingDate,
-          ...(shouldSyncFirstStart ? { firstStartDate: effectiveUnloadingDate } : {})
-        });
-        if (caObj.assetId) {
-          db.updateRow<Asset>('assets', caObj.assetId, {
-            status: 'RENTED',
-            contractStart: effectiveUnloadingDate,
-            updatedAt: nowIso
-          });
         }
       });
 
-      db.assetInOutLogs
-        .filter(l => l.deliveryId === delivery.id && l.type === 'OUTBOUND')
-        .forEach(l => {
-          db.updateRow<AssetInOutLog>('asset_inout_logs', l.id, {
-            eventDate: effectiveUnloadingDate
-          });
+      db.updateRow<Contract>('contracts', delivery.contractId, {
+        status: 'COMPLETED',
+        updatedAt: new Date().toISOString()
+      });
+    }
+
+    // OUTBOUND (출고) 완료 시 계약 활성화 및 출고 이력 생성
+    if (delivery.type === 'OUTBOUND' && delivery.contractId) {
+      if (contract && contract.status !== 'COMPLETED') {
+        db.updateRow<Contract>('contracts', delivery.contractId, {
+          status: 'ACTIVE',
+          updatedAt: new Date().toISOString()
         });
 
-      const contract = db.contracts.find(c => c.id === delivery.contractId);
-      if (contract) {
-        const activeCas = db.contractAssets.filter(
-          c => c.contractId === contract.id && c.status !== 'RETURNED' && c.status !== 'SOLD' && c.startDate
-        );
-        const earliestStart = activeCas.map(c => c.startDate).filter(Boolean).sort()[0] || effectiveUnloadingDate;
-        const nextContractStatus = (contract.status !== 'COMPLETED' && contract.status !== 'EXTENDED') ? 'ACTIVE' : contract.status;
-        db.updateRow<Contract>('contracts', delivery.contractId, {
-          startDate: earliestStart,
-          status: nextContractStatus,
-          updatedAt: nowIso
+        // OUTBOUND 로그 추가 (중복 방지 가드)
+        const cAssets = db.contractAssets.filter(ca => ca.contractId === delivery.contractId);
+        cAssets.forEach(ca => {
+          if (ca.assetId) {
+            const asset = db.assets.find(a => a.id === ca.assetId);
+            if (asset) {
+              const alreadyLogged = db.assetInOutLogs.some(
+                l => l.assetId === asset.id && l.type === 'OUTBOUND' && l.deliveryId === deliveryId
+              );
+              if (!alreadyLogged) {
+                db.insertRow<AssetInOutLog>('assetInOutLogs', {
+                  assetId: asset.id,
+                  assetNo: asset.assetNo,
+                  modelName: asset.modelName,
+                  type: 'OUTBOUND',
+                  eventDate: delivery.scheduledDate || new Date().toISOString().split('T')[0],
+                  customerId: contract.customerId,
+                  customerName: customer?.name || '',
+                  siteId: contract.siteId,
+                  siteName: site?.name || '',
+                  deliveryId: deliveryId,
+                  createdAt: new Date().toISOString()
+                });
+              }
+            }
+          }
         });
       }
     }
 
-    await db.awaitPendingWrites();
-    refreshAllData();
-  };
+    await db.awaitPendingWrites(); refreshAllData(); };
 
   const completeInboundDelivery = async (
     deliveryId: string,
@@ -12877,7 +9567,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       const registeredAt = new Date().toISOString();
 
       if (isExchange) {
-        // 교환 배차: 계약은 계속 진행되므로 완료시키지 않음
+        // 교환(EXCHANGE) 배차: 계약은 계속 진행(ACTIVE)되므로 완료시키지 않음
         // 회수 검수된 장비 슬롯만 RETURNED 처리 (대차로 투입된 장비는 계속 RENTED 유지)
         cAssets.forEach(ca => {
           if (ca.assetId && reviewedAssetIds.includes(ca.assetId)) {
@@ -12924,7 +9614,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
           !(ca.assetId && reviewedAssetIds.includes(ca.assetId)) && ca.status !== 'RETURNED'
         );
 
-        // 💡 [단일 진실의 원천]: 모든 장비가 회수 완료되었을 때 마스터 계약을 COMPLETED로 종료하고 종료일을 입고일로 덮어쓰기
+        // 💡 [단일 진실의 원천]: 모든 장비가 회수 완료되었을 때 마스터 계약을 COMPLETED로 종료하고 종료일(endDate)을 입고일로 덮어쓰기
         if (remainingActiveAssets.length === 0) {
           const contract = db.contracts.find(c => c.id === delivery.contractId);
           if (contract) {
@@ -12992,7 +9682,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
     const score = data.maintenanceScore || 0;
     const hasDefect = score > 0 || (data.defects && data.defects.length > 0) || Boolean(data.otherDefectText);
-    // 자산 상태: 점수 0점이고 결함 없으면 임대가능, 이상 시 정비중 또는 전달된 targetAssetStatus
+    // 자산 상태: 점수 0점이고 결함 없으면 AVAILABLE(임대가능), 이상 시 REPAIRING(정비중) 또는 전달된 targetAssetStatus
     const nextAssetStatus: Asset['status'] = data.targetAssetStatus || (!hasDefect ? 'AVAILABLE' : 'REPAIRING');
 
     // 💡 [입고 번호 채번]
@@ -13022,9 +9712,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       updatedAt: registeredAt
     });
 
-    // 2. 계약 자산 반납 갱신 (청구 연동: actualReturnDate는 실제 입고일, inRegisteredAt은 전산 등록일시)
-    const prevCaEndDate = ca?.endDate || contract?.endDate || data.returnDate;
-    const prevContractEndDate = contract?.endDate || data.returnDate;
+        // 2. 계약 자산 반납 갱신 (청구 연동: actualReturnDate는 실제 입고일, inRegisteredAt은 전산 등록일시)
     if (activeCAs.length > 0 || ca) {
       if (activeCAs.length > 0) {
         activeCAs.forEach(targetCa => {
@@ -13068,9 +9756,9 @@ ${currentTenant?.corporateName || tenantCorp} 배상
             contractId: contract.id,
             changeType: 'TERMINATE',
             changeDate: data.returnDate,
-            prevEndDate: prevContractEndDate,
+            prevEndDate: contract.endDate,
             newEndDate: data.returnDate,
-            description: `[자동 마감] 마지막 자산(${asset.assetNo}) 반납(입고일: ${data.returnDate})에 따른 마스터 계약 마감 및 종료일 동기화 (원래종료일: ${prevContractEndDate}, 원래슬롯종료일: ${prevCaEndDate})`,
+            description: `[자동 마감] 마지막 자산 반납(입고일: ${data.returnDate})에 따른 마스터 계약 마감 및 종료일 동기화`,
             createdAt: registeredAt
           });
         } else if (data.returnDate > contract.endDate) {
@@ -13083,20 +9771,9 @@ ${currentTenant?.corporateName || tenantCorp} 배상
             contractId: contract.id,
             changeType: 'EXTEND',
             changeDate: data.returnDate,
-            prevEndDate: prevContractEndDate,
+            prevEndDate: contract.endDate,
             newEndDate: data.returnDate,
-            description: `[자동 연장] 자산(${asset.assetNo}) 입고 처리(입고일: ${data.returnDate})에 따른 마스터 계약 강제 연장 동기화 (원래종료일: ${prevContractEndDate}, 원래슬롯종료일: ${prevCaEndDate})`,
-            createdAt: registeredAt
-          });
-        } else {
-          // 다수 장비 계약 중 일부 장비 조기/정상 반납 -> 슬롯 원래 종료일 스냅샷 보존
-          db.insertRow<ContractHistory>('contractHistory', {
-            contractId: contract.id,
-            changeType: 'ASSET_PERIOD_CHANGE',
-            changeDate: data.returnDate,
-            prevEndDate: prevCaEndDate,
-            newEndDate: data.returnDate,
-            description: `[부분 입고] 자산(${asset.assetNo}) 반납 입고(입고일: ${data.returnDate}) 처리 (원래슬롯종료일: ${prevCaEndDate})`,
+            description: `[자동 연장] 입고 처리(입고일: ${data.returnDate})에 따른 마스터 계약 강제 연장 동기화`,
             createdAt: registeredAt
           });
         }
@@ -13218,198 +9895,42 @@ ${currentTenant?.corporateName || tenantCorp} 배상
 
     await db.awaitPendingWrites(); refreshAllData(); };
 
-  // 💡 [사장님 지시] 입고 취소 롤백 (휴먼에러 원상복구 6단계 트랜잭션: 계약종료일·계약상태·체결자산·정비·배차·감사로그 100% 복원)
+  // 💡 [사장님 지시] 입고 취소 롤백 (휴먼에러 복원 및 INBOUND_CANCEL 히스토리 무누락 저장)
   const cancelInboundAsset = async (logId: string, cancelReason?: string) => {
-    // 🔒 테넌트 정식 오픈 전까지 개발자 계정 또는 데모 모드에서만 실행 허용
-    if (!isSystemDeveloperUser(currentUser) && !isDemoMode()) {
-      throw new Error('입고 취소 기능은 현재 개발자 전용으로 제한되어 있습니다.');
-    }
-
     const log = db.assetInOutLogs.find(l => l.id === logId && l.type === 'INBOUND');
     if (!log) throw new Error('해당 입고 이력 로그를 찾을 수 없거나 이미 취소된 건입니다.');
 
     const asset = db.assets.find(a => a.id === log.assetId);
     if (!asset) throw new Error('연관 자산을 찾을 수 없습니다.');
 
-    // [Step 0] 사전 안전 검증
-    // 0-1. 입고 등록 이후 타 계약에 이미 재출고/배정되었는지 검사
-    const hasSubsequentOutbound = db.assetInOutLogs.some(l =>
-      l.assetId === asset.id &&
-      l.type === 'OUTBOUND' &&
-      l.createdAt && log.createdAt &&
-      l.createdAt > log.createdAt
-    );
-    const isAssignedToAnotherCustomer =
-      (asset.status === 'RENTED' || asset.status === 'ASSIGNED') &&
-      Boolean(asset.currentCustomerId) &&
-      Boolean(log.customerId) &&
-      asset.currentCustomerId !== log.customerId;
+    // 1. 자산 상태 RENTED(대여중)로 복원
+    db.updateRow<Asset>('assets', asset.id, {
+      status: 'RENTED',
+      currentCustomerId: log.customerId || asset.currentCustomerId,
+      currentSiteId: log.siteId || asset.currentSiteId,
+      updatedAt: new Date().toISOString()
+    });
 
-    if (hasSubsequentOutbound || isAssignedToAnotherCustomer) {
-      throw new Error(`자산(${asset.assetNo})은 입고 등록 이후 이미 다른 계약에 배정 또는 재출고되어 입고를 취소할 수 없습니다.`);
-    }
-
-    // 0-2. 입고 결함으로 자동 생성된 정비 건이 이미 완료 마감되었는지 검사
-    const linkedRepair = log.repairId ? db.repairs.find(r => r.id === log.repairId) : undefined;
-    if (linkedRepair && linkedRepair.status === 'COMPLETED') {
-      throw new Error(`해당 입고 건으로 자동 접수된 정비(${linkedRepair.id})가 이미 완료 마감되어 부품/수리비가 반영되었습니다. 정비 내역을 먼저 취소 또는 확인해 주십시오.`);
-    }
-
-    const nowIso = new Date().toISOString();
-    const inboundDateStr = log.inDate || log.eventDate;
-
-    // [Step 1] 해당 입고 건과 매칭되는 정확한 체결 자산 슬롯 및 마스터 계약 특정
-    const candidateCAs = db.contractAssets
-      .filter(c => c.assetId === asset.id)
-      .sort((a, b) => (b.inRegisteredAt || b.updatedAt || b.createdAt || '').localeCompare(a.inRegisteredAt || a.updatedAt || a.createdAt || ''));
-
-    const ca =
-      candidateCAs.find(c => c.status === 'RETURNED' && c.actualReturnDate === inboundDateStr) ||
-      candidateCAs.find(c => {
-        if (c.status !== 'RETURNED') return false;
-        const ct = db.contracts.find(con => con.id === c.contractId);
-        return ct && log.customerId && ct.customerId === log.customerId;
-      }) ||
-      candidateCAs.find(c => c.status === 'RETURNED') ||
-      candidateCAs[0];
-
-    const contract = ca ? db.contracts.find(ct => ct.id === ca.contractId) : undefined;
-
-    // [Step 2] 자동 단축/변경된 계약 종료일 및 슬롯 종료일 역추적 산출
-    let restoredContractEndDate = contract?.endDate || '';
-    let restoredCaEndDate = ca?.endDate || '';
-
-    if (contract) {
-      const contractHistories = db.contractHistory
-        .filter(h => h.contractId === contract.id)
-        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
-
-      // 입고 등록 시 자동 기록된 TERMINATE / EXTEND / ASSET_PERIOD_CHANGE 이력 탐색
-      const matchedAutoHistory = contractHistories.find(h =>
-        (h.changeType === 'TERMINATE' || h.changeType === 'EXTEND' || h.changeType === 'ASSET_PERIOD_CHANGE') &&
-        (h.newEndDate === inboundDateStr || h.changeDate === inboundDateStr || (h.description && h.description.includes(asset.assetNo)))
-      );
-
-      if (matchedAutoHistory?.prevEndDate) {
-        if (matchedAutoHistory.changeType === 'TERMINATE' || matchedAutoHistory.changeType === 'EXTEND') {
-          restoredContractEndDate = matchedAutoHistory.prevEndDate;
-        }
-        restoredCaEndDate = matchedAutoHistory.prevEndDate;
-      }
-
-      // description 내 '원래슬롯종료일: YYYY-MM-DD' 또는 '원래종료일: YYYY-MM-DD' 파싱 보강
-      if (matchedAutoHistory?.description) {
-        const slotMatch = matchedAutoHistory.description.match(/원래슬롯종료일:\s*(\d{4}-\d{2}-\d{2})/);
-        const contractMatch = matchedAutoHistory.description.match(/원래종료일:\s*(\d{4}-\d{2}-\d{2})/);
-        if (slotMatch?.[1]) restoredCaEndDate = slotMatch[1];
-        if (contractMatch?.[1]) restoredContractEndDate = contractMatch[1];
-      }
-
-      // 만약 이전 이력에 prevEndDate가 없는 레거시 데이터라면 직전 계약 이력 또는 동일 계약 타 자산 종료일로 폴백 복원
-      if (!matchedAutoHistory?.prevEndDate && restoredContractEndDate === inboundDateStr) {
-        const priorHistory = contractHistories.find(h =>
-          h.id !== matchedAutoHistory?.id &&
-          (h.changeType === 'REGISTER' || h.changeType === 'EXTEND' || h.changeType === 'SHORTEN') &&
-          Boolean(h.newEndDate) &&
-          h.newEndDate !== inboundDateStr
-        );
-        const siblingMaxEndDate = db.contractAssets
-          .filter(c => c.contractId === contract.id && c.id !== ca?.id && c.endDate)
-          .reduce((max, c) => (c.endDate > max ? c.endDate : max), '');
-
-        if (priorHistory?.newEndDate) {
-          restoredContractEndDate = priorHistory.newEndDate;
-        } else if (siblingMaxEndDate && siblingMaxEndDate > restoredContractEndDate) {
-          restoredContractEndDate = siblingMaxEndDate;
-        }
-      }
-
-      if (!restoredCaEndDate || restoredCaEndDate === inboundDateStr) {
-        restoredCaEndDate = restoredContractEndDate || ca?.endDate || '';
-      }
-
-      // 마스터 계약 상태 및 계약 종료일 원상복구
-      db.updateRow<Contract>('contracts', contract.id, {
-        status: 'ACTIVE',
-        endDate: restoredContractEndDate || contract.endDate,
-        updatedAt: nowIso
-      });
-    }
-
-    // [Step 3] 계약 체결 자산 슬롯 대여중 및 원래 종료일 복원
+    // 2. 계약 체결 자산 RENTED(대여중)로 복원
+    const ca = db.contractAssets.find(c => c.assetId === asset.id);
     if (ca) {
       db.updateRow<ContractAsset>('contractAssets', ca.id, {
         status: 'RENTED',
-        endDate: restoredCaEndDate || ca.endDate,
         actualReturnDate: undefined,
-        inRegisteredAt: undefined,
-        updatedAt: nowIso
+        updatedAt: new Date().toISOString()
       });
     }
 
-    // [Step 4] 자산 마스터 대여중 및 계약 귀속 속성 원상복구
-    db.updateRow<Asset>('assets', asset.id, {
-      status: 'RENTED',
-      currentCustomerId: contract?.customerId || log.customerId || asset.currentCustomerId || '',
-      currentSiteId: contract?.siteId || log.siteId || asset.currentSiteId || '',
-      contractStart: ca?.startDate || contract?.startDate || asset.contractStart || '',
-      contractEnd: restoredCaEndDate || restoredContractEndDate || asset.contractEnd || '',
-      monthlyRentalFee: ca?.monthlyRentalFee ?? asset.monthlyRentalFee,
-      dailyRentalFee: ca?.dailyRentalFee ?? asset.dailyRentalFee,
-      maintenanceScore: 0,
-      note: '입고 취소 롤백 (대여중 원복)',
-      updatedAt: nowIso
-    });
-
-    // [Step 5] 연동된 자동 생성 입고 정비 및 회수 배차 상태 원상복구
-    if (linkedRepair && linkedRepair.status === 'PENDING') {
-      db.deleteRow('repairs', linkedRepair.id);
-      await clearHandoverTasks({
-        entityId: linkedRepair.id,
-        completionAction: 'INBOUND_CANCELLED',
-        completedByUserId: currentUser?.id,
-        completedByName: currentUser?.name
-      });
-    }
-
-    if (log.deliveryId) {
-      const matchedDel = db.deliveries.find(d => d.id === log.deliveryId);
-      if (matchedDel && (matchedDel.type === 'INBOUND' || matchedDel.type === 'RETURN') && matchedDel.status === 'DELIVERED') {
-        db.updateRow<Delivery>('deliveries', matchedDel.id, {
-          status: 'DISPATCHED',
-          unloadingCompletedAt: undefined,
-          updatedAt: nowIso
-        });
-      }
-    }
-
-    // [Step 6] 오등록 입고 로그 제거 및 입고 취소 감사 이력·계약 이력 무누락 기록
+    // 3. 기존 오등록 입고 로그 삭제 및 계약 이력에 롤백 로그 무누락 생성
     db.deleteRow('assetInOutLogs', logId);
 
-    db.insertRow<AssetInOutLog>('assetInOutLogs', {
-      assetId: asset.id,
-      assetNo: asset.assetNo,
-      modelName: asset.modelName,
-      type: 'INBOUND_CANCEL',
-      inboundNo: log.inboundNo,
-      eventDate: nowIso.split('T')[0],
-      customerId: contract?.customerId || log.customerId || '',
-      customerName: log.customerName || '',
-      siteId: contract?.siteId || log.siteId || '',
-      siteName: log.siteName || '',
-      memo: `[입고 취소 롤백] 오등록 입고일(${inboundDateStr}) 취소 ➔ 대여중 복원 및 계약종료일(${restoredContractEndDate || '-'}) 원복 (사유: ${cancelReason || '사용자 휴먼에러 입고 취소'})`,
-      createdAt: nowIso
-    });
-
-    if (contract) {
+    if (ca?.contractId) {
       db.insertRow<ContractHistory>('contractHistory', {
-        contractId: contract.id,
-        changeType: 'EXTEND',
-        changeDate: nowIso.split('T')[0],
-        prevEndDate: inboundDateStr,
-        newEndDate: restoredContractEndDate || contract.endDate,
-        description: `[입고 취소 원상복구] 자산(${asset.assetNo}) 휴먼에러 입고 취소 ➔ 계약상태(진행중) 및 계약종료일(${inboundDateStr} ➔ ${restoredContractEndDate || contract.endDate}) 원복 (사유: ${cancelReason || '사용자 휴먼에러 입고 취소'})`,
-        createdAt: nowIso
+        contractId: ca.contractId,
+        changeType: 'TERMINATE',
+        changeDate: new Date().toISOString().split('T')[0],
+        description: `[입고 취소 롤백] 자산(${asset.assetNo}) 오등록 입고 취소 ➔ '대여중' 복원 (사유: ${cancelReason || '사용자 휴먼에러 입고 취소'})`,
+        createdAt: new Date().toISOString()
       });
     }
 
@@ -13491,7 +10012,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       });
     }
 
-    // 소모품 재고 차감: 주기장 정비이거나 stockSource가 YARD_STOCK/CENTRAL_HQ인 경우 주기장 재고에서 우선 차감
+    // 소모품 재고 차감: 주기장 정비(YARD)이거나 stockSource가 YARD_STOCK/CENTRAL_HQ인 경우 주기장 재고에서 우선 차감
     const isYardDepotRepair = repairData.workLocation === 'YARD' || repairData.stockSource === 'YARD_STOCK' || repairData.stockSource === 'CENTRAL_HQ' || maintenanceType === 'INHOUSE_REPAIR';
     const effectiveMechanicId = repairData.mechanicId || currentUser?.id;
     const mechanic = db.users.find(u => u.id === effectiveMechanicId);
@@ -13504,44 +10025,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       let remainingToDeduct = uc.quantity;
       let hqDeducted = 0;
 
-      if (!isYardDepotRepair && effectiveMechanicId) {
-        // 1. 기사 차량 재고에서 차감 (현장 출장 AS인 경우)
-        const mechStocks = db.mechanicConsumableStocks
-          .filter(s => s.mechanicId === effectiveMechanicId && s.consumableId === uc.consumableId && s.stockQty > 0)
-          .sort((a, b) => {
-            const lotA = db.consumableLots.find(l => l.id === a.lotId);
-            const lotB = db.consumableLots.find(l => l.id === b.lotId);
-            return new Date(lotA?.inboundDate || 0).getTime() - new Date(lotB?.inboundDate || 0).getTime();
-          });
-
-        for (const stock of mechStocks) {
-          if (remainingToDeduct <= 0) break;
-          const deduct = Math.min(stock.stockQty, remainingToDeduct);
-          
-          db.updateRow<MechanicConsumableStock>('mechanicConsumableStocks', stock.id, {
-            stockQty: stock.stockQty - deduct,
-            updatedAt: new Date().toISOString()
-          });
-
-          db.insertRow<ConsumableLog>('consumableLogs', {
-            consumableId: consumable.id,
-            lotId: stock.lotId,
-            type: 'OUTBOUND',
-            quantity: deduct,
-            unitPrice: consumable.unitPrice,
-            targetAssetId: repairData.assetId,
-            userId: currentUser?.id,
-            mechanicId: effectiveMechanicId,
-            fromLocation: `${mechanicName} 차량`,
-            toLocation: `현장 장비(${targetAsset?.assetNo || 'N/A'})`,
-            actionDate: repairData.repairDate || new Date().toISOString().split('T')[0],
-            description: `[차량재고 소진] 정비(${repairId}) ${mechanicName} 차량에서 현장 투입`,
-            createdAt: new Date().toISOString()
-          });
-
-          remainingToDeduct -= deduct;
-        }
-      }
 
       if (remainingToDeduct > 0) {
         hqDeducted = remainingToDeduct;
@@ -13829,7 +10312,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       const monthlyDepn = depreciableAmount / asset.depreciationMonths;
       if (monthlyDepn <= 0) continue;
 
-      // 3. 취득일부터 마감연월 말일까지의 경과 개월수 정밀 산출
+      // 3. 취득일(acqDate)부터 마감연월 말일(closingDate)까지의 경과 개월수 정밀 산출
       let yearsDiff = closingDate.getFullYear() - acqDate.getFullYear();
       let monthsDiff = closingDate.getMonth() - acqDate.getMonth();
       let totalElapsedMonths = yearsDiff * 12 + monthsDiff + 1; // 취득당월 포함
@@ -13904,9 +10387,8 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     let consumableCount = 0;
     let leaseCount = 0;
 
-    // ① 운송료 집계 — 당월 DELIVERED 배차 중 미정산 건 (고객직접운송 0원 건 제외)
+    // ① 운송료 집계 — 당월 DELIVERED 배차 중 미정산 건
     const deliveriesOfMonth = db.deliveries.filter(d => {
-      if ((d.transportCompany || '').trim() === '고객직접운송') return false;
       const dateStr = d.unloadingDate || d.scheduledDate || d.requestDate;
       return dateStr?.startsWith(ym) &&
         d.status === 'DELIVERED' &&
@@ -14088,7 +10570,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     );
     leaseCount = leaseSettlementsOfMonth.length;
 
-    // ④ [신규 추가] 외주 정비비 집계 — 정비수리에서 repairType === 'EXTERNAL'이고 status === 'COMPLETED'인 외주 정비 건 수집
+    // ④ [신규 추가] 외주 정비비 집계 — 정비수리(Repairs)에서 repairType === 'EXTERNAL'이고 status === 'COMPLETED'인 외주 정비 건 수집
     let repairCount = 0;
     const completedExternalRepairs = db.repairs.filter(r => {
       if (r.repairType !== 'EXTERNAL' || r.status !== 'COMPLETED' || !r.vendorId) return false;
@@ -14194,7 +10676,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       memo: data.memo
     });
 
-    // SettlementPaymentLog 지급 이력 레코드 1:N 보관
+    // SettlementPaymentLog 지급 이력 레코드 1:N 보관 (Audit Trail)
     const logId = `SPL-${Date.now()}`;
     const logs = db.settlementPaymentLogs;
     logs.push({
@@ -14269,13 +10751,12 @@ ${currentTenant?.corporateName || tenantCorp} 배상
   const convertReconciledDeliveriesToSettlement = async (settlementYm: string, transportCompanyId?: string): Promise<number> => {
     try {
       const targetDeliveries = db.deliveries.filter(d => {
-        if ((d.transportCompany || '').trim() === '고객직접운송') return false;
         const dDate = d.loadingDate || d.scheduledDate || d.requestDate || d.createdAt.split('T')[0];
         const matchYm = dDate.startsWith(settlementYm);
         const matchStatus = d.reconciliationStatus === 'RECONCILED' || d.reconciliationStatus === 'MATCHED';
         const tcObj = transportCompanyId ? db.transportCompanies.find(c => c.id === transportCompanyId) : null;
         const matchComp = !transportCompanyId || d.transportCompany === tcObj?.name || d.transportCompany === transportCompanyId; // 💡 FIX: d.transportCompany가 name이거나 id일 수 있으므로 모두 허용 (논리 충돌 버그 수정)
-        return matchYm && matchStatus && matchComp;
+        return matchYm && matchStatus;
       });
 
       if (targetDeliveries.length === 0) return 0;
@@ -14562,7 +11043,7 @@ ${currentTenant?.corporateName || tenantCorp} 배상
         prepaidBalance: nextBal
       });
 
-      // 2. 수납 레코드 생성
+      // 2. 수납 (Payment) 레코드 생성
       const paymentId = `pay-prepaid-${Date.now()}`;
       db.insertRow<Payment>('payments', {
         id: paymentId,
@@ -14958,41 +11439,416 @@ ${currentTenant?.corporateName || tenantCorp} 배상
     setErrorReports([...db.errorReports]);
   };
 
-  // 🛡️ [권한 기반 로컬 DB 매일 09:00 자동 백업 정책 동기화]
-  // 로그인한 직원의 백업 권한(autoBackupEnabled, autoBackupTime)을 로컬 에이전트(C:\eBroAgent)에 실시간 핫 동기화
-  useEffect(() => {
-    if (!currentUser && !currentTenant) return;
-    const matchedUser = currentUser
-      ? (users.find(u => u.id === currentUser.id || (currentUser.loginId && u.loginId === currentUser.loginId)) || currentUser)
-      : null;
+  const registerInboundDefectClaimReceivable = async (payload: {
+    existingReceivableId?: string;
+    repairId?: string;
+    assetId?: string;
+    assetNo: string;
+    modelName?: string;
+    ownerType?: 'OWN' | 'RENTED';
+    vendorName?: string;
+    customerId?: string;
+    customerName: string;
+    siteId?: string;
+    siteName: string;
+    siteAddress?: string;
+    contractId?: string;
+    contractNo?: string;
+    outboundDate?: string;
+    inboundDate: string;
+    billingDay?: number;
+    salespersonId?: string;
+    salespersonName?: string;
+    customerContactName?: string;
+    customerPhone?: string;
+    customerEmail?: string;
+    inspectorMemo?: string;
+    defectItems: InboundClaimDefectItem[];
+    negotiationMemo?: string;
+  }): Promise<string> => {
+    const now = new Date().toISOString();
+    const sanitizedDefectItems: InboundClaimDefectItem[] = (payload.defectItems || []).map((item, idx) => ({
+      id: item.id || `DEF-${idx + 1}`,
+      checkitemId: item.checkitemId || undefined,
+      category: (item.category || '입고불량').trim(),
+      symptomName: (item.symptomName || `불량 증상 ${idx + 1}`).trim(),
+      estimatedCost: Math.max(0, Math.round(Number(item.estimatedCost) || 0)),
+      agreedCost: Math.max(
+        0,
+        Math.round(Number(item.agreedCost !== undefined ? item.agreedCost : item.estimatedCost) || 0)
+      ),
+      photos: Array.isArray(item.photos) ? item.photos.filter(Boolean).slice(0, 2) : [],
+      memo: (item.memo || '').trim()
+    }));
 
-    syncTenantPolicyToAgent(
-      currentTenant,
-      matchedUser
-        ? {
-            autoBackupEnabled: Boolean(matchedUser.autoBackupEnabled),
-            autoBackupTime: matchedUser.autoBackupTime || '09:00',
-            autoBackupRetentionDays: matchedUser.autoBackupRetentionDays || 30,
-            backupUserId: matchedUser.id || '',
-            backupUserName: matchedUser.name || ''
-          }
-        : {
-            autoBackupEnabled: false,
-            autoBackupTime: '09:00',
-            autoBackupRetentionDays: 30,
-            backupUserId: '',
-            backupUserName: ''
-          }
-    ).catch(() => {});
-  }, [
-    currentUser?.id,
-    currentUser?.loginId,
-    currentUser?.autoBackupEnabled,
-    currentUser?.autoBackupTime,
-    users,
-    currentTenant?.id,
-    currentTenant?.tenantCode
-  ]);
+    if (sanitizedDefectItems.length === 0) {
+      throw new Error('최소 1개 이상의 불량 증상을 입력해 주십시오.');
+    }
+
+    const initialEstimatedAmount = sanitizedDefectItems.reduce(
+      (sum, item) => sum + (item.estimatedCost || 0),
+      0
+    );
+    const allPhotos = sanitizedDefectItems.flatMap(item => item.photos || []);
+
+    const existingRcv = payload.existingReceivableId
+      ? db.receivables.find(r => r.id === payload.existingReceivableId)
+      : undefined;
+    const receivableId = existingRcv ? existingRcv.id : db.generateNextId('RCV', db.receivables);
+    const existingRepair = existingRcv?.repairId
+      ? db.repairs.find(r => r.id === existingRcv.repairId)
+      : undefined;
+    const repairId = existingRepair ? existingRepair.id : db.generateNextId('RPR', db.repairs);
+
+    const autoLookup = lookupRecentInboundInfoByAsset(payload.assetNo, {
+      assets: db.assets,
+      assetInOutLogs: db.assetInOutLogs,
+      contractAssets: db.contractAssets,
+      contracts: db.contracts,
+      deliveries: db.deliveries,
+      repairs: db.repairs,
+      customers: db.customers,
+      sites: db.sites,
+      users: db.users,
+      vendors: db.vendors
+    });
+
+    const resolvedInspectorMemo = (payload.inspectorMemo ?? payload.negotiationMemo ?? '').trim();
+    const displayName = `[수리비 청구] ${payload.assetNo} 입고 파손·불량 수리비 (${sanitizedDefectItems.length}건)`;
+
+    const claimMeta: InboundDefectClaimMeta = {
+      kind: 'INBOUND_DEFECT_CLAIM_V1',
+      receivableId,
+      repairId,
+      assetId: payload.assetId || autoLookup?.assetId,
+      assetNo: payload.assetNo,
+      modelName: payload.modelName || autoLookup?.modelName || '',
+      ownerType: payload.ownerType || autoLookup?.ownerType || 'OWN',
+      vendorName: payload.vendorName || autoLookup?.vendorName || undefined,
+      customerId: payload.customerId || autoLookup?.customerId,
+      customerName: payload.customerName || autoLookup?.customerName || '미지정 고객',
+      siteId: payload.siteId || autoLookup?.siteId,
+      siteName: payload.siteName || autoLookup?.siteName || '미지정 현장',
+      siteAddress: payload.siteAddress || autoLookup?.siteAddress || '',
+      contractId: payload.contractId || autoLookup?.contractId,
+      contractNo: payload.contractNo || autoLookup?.contractNo,
+      outboundDate: payload.outboundDate || autoLookup?.outboundDate || undefined,
+      inboundDate: payload.inboundDate || autoLookup?.inboundDate || now.slice(0, 10),
+      billingDay: payload.billingDay || autoLookup?.billingDay,
+      salespersonId: payload.salespersonId || autoLookup?.salespersonId,
+      salespersonName: payload.salespersonName || autoLookup?.salespersonName,
+      customerContactName: payload.customerContactName || autoLookup?.customerContactName || undefined,
+      customerPhone: payload.customerPhone || autoLookup?.customerPhone || undefined,
+      customerEmail: payload.customerEmail || autoLookup?.customerEmail || undefined,
+      registeredById: currentUser?.id,
+      registeredByName: currentUser?.name || '출고팀',
+      registeredAt: existingRcv?.createdAt || now,
+      inspectorMemo: resolvedInspectorMemo,
+      displayName,
+      initialEstimatedAmount,
+      agreedAmount: initialEstimatedAmount,
+      negotiationStatus: 'PENDING_NEGOTIATION',
+      negotiationMemo: payload.negotiationMemo || '',
+      defectItems: sanitizedDefectItems
+    };
+
+    const symptomSummaryText = sanitizedDefectItems
+      .map(d => `${d.symptomName}(₩${(d.estimatedCost || 0).toLocaleString()})`)
+      .join(', ');
+
+    const internalDescription = `[입고불량 수리비] ${payload.assetNo} (${claimMeta.customerName} / ${claimMeta.siteName}) - ${symptomSummaryText}`;
+
+    if (existingRepair) {
+      db.updateRow<Repair>('repairs', repairId, {
+        assetId: payload.assetId || existingRepair.assetId,
+        assetNo: payload.assetNo,
+        modelName: payload.modelName || existingRepair.modelName,
+        contractId: payload.contractId || existingRepair.contractId,
+        customerId: payload.customerId || existingRepair.customerId,
+        customerName: payload.customerName || existingRepair.customerName,
+        siteId: payload.siteId || existingRepair.siteId,
+        siteName: payload.siteName || existingRepair.siteName,
+        issueCategory: sanitizedDefectItems[0]?.category || '입고불량',
+        issueDescription: internalDescription,
+        billableType: 'BILLABLE',
+        billableAmount: initialEstimatedAmount,
+        billableToCustomer: true,
+        isCustomerFault: true,
+        evidenceImages: allPhotos,
+        defectsJson: JSON.stringify(claimMeta),
+        memo: payload.negotiationMemo || existingRepair.memo,
+        updatedAt: now
+      } as any);
+    } else {
+      db.insertRow<Repair>('repairs', {
+        id: repairId,
+        ticketNo: repairId,
+        workCategory: 'YARD_INTERNAL',
+        workLocation: 'YARD',
+        stockSource: 'YARD_STOCK',
+        source: 'INBOUND_INSPECTION',
+        repairType: 'INTERNAL',
+        priority: 'URGENT',
+        assetId: payload.assetId || undefined,
+        assetNo: payload.assetNo,
+        modelName: payload.modelName || undefined,
+        contractId: payload.contractId || undefined,
+        customerId: payload.customerId || undefined,
+        customerName: payload.customerName || undefined,
+        siteId: payload.siteId || undefined,
+        siteName: payload.siteName || undefined,
+        reporterName: currentUser?.name || '출고팀',
+        issueCategory: sanitizedDefectItems[0]?.category || '입고불량',
+        degradationScore: 0,
+        issueDescription: internalDescription,
+        requestDate: payload.inboundDate || now.slice(0, 10),
+        status: 'REQUESTED',
+        partsUsed: [],
+        collectedParts: [],
+        consumables: [],
+        timelineLogs: [],
+        timelineEvents: [],
+        billableType: 'BILLABLE',
+        billableAmount: initialEstimatedAmount,
+        billableToCustomer: true,
+        totalCost: initialEstimatedAmount,
+        costTotal: initialEstimatedAmount,
+        isCustomerFault: true,
+        isWaived: false,
+        waivedAmount: 0,
+        evidenceImages: allPhotos,
+        defectsJson: JSON.stringify(claimMeta),
+        memo: payload.negotiationMemo || '',
+        createdAt: now,
+        updatedAt: now
+      } as any);
+    }
+
+    const finalTotalAmount = Math.max(existingRcv?.billedAmount || 0, initialEstimatedAmount);
+    if (existingRcv) {
+      db.updateRow<Receivable>('receivables', receivableId, {
+        contractId: payload.contractId || existingRcv.contractId,
+        customerId: payload.customerId || existingRcv.customerId,
+        assetNo: payload.assetNo,
+        type: 'REPAIR',
+        totalAmount: finalTotalAmount,
+        internalDescription,
+        displayName,
+        occurredDate: payload.inboundDate || existingRcv.occurredDate || now.slice(0, 10),
+        repairId,
+        claimMeta,
+        updatedAt: now
+      });
+    } else {
+      db.insertRow<Receivable>('receivables', {
+        id: receivableId,
+        contractId: payload.contractId || undefined,
+        customerId: payload.customerId || undefined,
+        assetNo: payload.assetNo,
+        type: 'REPAIR',
+        totalAmount: finalTotalAmount,
+        billedAmount: 0,
+        internalDescription,
+        displayName,
+        occurredDate: payload.inboundDate || now.slice(0, 10),
+        status: 'PENDING',
+        repairId,
+        claimMeta,
+        createdAt: now,
+        updatedAt: now
+      });
+    }
+
+    saveLocalClaimMetaCache(receivableId, claimMeta);
+
+    await issueHandoverTask({
+      category: 'CLAIM_DAMAGE_BILLING',
+      title: `[입고불량 수리비 협상·전달] ${payload.customerName} (${payload.siteName}) - ${payload.assetNo}`,
+      content: `입고 불량 증상 ${sanitizedDefectItems.length}건(예상 수리비 ₩${initialEstimatedAmount.toLocaleString()})이 등록되었습니다. 내역서를 고객에게 전달하고 수리비를 합의해 주십시오.`,
+      priority: 'HIGH',
+      targetDept: 'SALES',
+      assignedUserId: payload.salespersonId || undefined,
+      dueDate: now.slice(0, 10),
+      actionUrl: '/receivables',
+      entityType: 'RECEIVABLE',
+      entityId: receivableId,
+      senderId: currentUser?.id,
+      senderName: currentUser?.name || '출고팀'
+    });
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+    return receivableId;
+  };
+
+  const updateReceivableClaimNegotiation = async (payload: {
+    receivableId: string;
+    agreedAmount: number;
+    negotiationStatus: ClaimNegotiationStatus;
+    defectItems?: InboundClaimDefectItem[];
+    negotiationMemo?: string;
+    displayName?: string;
+    sentChannel?: 'EMAIL' | 'KAKAO_SHARE' | 'PDF_DOWNLOAD';
+    sentToEmail?: string;
+  }): Promise<void> => {
+    const rcv = db.receivables.find(r => r.id === payload.receivableId);
+    if (!rcv) {
+      throw new Error('대상 외상미수금 청구건을 찾을 수 없습니다.');
+    }
+
+    const now = new Date().toISOString();
+    const currentMeta = resolveReceivableClaimMeta(rcv, {
+      repairs: db.repairs,
+      assets: db.assets,
+      customers: db.customers,
+      sites: db.sites,
+      contracts: db.contracts,
+      contractAssets: db.contractAssets,
+      users: db.users,
+      vendors: db.vendors
+    });
+
+    const newTotalAmount = Math.max(
+      rcv.billedAmount || 0,
+      Math.round(Number(payload.agreedAmount) || 0)
+    );
+
+    const updatedDefectItems: InboundClaimDefectItem[] = (
+      payload.defectItems ||
+      currentMeta?.defectItems ||
+      []
+    ).map((item, idx) => ({
+      ...item,
+      id: item.id || `DEF-${idx + 1}`,
+      photos: Array.isArray(item.photos) ? item.photos.filter(Boolean).slice(0, 2) : [],
+      estimatedCost: Math.max(0, Math.round(Number(item.estimatedCost) || 0)),
+      agreedCost:
+        item.agreedCost !== undefined
+          ? Math.max(0, Math.round(Number(item.agreedCost) || 0))
+          : Math.max(0, Math.round(Number(item.estimatedCost) || 0))
+    }));
+
+    const updatedDisplayName =
+      payload.displayName?.trim()
+        ? payload.displayName.trim()
+        : payload.negotiationStatus === 'AGREED'
+          ? `[수리비 합의완료] ${currentMeta?.assetNo || rcv.assetNo || ''} 입고 파손·불량 수리비 (${updatedDefectItems.length}건)`
+          : rcv.displayName;
+
+    const updatedMeta: InboundDefectClaimMeta = {
+      ...currentMeta,
+      kind: 'INBOUND_DEFECT_CLAIM_V1',
+      receivableId: rcv.id,
+      repairId: rcv.repairId || currentMeta?.repairId,
+      assetId: currentMeta?.assetId,
+      assetNo: rcv.assetNo || currentMeta?.assetNo || '',
+      modelName: currentMeta?.modelName || '',
+      ownerType: currentMeta?.ownerType,
+      vendorName: currentMeta?.vendorName,
+      customerId: rcv.customerId || currentMeta?.customerId,
+      customerName: currentMeta?.customerName || '미지정 고객',
+      siteId: currentMeta?.siteId,
+      siteName: currentMeta?.siteName || '미지정 현장',
+      siteAddress: currentMeta?.siteAddress,
+      contractId: rcv.contractId || currentMeta?.contractId,
+      contractNo: currentMeta?.contractNo,
+      outboundDate: currentMeta?.outboundDate,
+      inboundDate: currentMeta?.inboundDate || rcv.occurredDate,
+      billingDay: currentMeta?.billingDay,
+      salespersonId: currentMeta?.salespersonId,
+      salespersonName: currentMeta?.salespersonName,
+      customerContactName: currentMeta?.customerContactName,
+      customerPhone: currentMeta?.customerPhone,
+      customerEmail: currentMeta?.customerEmail,
+      registeredById: currentMeta?.registeredById,
+      registeredByName: currentMeta?.registeredByName,
+      registeredAt: currentMeta?.registeredAt || rcv.createdAt,
+      inspectorMemo: currentMeta?.inspectorMemo,
+      displayName: updatedDisplayName,
+      initialEstimatedAmount:
+        currentMeta?.initialEstimatedAmount !== undefined
+          ? currentMeta.initialEstimatedAmount
+          : rcv.totalAmount,
+      agreedAmount: newTotalAmount,
+      negotiationStatus: payload.negotiationStatus,
+      sentAt: payload.sentChannel ? now : currentMeta?.sentAt,
+      sentChannel: payload.sentChannel || currentMeta?.sentChannel,
+      sentToEmail: payload.sentToEmail || currentMeta?.sentToEmail,
+      agreedAt: payload.negotiationStatus === 'AGREED' ? now : currentMeta?.agreedAt,
+      agreedBy:
+        payload.negotiationStatus === 'AGREED'
+          ? currentUser?.name || '영업담당자'
+          : currentMeta?.agreedBy,
+      negotiationMemo:
+        payload.negotiationMemo !== undefined
+          ? payload.negotiationMemo
+          : currentMeta?.negotiationMemo || '',
+      defectItems: updatedDefectItems
+    };
+
+    if (rcv.repairId) {
+      const existingRepair = db.repairs.find(r => r.id === rcv.repairId);
+      if (existingRepair) {
+        db.updateRow<Repair>('repairs', rcv.repairId, {
+          billableAmount: newTotalAmount,
+          defectsJson: JSON.stringify(updatedMeta),
+          memo: updatedMeta.negotiationMemo || updatedMeta.inspectorMemo || existingRepair.memo,
+          updatedAt: now
+        } as any);
+      }
+    }
+
+    db.updateRow<Receivable>('receivables', rcv.id, {
+      totalAmount: newTotalAmount,
+      displayName: updatedDisplayName,
+      claimMeta: updatedMeta,
+      status:
+        newTotalAmount <= (rcv.billedAmount || 0) && newTotalAmount > 0
+          ? 'CLEARED'
+          : (rcv.billedAmount || 0) > 0
+            ? 'PARTIAL'
+            : 'PENDING',
+      updatedAt: now
+    });
+
+    saveLocalClaimMetaCache(rcv.id, updatedMeta);
+
+    if (payload.negotiationStatus === 'AGREED') {
+      await clearHandoverTasks({
+        entityId: rcv.id,
+        category: 'CLAIM_DAMAGE_BILLING',
+        completedByUserId: currentUser?.id,
+        completedByName: currentUser?.name || '영업담당자',
+        completionAction: '입고 불량 수리비 고객 최종 합의 완료'
+      });
+      if (rcv.repairId) {
+        await clearHandoverTasks({
+          entityId: rcv.repairId,
+          category: 'CLAIM_DAMAGE_BILLING',
+          completedByUserId: currentUser?.id,
+          completedByName: currentUser?.name || '영업담당자',
+          completionAction: '입고 불량 수리비 고객 최종 합의 완료'
+        });
+      }
+
+      await issueHandoverTask({
+        category: 'BILLABLE_REPAIR_BILLING',
+        title: `[당월 청구 반영] ${updatedMeta.customerName} (${updatedMeta.siteName}) - ${updatedMeta.assetNo} 합의 수리비 ₩${newTotalAmount.toLocaleString()}`,
+        content: `고객과 최종 합의된 입고 파손·불량 수리비(₩${newTotalAmount.toLocaleString()})가 외상미수금 대장에 확정되었습니다. 당월 청구 업무 시 포함하여 진행해 주십시오.`,
+        priority: 'HIGH',
+        targetDept: 'ACCOUNTING',
+        dueDate: now.slice(0, 10),
+        actionUrl: '/billings',
+        entityType: 'RECEIVABLE',
+        entityId: rcv.id,
+        senderId: currentUser?.id,
+        senderName: currentUser?.name || '영업담당자'
+      });
+    }
+
+    await db.awaitPendingWrites();
+    refreshAllData();
+  };
 
   const contextValue: AppContextType = {
     db,
@@ -15005,13 +11861,12 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       addTenantWorkplace, updateTenantWorkplace, deleteTenantWorkplace,
       addTenantYard, updateTenantYard, deleteTenantYard, setDefaultYard,
       errorReports, addErrorReport, receiveErrorReport, completeErrorReport, cancelErrorReport, reopenErrorReport, deleteErrorReport,
-      users, departments, permissions, customers, contacts, sites, siteMasters, saveSiteMaster, deleteSiteMaster, products, assets, consumables, consumableLots: db.consumableLots, consumableLogs, consumablePurchases, mechanicConsumableStocks, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, transportNegotiations, subleaseNegotiations, todos,
-      stocktakingAudits, stocktakingAuditItems, collectedParts,
+      users, departments, permissions, customers, contacts, sites, siteMasters, saveSiteMaster, deleteSiteMaster, products, assets, consumables, consumableLots: db.consumableLots, consumableLogs, consumablePurchases, contracts, contractAssets, contractHistory, deliveries, billings, billingDetails, payments, paymentDepositLinks, repairs, repairConsumables, transportCompanies, transportDrivers, transportNegotiations, subleaseNegotiations, todos,
+      stocktakingAudits, stocktakingAuditItems,
       bankTransactions, bankMatchingRules, bankInitialBalances, assetInOutLogs, vendors, officialMailConfigs, cashFlowSnapshots, outboundInspections, depreciationLogs,
       purchaseSettlements, purchaseSettlementItems, settlementPaymentLogs: db.settlementPaymentLogs, externalLeases, inspectionChecklistItems,
       equipmentManuals, saveEquipmentManual, deleteEquipmentManual,
       standardOptions, saveStandardOption, deleteStandardOption, monthlyIncomeStatements, saveMonthlyIncomeStatement,
-      salesJournals, saveSalesJournal, deleteSalesJournal,
       customRoles, rolePermissions, saveCustomRole, deleteCustomRole, saveRolePermissions, assignUserRole,
       annualLeaveQuotas, leaveUsages, overtimeRecords, payrollClosings, prepaidTransactions, delinquencyActionLogs, legalNoticeLogs, legalNoticeTemplates, saveLegalNoticeLog, saveLegalNoticeTemplate,
       corporateVehicles, vehicleOperationLogs, vehicleFuelLogs, registerCorporateVehicle, updateCorporateVehicle, deleteCorporateVehicle, registerVehicleOperationLog, updateVehicleOperationLog, deleteVehicleOperationLog, registerVehicleFuelLog, deleteVehicleFuelLog,
@@ -15019,14 +11874,16 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       saveCashFlowSnapshot, deleteCashFlowSnapshot, saveVendor, deleteVendor, recalculateAllVendorMetrics, saveBankInitialBalance, saveInspectionChecklistItem, deleteInspectionChecklistItem,
       updateAnnualLeaveQuota, addLeaveUsage, deleteLeaveUsage, addOvertimeRecord, deleteOvertimeRecord, setPayrollClosingStatus,
       acquireAsset, batchAcquireAssets, disposeAsset, executeAssetSale, registerRentedAsset, returnRentedAsset, createVendorClaimReceivable, changeAssetStatus, registerInboundAsset, cancelInboundAsset,
-      purchaseConsumable, useConsumable, transferConsumableToMechanic, returnConsumableToHq, transferConsumableBetweenMechanics, addConsumable, updateConsumable, deleteConsumable,
-      createStocktakingAudit, updateStocktakingItem, confirmStocktakingAudit, cancelStocktakingAudit, processCollectedPart,
+      purchaseConsumable, useConsumable, addConsumable, updateConsumable, deleteConsumable,
+      createStocktakingAudit, updateStocktakingItem, confirmStocktakingAudit, cancelStocktakingAudit,
       requestConsumablePurchase, updatePurchaseUnitPrice, acceptConsumablePurchase, completeConsumablePurchase, inboundConsumablePurchase, clearEvidenceFileUrls, updateEvidenceFileUrls,
-      createContract, rescindContract, extendContract, shortenContract, succeedContract, exchangeAsset, updateContractAssetPeriod, relocateContractAsset, redeployRepairedAsset,
+      createContract, extendContract, shortenContract, succeedContract, exchangeAsset, updateContractAssetPeriod, relocateContractAsset, redeployRepairedAsset,
       assignAssetToContract, batchAssignAssetsToContract, unassignAssetFromContract, batchUnassignAssetsFromContract, exchangeOutboundAsset,
-      saveSmartDispatch, cancelOutboundRequest, deleteCancelledOutboundRequests, updateOutboundRequestPricing, saveSmartReturn,
+      saveSmartDispatch, saveSmartReturn,
       completeTodo, issueExecutiveDirective, resolveExecutiveDirective, cancelExecutiveDirective,
-      generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, syncContractBillingMilestones, splitBillingAbsoluteAmount, regenerateBilling, saveCustomStatementForBilling, removeCustomStatementForBilling, toggleTenantCustomBillingStatement, toggleTenantContractTradeOutbound, approveBilling, cancelBilling, receivePayment, cancelPayment, cancelAllPaymentsForBilling, saveBankDeposit, deleteBankDeposit,
+      generateBillingsForMonth, getDueContractsForBilling, generateDueBillings, generateBillingForSingleContract, syncContractBillingMilestones, splitBillingAbsoluteAmount, regenerateBilling, saveCustomStatementForBilling, removeCustomStatementForBilling, toggleTenantCustomBillingStatement, approveBilling, cancelBilling, receivePayment, cancelPayment, cancelAllPaymentsForBilling,
+      confirmContractDepositPayment, offsetDepositForBilling, settleContractDepositAndComplete,
+      saveBankDeposit, deleteBankDeposit,
       addReceivable, registerInboundDefectClaimReceivable, updateReceivableClaimNegotiation, generateStandaloneBillingForReceivable, linkReceivableToBilling,
       uploadBankTransactions, matchTransactionManual, batchAutoMatchTransactions, unmatchTransaction, saveMatchingRule, deleteMatchingRule,
       dispatchDelivery, settleDeliveryCost, completeDelivery, completeInboundDelivery,
@@ -15039,7 +11896,6 @@ ${currentTenant?.corporateName || tenantCorp} 배상
       createRevisitAsTicket,
       importBandAsHistory,
       logFieldAsTimelineEvent,
-      recordAsRouteEvent,
       saveTransportDataOnFly,
       generateMonthlyPurchaseSettlements, confirmPurchaseSettlement, recordPurchaseSettlementPayment, savePurchaseSettlement, convertReconciledDeliveriesToSettlement,
       cancelMonthlyDepreciation, linkRepairToBilling, unlinkRepairFromBilling,

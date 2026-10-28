@@ -139,8 +139,6 @@ export interface TenantFeatures {
   publicDataApiKey?: string;      // 국토교통부 세움터 공공데이터포털 인증키 (서버/DB 보관)
   vworldApiKey?: string;          // V-World 공간정보 오픈플랫폼 인증키 (서버/DB 보관)
   agentAiEnabled?: boolean;       // eBro AI Agent 고유 기능 (텔레그램 명령 / 브라우저 확장 제어 / 데스크톱 AI Studio) 활성화 여부 (false 시 Silent Core 인쇄·문서 처리 모드)
-  allowContractTradeOutbound?: boolean; // 💡 렌탈 계약 상세에서 유통 출고 및 당월 청구 합산 기능 활성화 여부
-  walkieTalkie?: boolean;         // 📻 모바일 웹앱 현장 무전기 사용 여부
   specialFeatures?: string[];     // 🛡️ 사장님 지목 선별적 특수 탭 / 특수 버튼 인가 목록
 }
 
@@ -150,12 +148,12 @@ export type SubscriptionPlan = 'TRIAL' | 'STARTER' | 'STANDARD' | 'PRO' | 'ENTER
 /** ⏳ 테넌트 구독 라이선스 상태 */
 export type SubscriptionStatus = 'ACTIVE' | 'EXPIRING_SOON' | 'GRACE_PERIOD' | 'EXPIRED' | 'SUSPENDED';
 
-/** 📑 테넌트 구독 계약 및 만료 라이선스 정보 */
+/** 📑 테넌트 구독 계약 및 만료(Expire) 라이선스 정보 */
 export interface TenantSubscription {
   plan: SubscriptionPlan;              // 구독 요금제 등급
   status: SubscriptionStatus;          // 구독 상태
-  startDate: string;                   // 구독 시작일자(일자)
-  endDate: string;                     // 구독 만료일자(일자)
+  startDate: string;                   // 구독 시작일자 (YYYY-MM-DD)
+  endDate: string;                     // 구독 만료일자 (YYYY-MM-DD)
   gracePeriodDays: number;             // 만료 후 서비스 유예 기간 일수 (기본 7일)
   billingCycle: 'MONTHLY' | 'YEARLY' | 'CUSTOM'; // 결제 주기 (월납, 연납, 수시)
   monthlyFee?: number;                 // 월간 구독료 (원 단위)
@@ -279,7 +277,7 @@ export interface Tenant {
   solutionType?: SolutionType;         // 솔루션 업종 분류 (AWP: 고소작업대, IT: IT 인프라/장비, MULTI: 복합 사업군)
   targetRepo?: string;                 // 연동 깃허브 레포지토리 (예: 'DragonRPA/ebro_awp', 'DragonRPA/ebro_it')
   features?: TenantFeatures;           // 활성화된 모듈 및 라이선스 플러그인
-  subscription?: TenantSubscription;   // 💳 구독 요금제 및 만료 라이선스 정보
+  subscription?: TenantSubscription;   // 💳 구독 요금제 및 만료(Expire) 라이선스 정보
   systemName: string;                  // 시스템 기본 명칭 ('e-Bro System')
   displayName: string;                 // 시스템 표출 회사명 (예: '기연리프트')
   corporateName: string;               // 법인명(단체명): '주식회사 기연리프트'
@@ -320,12 +318,11 @@ export interface Tenant {
   updatedAt?: string;
   excelMappingRules?: TenantExcelMappingRules;
   allowCustomBillingStatement?: boolean; // 💡 특수 거래명세서(항목 임의수정 및 사유 기록) 기능 활성화 여부
-  allowContractTradeOutbound?: boolean;  // 💡 렌탈 계약 연동 유통 출고(당월 청구 합산) 기능 활성화 여부
   allowedPages?: string[];               // 📄 테넌트별 노출 허용 페이지 ID 목록 (빈 배열/미지정 시 전체 노출)
   hiddenPages?: string[];
   specialFeatures?: string[]; // 🛡️ 사장님 지목 선별적 특수 탭 / 특수 버튼 인가 목록 (예: ['tab:truck_dispatch:audit_settle'])                // 🚫 테넌트별 숨김/비노출 페이지 ID 목록
 
-  // 🛡️ 법정 개인정보 보호책임자
+  // 🛡️ 법정 개인정보 보호책임자 (CPO - Chief Privacy Officer)
   privacyOfficer?: TenantPrivacyOfficer;
   privacyOfficerName?: string;
   privacyOfficerPosition?: string;
@@ -338,7 +335,7 @@ export interface Tenant {
   r2Config?: Partial<OfficialMailConfig>;
 }
 
-/** 🛡️ 법정 개인정보 보호책임자 엔티티 */
+/** 🛡️ 법정 개인정보 보호책임자 (CPO) 엔티티 */
 export interface TenantPrivacyOfficer {
   name: string;        // 성명 (예: '이수용')
   position: string;    // 직책/직급 (예: '대표이사 / 관리부 총괄')
@@ -377,94 +374,6 @@ export async function autoApplyTenantsDdl(): Promise<boolean> {
   }
 }
 
-/** 🚜 assets 테이블 신규 컬럼(yard, assetNature), 상태 CHECK 제약조건 확장 DDL 및 PostgREST 스키마 캐시 자동 반영 헬퍼 */
-export const ASSETS_DDL_STATEMENTS: string[] = [
-  `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "yard" TEXT DEFAULT '용인';`,
-  `ALTER TABLE "assets" ADD COLUMN IF NOT EXISTS "assetNature" TEXT DEFAULT 'PHYSICAL';`,
-  `ALTER TABLE "assets" DROP CONSTRAINT IF EXISTS "assets_status_check";`,
-  `ALTER TABLE "assets" ADD CONSTRAINT "assets_status_check" CHECK (status IN ('AVAILABLE', 'ASSIGNED', 'OUTBOUND_INSPECTION', 'AWAITING_TRANSPORT', 'RENTED', 'REPAIRING', 'RENTED_RETURNED', 'SOLD', 'LOST', 'DISPOSED'));`,
-  `UPDATE "assets" SET "yard" = '용인' WHERE "yard" IS NULL OR "yard" = '';`,
-  `NOTIFY pgrst, 'reload schema';`
-];
-
-export async function autoApplyAssetsDdl(): Promise<boolean> {
-  if (!supabase) return false;
-  try {
-    const { data, error } = await supabase.rpc('dev_exec_ddl', { statements: ASSETS_DDL_STATEMENTS });
-    if (!error) {
-      console.log('[autoApplyAssetsDdl] assets DDL 실행 및 PostgREST 스키마 캐시 갱신 성공:', data);
-      return true;
-    }
-    console.warn('[autoApplyAssetsDdl] dev_exec_ddl RPC 실행 실패 (Fallback 전환):', error?.message || error);
-    return false;
-  } catch (e: any) {
-    console.warn('[autoApplyAssetsDdl] dev_exec_ddl RPC 호출 예외 (Fallback 전환):', e?.message || e);
-    return false;
-  }
-}
-
-/** 🚐 as_route_logs 테이블 자동 생성 DDL 및 PostgREST 스키마 캐시 자동 반영 헬퍼 */
-export const AS_ROUTE_LOGS_DDL_STATEMENTS: string[] = [
-  `CREATE TABLE IF NOT EXISTS "as_route_logs" (
-    "id" TEXT PRIMARY KEY,
-    "workDate" TEXT NOT NULL,
-    "mechanicId" TEXT,
-    "mechanicName" TEXT NOT NULL,
-    "eventType" TEXT NOT NULL,
-    "eventLabel" TEXT NOT NULL,
-    "repairId" TEXT,
-    "ticketNo" TEXT,
-    "customerId" TEXT,
-    "customerName" TEXT,
-    "siteId" TEXT,
-    "siteName" TEXT,
-    "siteAddress" TEXT,
-    "assetId" TEXT,
-    "assetNo" TEXT,
-    "modelName" TEXT,
-    "nextRepairId" TEXT,
-    "nextSiteName" TEXT,
-    "sourcingType" TEXT,
-    "sourcingTargetName" TEXT,
-    "partName" TEXT,
-    "revisitDate" TEXT,
-    "durationMinutes" INTEGER,
-    "memo" TEXT,
-    "recordedAt" TEXT NOT NULL,
-    "createdAt" TEXT NOT NULL,
-    "updatedAt" TEXT NOT NULL,
-    "tenant_id" TEXT NOT NULL DEFAULT 'giyeonlift'
-  );`,
-  `ALTER TABLE "as_route_logs" DROP CONSTRAINT IF EXISTS "as_route_logs_eventType_check";`,
-  `ALTER TABLE "as_route_logs" ADD COLUMN IF NOT EXISTS "sourcingType" TEXT;`,
-  `ALTER TABLE "as_route_logs" ADD COLUMN IF NOT EXISTS "sourcingTargetName" TEXT;`,
-  `ALTER TABLE "as_route_logs" ADD COLUMN IF NOT EXISTS "partName" TEXT;`,
-  `ALTER TABLE "as_route_logs" ADD COLUMN IF NOT EXISTS "revisitDate" TEXT;`,
-  `CREATE INDEX IF NOT EXISTS idx_as_route_logs_work_date ON "as_route_logs"("workDate");`,
-  `CREATE INDEX IF NOT EXISTS idx_as_route_logs_mechanic ON "as_route_logs"("mechanicId", "workDate");`,
-  `CREATE INDEX IF NOT EXISTS idx_as_route_logs_repair ON "as_route_logs"("repairId");`,
-  `ALTER TABLE "as_route_logs" ENABLE ROW LEVEL SECURITY;`,
-  `DROP POLICY IF EXISTS "allow_all_as_route_logs" ON "as_route_logs";`,
-  `CREATE POLICY "allow_all_as_route_logs" ON "as_route_logs" FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);`,
-  `NOTIFY pgrst, 'reload schema';`
-];
-
-export async function autoApplyAsRouteLogsDdl(): Promise<boolean> {
-  if (!supabase) return false;
-  try {
-    const { data, error } = await supabase.rpc('dev_exec_ddl', { statements: AS_ROUTE_LOGS_DDL_STATEMENTS });
-    if (!error) {
-      console.log('[autoApplyAsRouteLogsDdl] as_route_logs DDL 실행 및 PostgREST 스키마 캐시 갱신 성공:', data);
-      return true;
-    }
-    console.warn('[autoApplyAsRouteLogsDdl] dev_exec_ddl RPC 실행 실패 (Fallback 전환):', error?.message || error);
-    return false;
-  } catch (e: any) {
-    console.warn('[autoApplyAsRouteLogsDdl] dev_exec_ddl RPC 호출 예외 (Fallback 전환):', e?.message || e);
-    return false;
-  }
-}
-
 export interface ApprovalRule {
   id?: string;
   tenant_id?: string;
@@ -489,17 +398,11 @@ export interface RuleConsensus {
 }
 
 export interface ApprovalPayload {
-  version?: string | number;
-  actionType?: 'CUSTOM_BILLING_CREATE' | 'CONTRACT_EXTEND' | 'CONTRACT_SHORTEN' | string;
-  eventCode?: string;
-  title?: string;
-  summary?: string;
-  targetTable?: string;
-  targetId?: string;
-  targetRecordId?: string;
-  asIs?: Record<string, any>;
-  toBe?: Record<string, any>;
-  diffSummary?: any[];
+  actionType: 'CUSTOM_BILLING_CREATE' | 'CONTRACT_EXTEND' | 'CONTRACT_SHORTEN' | string;
+  targetTable: string;
+  targetId: string;
+  asIs: Record<string, any>;
+  toBe: Record<string, any>;
   reason?: string;
   summaryText?: string;
 }
@@ -646,7 +549,7 @@ export async function loadApprovalTierConfigs(): Promise<{
   return { duties, positions };
 }
 
-/** 동기 로더 (LocalStorage 또는 기본값 즉시 반환) */
+/** 동기(Sync) 로더 (LocalStorage 또는 기본값 즉시 반환) */
 export function getStoredApprovalTierConfigs(): {
   duties: ApprovalTierConfig[];
   positions: ApprovalTierConfig[];
@@ -670,8 +573,8 @@ export function getStoredApprovalTierConfigs(): {
 
 /**
  * 임직원의 유효 결재 티어 산출 함수 (R&R 기반 직책 우선 강제 원칙)
- * 1. 직책이 등록되어 있으면 직책 티어가 최우선(더 강력하게) 작동
- * 2. 직책이 없거나 미등록 직책인 경우 직급 티어로 fallback 작동 (소규모 기업/일반 사원 호환)
+ * 1. 직책(duty)이 등록되어 있으면 직책 티어가 최우선(더 강력하게) 작동
+ * 2. 직책이 없거나 미등록 직책인 경우 직급(position) 티어로 fallback 작동 (소규모 기업/일반 사원 호환)
  * 3. 둘 다 매핑되지 않으면 user.tier_level 또는 0 반환
  */
 export function getUserEffectiveTier(
@@ -687,7 +590,7 @@ export function getUserEffectiveTier(
   const dutyList = (dutyConfigs && dutyConfigs.length > 0) ? dutyConfigs : (stored?.duties || DEFAULT_DUTY_TIERS);
   const positionList = (positionConfigs && positionConfigs.length > 0) ? positionConfigs : (stored?.positions || DEFAULT_POSITION_TIERS);
 
-  // 1. 직책 우선 판정 (R&R 단위 조직 책임자 권한 우선)
+  // 1. 직책(Duty) 우선 판정 (R&R 단위 조직 책임자 권한 우선)
   if (user.duty && user.duty.trim()) {
     const trimmedDuty = user.duty.trim().toLowerCase();
     const matchedDuty = dutyList.find(d => d.title.trim().toLowerCase() === trimmedDuty);
@@ -700,7 +603,7 @@ export function getUserEffectiveTier(
     }
   }
 
-  // 2. 직급 판정 (Fallback for 소규모 기업 및 일반 사원)
+  // 2. 직급(Position) 판정 (Fallback for 소규모 기업 및 일반 사원)
   if (user.position && user.position.trim()) {
     const trimmedPos = user.position.trim().toLowerCase();
     const matchedPos = positionList.find(p => p.title.trim().toLowerCase() === trimmedPos);
@@ -768,20 +671,18 @@ export function getTierDisplayLabel(
   return `${tier}티어: ${posText}`;
 }
 
-/** 전사 업무 이벤트 레지스트리 — 결재선 설정 화면 드롭다운 원본 (유형별 정렬) */
+/** 전사 업무 이벤트 레지스트리 (SSOT) — 결재선 설정 화면 드롭다운 원본 (유형별 정렬) */
 export const APPROVAL_EVENT_REGISTRY = [
   // ── 1. 고객 (1) ──
   { code: 'CUSTOMER_REGISTRATION',       name: '고객 등록',        targetTable: 'customers',           category: '고객' },
 
-  // ── 2. 계약 / 청구 (8) ──
-  { code: 'CONTRACT_SIGN',               name: '계약 체결',                         targetTable: 'contracts',           category: '계약' },
-  { code: 'CONTRACT_MODIFY',             name: '계약의 수정(완결된 출고의 수정)',     targetTable: 'deliveries',          category: '계약' },
-  { code: 'CONTRACT_TERMINATE',          name: '계약의 해제',                       targetTable: 'contracts',           category: '계약' },
-  { code: 'CONTRACT_EXTEND',             name: '계약 연장',                         targetTable: 'contracts',           category: '계약' },
-  { code: 'CONTRACT_SUCCEED',            name: '계약 승계',                         targetTable: 'contracts',           category: '계약' },
-  { code: 'CONTRACT_DISCOUNT',           name: '계약의 할인',                       targetTable: 'contracts',           category: '계약' },
-  { code: 'REPAIR_BILLING',              name: '수리비 청구',                       targetTable: 'repairs',             category: '계약' },
-  { code: 'CUSTOM_BILLING_CREATE',       name: '특수청구 생성 승인',                 targetTable: 'billings',            category: '계약' },
+  // ── 2. 계약 / 청구 (6) ──
+  { code: 'CONTRACT_SIGN',               name: '계약 체결',        targetTable: 'contracts',           category: '계약' },
+  { code: 'CONTRACT_TERMINATE',          name: '계약 해지',        targetTable: 'contracts',           category: '계약' },
+  { code: 'CONTRACT_EXTEND',             name: '계약 연장',        targetTable: 'contracts',           category: '계약' },
+  { code: 'CONTRACT_SUCCEED',            name: '계약 승계',        targetTable: 'contracts',           category: '계약' },
+  { code: 'REPAIR_BILLING',              name: '수리비 청구',      targetTable: 'repairs',             category: '계약' },
+  { code: 'CUSTOM_BILLING_CREATE',       name: '특수청구 생성 승인', targetTable: 'billings',            category: '계약' },
 
   // ── 3. 자산 (2) ──
   { code: 'ASSET_DISPOSAL',              name: '자산 매각',        targetTable: 'assets',              category: '자산' },
@@ -814,18 +715,13 @@ export interface User {
   position?: string;
   status?: 'ACTIVE' | 'LEAVE_OF_ABSENCE' | 'RETIRED';
   birthDate?: string;
-  joinDate?: string;  // 입사일(일자)
+  joinDate?: string;  // 입사일 (YYYY-MM-DD)
   baseSalary?: number; // 기본급 (원) - 급여 정산 권한자 전용
   address?: string;
   phone?: string;
   email?: string;
   profileImageUrl?: string;
   customRoleId?: string; // 상속받은 권한 명칭 ID (CustomRole.id)
-  canBlockCustomer?: boolean; // 미수채권 연체관리 및 고객관리 거래처 차단/해제 버튼 노출 허용 여부
-  autoBackupEnabled?: boolean; // 로컬 DB 자동 백업 권한 허용 여부
-  autoBackupTime?: string; // 자동 백업 실행 시각 (기본 '09:00')
-  autoBackupRetentionDays?: number; // 로컬 백업 파일 보존 일수 (기본 30일)
-  lastAutoBackupAt?: string; // 마지막 로컬 자동 백업 완료 일시
   createdAt?: string;
   updatedAt?: string;
 }
@@ -888,7 +784,7 @@ export interface Department {
   updatedAt?: string;
 }
 
-/** 9대 보편 조직 기능 속성 SSOT 정의 */
+/** 9대 보편 조직 기능 속성 (Universal Functional Attributes) SSOT 정의 */
 export interface FunctionalAttributeConfig {
   id: string; // e.g. 'ATTR_PRODUCTION'
   code: string; // 'PRODUCTION'
@@ -903,7 +799,7 @@ export const UNIVERSAL_FUNCTIONAL_ATTRIBUTES: FunctionalAttributeConfig[] = [
   { id: 'ATTR_PRODUCTION', code: 'PRODUCTION', label: '생산', description: '신규 장비 검수, 제작, 조립, 부품 볼팅, 초기 셋업', color: '#6366f1', badgeBg: '#eef2ff', badgeText: '#4338ca' },
   { id: 'ATTR_SALES', code: 'SALES', label: '영업', description: '고객 견적, 계약 체결, 대차 요구 의뢰 발의', color: '#2563eb', badgeBg: '#eff6ff', badgeText: '#1d4ed8' },
   { id: 'ATTR_DISPATCH', code: 'DISPATCH', label: '배차', description: '운송 차량 섭외, 배차 지시, 배차 대장 관리, 운송료 정산', color: '#d97706', badgeBg: '#fffbeb', badgeText: '#b45309' },
-  { id: 'ATTR_OUTBOUND', code: 'OUTBOUND', label: '출고', description: '출고 전 점검, 안전옵션 장착, 출고 검수 승인', color: '#059669', badgeBg: '#ecfdf5', badgeText: '#047857' },
+  { id: 'ATTR_OUTBOUND', code: 'OUTBOUND', label: '출고', description: '출고 전 점검, 안전옵션 장착, 출고 검수 승인(RENTED)', color: '#059669', badgeBg: '#ecfdf5', badgeText: '#047857' },
   { id: 'ATTR_AFTER_SERVICE', code: 'AFTER_SERVICE', label: '현장AS', description: '출동 수리, 긴급 고장 조치, 현장 경정비, 순회 점검', color: '#e11d48', badgeBg: '#fff1f2', badgeText: '#be123c' },
   { id: 'ATTR_INBOUND', code: 'INBOUND', label: '입고정비', description: '반납 장비 입고 확인, 세척, 입고 검사, 공장 정비 및 부품 교체', color: '#0891b2', badgeBg: '#ecfeff', badgeText: '#0e7490' },
   { id: 'ATTR_ASSET', code: 'ASSET', label: '자산', description: '장비 등록, 타사 임차(전대) 매핑, 장비 매각/폐기, 자산 현황', color: '#9333ea', badgeBg: '#faf5ff', badgeText: '#7e22ce' },
@@ -936,7 +832,7 @@ export function userHasFunctionalAttribute(
     return tags.includes(normTarget);
   });
   if (!anyDeptHasAttr) {
-    return true; // 아무 부서도 없으면 전사 공유 풀 개방
+    return true; // 아무 부서도 없으면 전사 공유 풀 개방 (Fallback)
   }
 
   // 2. 사용자의 소속 부서가 해당 기능 태그를 보유하고 있는지 검증
@@ -958,7 +854,7 @@ export interface MenuPermission {
   role?: string;
 }
 
-/** MenuPermission 단일 진실의 원천 팩토리 생성 함수 */
+/** MenuPermission 단일 진실의 원천(SSOT) 팩토리 생성 함수 */
 export function createMenuPermission(
   userId: string,
   menuId: string,
@@ -1013,8 +909,30 @@ export interface SpecItem {
   keywords: string[];
 }
 
-// 🛡️ 고소작업대 필수 기술 요구사항 표준 체크리스트 정의 (하드코딩 제거 — DB 등록 standard_options 마스터만 사용)
-export const STANDARD_SPECS: SpecItem[] = [];
+// 🛡️ 고소작업대 필수 기술 요구사항 표준 체크리스트 정의 (SSOT 단일 원천)
+export const STANDARD_SPECS: SpecItem[] = [
+  { id: 'spec1', label: '철망 / 함석 설치', keywords: ['철망', '함석', '사면철망', '1면', '2면', '3면', '4면', '5면', '망'] },
+  { id: 'spec2', label: '확장대 철망 / 함석 설치', keywords: ['확장대 철망', '확장대철망', '확장대 함석', '확장대함석'] },
+  { id: 'spec3', label: '상단 감지봉 / 협착 센서 설치 (4EA)', keywords: ['감지봉', '감지봉 4ea', '상단감지', '협착', '센서', '4ea', '감지봉4ea'] },
+  { id: 'spec4', label: '원판 설치', keywords: ['원판설치', '원판'] },
+  { id: 'spec5', label: '배터리 단자 풀림 확인 마킹', keywords: ['배터리 단자 풀림', '단자 풀림 확인 마킹', '단자 풀림', '배터리 마킹'] },
+  { id: 'spec6', label: '배터리 단자 커버 설치', keywords: ['배터리 단자 커버', '커버설치', '단자 커버'] },
+  { id: 'spec7', label: '트레이 내부 볼트류 풀림 확인 마킹', keywords: ['트레이 내부 볼트', '볼트류 풀림 확인마킹', '트레이 내부 볼트류 풀림'] },
+  { id: 'spec8', label: '주행속도 세팅 (고속 60 / 저속 45)', keywords: ['주행속도', '고속 60', '저속 45', '주행속도 고속', '속도 세팅'] },
+  { id: 'spec9', label: '오버로드 과적재 세팅', keywords: ['오버로드 셋팅', '오버로드', '오버로드 세팅', '과적'] },
+  { id: 'spec10', label: '조이스틱 커버 연장', keywords: ['조이스틱 커버', '커버 연장', '조이스틱 커버 연장'] },
+  { id: 'spec11', label: '탑승구 사다리 보양', keywords: ['탑승구 사다리', '사다리 보양', '탑승구 사다리 보양', '사다리'] },
+  { id: 'spec12', label: '모서리/전면부/미끄럼방지 보양', keywords: ['미끄럼방지', '모서리 8개소', '전면부 2개소', '모서리보양', '모서리 8면', '보양'] },
+  { id: 'spec13', label: '소화기함/손잡이 설치 및 안내스티커 부착', keywords: ['소화기함', '기타 스티커물', '탑승구 손잡이', '작동설명', '소화기', '스티커', '튜브소화기', 'T50', 'T100'] },
+  { id: 'spec14', label: '타이어 A급 장착', keywords: ['타이어 A급', '타이어A급', '타이어 A급 상태', '타이어'] },
+  { id: 'spec15', label: '점멸등, 비상하강장치, 비상정지장치 청결', keywords: ['점멸등', '비상하강장치', '비상정지장치', '비상하강장치 청결', '정지장치'] },
+  { id: 'spec16', label: '작업높이 80% 세팅', keywords: ['작업높이 80프로', '발판높이기준', '작업높이 80%', '작업높이 80'] },
+  { id: 'spec17', label: '작업구간 색상 라인구분 (초록/빨강)', keywords: ['라인구분', '초록, 빨강', '라인 구분'] },
+  { id: 'spec18', label: '하부상승제한, 확장대 50% 표식 부착', keywords: ['하부상승제한', '확장대 50%', '50%지점 표식'] },
+  { id: 'spec19', label: '비상정지스위치 및 비상하강꼬리표 부착', keywords: ['비상정지스위치', '비상하강꼬리표', '비상정지스위치 부착'] },
+  { id: 'spec20', label: '시저구간 협착위험 스티커 부착', keywords: ['협착위험 스티커', '시저구간', '접촉금지', '시저구간 접촉금지'] },
+  { id: 'spec21', label: '부착물 세트 (인증서, 제원표, 보험증권, 반입전 체크리스트)', keywords: ['부착물', '제원표', '비상하강사용법', '보험증권', '인증서', '반입전', '체크리스트', '출고서류', '안전점검결과서', '직인날인', '점검자 직인'] }
+];
 
 // 🏷️ 전사 표준 옵션 마스터 인터페이스 (유상옵션 / 무상옵션 / 부착물 / 요구사양)
 export interface StandardOption {
@@ -1048,7 +966,7 @@ export const SITE_CONTACT_TYPE_CONFIG: Record<SiteContactType, { label: string; 
   },
   CLOSING: {
     label: '마감담당자',
-    subLabel: '명세서 / 계산서 수신인',
+    subLabel: '거래명세서 / 정산서 수신인',
     icon: '🧾',
     defaultPosition: '공무과장',
     color: '#059669',
@@ -1077,53 +995,19 @@ export interface SiteContactPerson {
 }
 
 export const PAYMENT_DUE_MONTH_OPTIONS = [
-  { value: 0, label: '당월', shortLabel: '당월' },
-  { value: 1, label: '익월', shortLabel: '익월' },
-  { value: 2, label: '익익월', shortLabel: '익익월' },
-  { value: 3, label: '익익익월', shortLabel: '익익익월' },
+  { value: 0, label: '당월 (M0)', shortLabel: '당월' },
+  { value: 1, label: '익월 (M1)', shortLabel: '익월' },
+  { value: 2, label: '익익월 (M2)', shortLabel: '익익월' },
+  { value: 3, label: '익익익월 (M3)', shortLabel: '익익익월' },
 ] as const;
 
-export type PaymentMethodType = 'CASH' | 'BILL' | 'BOND'; // 'CASH': 현금(기본), 'BILL': 어음, 'BOND': 채권
-
-export const PAYMENT_METHOD_OPTIONS: ReadonlyArray<{ value: PaymentMethodType; label: string }> = [
-  { value: 'CASH', label: '현금' },
-  { value: 'BILL', label: '어음' },
-  { value: 'BOND', label: '채권' },
-] as const;
-
-export function getPaymentMethodLabel(method?: PaymentMethodType | string | null): string {
-  if (method === 'BILL' || method === '어음') return '어음';
-  if (method === 'BOND' || method === '채권') return '채권';
-  return '현금';
-}
-
-export function formatPaymentDueCondition(
-  monthOffset?: number | null,
-  day?: number | null,
-  paymentMethod?: PaymentMethodType | string | null,
-  paymentTermsNote?: string | null
-): string {
+export function formatPaymentDueCondition(monthOffset?: number | null, day?: number | null): string {
   const safeOffset = (monthOffset !== undefined && monthOffset !== null && !isNaN(monthOffset)) ? monthOffset : 1;
   const safeDay = (day !== undefined && day !== null && !isNaN(day) && day > 0) ? day : 25;
   const monthLabels = ['당월', '익월', '익익월', '익익익월'];
   const monthText = monthLabels[safeOffset] !== undefined ? monthLabels[safeOffset] : '익월';
   const dayText = safeDay === 31 ? '말일' : `${safeDay}일`;
-  const noteTrimmed = (paymentTermsNote || '').trim();
-  const baseDateStr = noteTrimmed === '익익월 초' && safeOffset === 2 && safeDay === 1
-    ? '익익월 초'
-    : `${monthText} ${dayText}`;
-
-  const methodLabel = getPaymentMethodLabel(paymentMethod);
-  if (methodLabel === '어음' || methodLabel === '채권') {
-    if (noteTrimmed && noteTrimmed !== '익익월 초') {
-      return `${methodLabel}(${baseDateStr}, ${noteTrimmed})`;
-    }
-    return `${methodLabel}(${baseDateStr})`;
-  }
-  if (noteTrimmed && noteTrimmed !== '익익월 초') {
-    return `${baseDateStr}(${noteTrimmed})`;
-  }
-  return baseDateStr;
+  return `${monthText} ${dayText}`;
 }
 
 export function calculatePaymentDueDate(
@@ -1155,10 +1039,10 @@ export function calculatePaymentDueDate(
   return `${year}-${String(month).padStart(2, '0')}-${String(actualDay).padStart(2, '0')}`;
 }
 
-// 🚦 거래처 거래 제한 상태 (2대 차단 유형 체계 + 폐업 조회 차단)
+// 🚦 거래처 거래 제한 상태 (2대 차단 유형 체계)
 // 1. ALLOWED: 정상 거래
-// 2. RESTRICT_NEW: 기존 거래 유지 + 추가 출고 차단
-// 3. BLOCKED_ALL (or BLOCKED): 추가 출고 차단 + 기존 거래 종료 지시 (전면 차단)
+// 2. RESTRICT_NEW: 기존계약 유지 및 추가계약 금지 (신규 계약/출고 차단)
+// 3. BLOCKED_ALL (or BLOCKED): 기존장비 회수 및 전면 계약 금지 (전면 거래 중단)
 export type CustomerTransactionStatus = 'ALLOWED' | 'RESTRICT_NEW' | 'BLOCKED_ALL' | 'BLOCKED';
 
 export const isCustomerRestricted = (status?: string): boolean => {
@@ -1169,79 +1053,29 @@ export const isCustomerTotalBlocked = (status?: string): boolean => {
   return status === 'BLOCKED_ALL' || status === 'BLOCKED';
 };
 
-/** 국세청 폐업자 조회로 인해 차단된 거래처인지 여부 (해제 불가) */
-export const isCustomerClosedBlocked = (cust?: { isClosed?: boolean; businessStatus?: string } | null): boolean => {
-  if (!cust) return false;
-  return Boolean(cust.isClosed || cust.businessStatus === 'CLOSED');
-};
-
-/** 임직원이 거래처 차단/차단해제 버튼을 사용할 권한이 있는지 판정 */
-export const canUserControlCustomerBlock = (
-  user?: User | null,
-  hasPermission?: (menuId: string, type: 'view' | 'save') => boolean,
-  rolePermissions?: RolePermission[]
-): boolean => {
-  if (!user) return false;
-  // 시스템 개발자 및 최고관리자는 상시 허용
-  if (user.id === 'u-1' || user.id === 'sys-admin' || String(user.loginId || '').trim().toLowerCase() === 'admin') {
-    return true;
-  }
-  // 임직원 권한관리에서 개별 직원 단위로 노출/비노출을 명시 지정한 경우 최우선 적용 (로컬 User 필드 및 원격 permissions 테이블 동기화)
-  if (typeof user.canBlockCustomer === 'boolean') {
-    return user.canBlockCustomer;
-  }
-  const explicitUserBlockPerm = (db.permissions || []).find(
-    p => p && p.userId === user.id && p.menuId === 'delinquency_block'
-  );
-  if (explicitUserBlockPerm) {
-    return Boolean(explicitUserBlockPerm.canSave || explicitUserBlockPerm.canView);
-  }
-  // 권한 명칭(RolePermission)에 delinquency_block 권한이 부여된 경우
-  if (user.customRoleId && Array.isArray(rolePermissions)) {
-    const roleBlockPerm = rolePermissions.find(
-      p => p.roleId === user.customRoleId && p.menuId === 'delinquency_block'
-    );
-    if (roleBlockPerm && (roleBlockPerm.canSave || roleBlockPerm.canView)) {
-      return true;
-    }
-  }
-  if (hasPermission && hasPermission('delinquency_block', 'save')) {
-    return true;
-  }
-  // 경영진/ADMIN 기본 허용
-  const deptText = String(user.department || '');
-  const posText = String(user.position || '');
-  const dutyText = String(user.duty || '');
-  if (
-    user.role === 'ADMIN' ||
-    user.role === 'EXECUTIVE' ||
-    deptText.includes('경영') ||
-    posText.includes('대표') ||
-    posText.includes('임원') ||
-    dutyText.includes('대표')
-  ) {
-    return true;
-  }
-  return false;
-};
-
-export const getCustomerTransactionStatusLabel = (
-  status?: string,
-  isClosed?: boolean
-): { label: string; color: string; badgeClass: string; isBlocked: boolean; isTotal: boolean; isClosedBlocked: boolean } => {
-  if (isClosed) {
-    return { label: '폐업차단 (해제불가)', color: '#991b1b', badgeClass: 'badge-danger', isBlocked: true, isTotal: true, isClosedBlocked: true };
-  }
+export const getCustomerTransactionStatusLabel = (status?: string): { label: string; color: string; badgeClass: string; isBlocked: boolean; isTotal: boolean } => {
   if (status === 'RESTRICT_NEW') {
-    return { label: '추가출고차단 (기존유지)', color: '#d97706', badgeClass: 'badge-warning', isBlocked: true, isTotal: false, isClosedBlocked: false };
+    return { label: '추가계약 금지', color: '#d97706', badgeClass: 'badge-warning', isBlocked: true, isTotal: false };
   }
   if (status === 'BLOCKED_ALL' || status === 'BLOCKED') {
-    return { label: '전면차단 (거래종료)', color: '#dc2626', badgeClass: 'badge-danger', isBlocked: true, isTotal: true, isClosedBlocked: false };
+    return { label: '전면 차단 (장비회수)', color: '#dc2626', badgeClass: 'badge-danger', isBlocked: true, isTotal: true };
   }
-  return { label: '정상 거래', color: '#16a34a', badgeClass: 'badge-success', isBlocked: false, isTotal: false, isClosedBlocked: false };
+  return { label: '정상 거래', color: '#16a34a', badgeClass: 'badge-success', isBlocked: false, isTotal: false };
 };
 
-export type TaxInvoiceIssueType = 'FORWARD' | 'REVERSE'; // 'FORWARD': 정발행 (기본), 'REVERSE': 역발행
+/** 💳 고객사 산하 복수 청구지 엔티티 (순번 1: 본사 OO팀, 순번 2: 본사 XX팀 등) */
+export interface BillingTarget {
+  id: string;                          // 청구지 고유 ID (예: 'bt-01')
+  seq: number;                         // 순번 (1, 2, 3...)
+  name: string;                        // 청구지 명칭 (예: '본사 IT운영팀', '마케팅본부', '수원사업장')
+  taxEmail: string;                    // 전자세금계산서 수신 이메일
+  bizRegNo?: string;                   // 사업자등록번호 (본사와 다를 경우)
+  subBizNo?: string;                   // 종사업장번호 4자리 (예: '0001')
+  managerName?: string;                // 청구/정산 담당자 성명
+  managerPhone?: string;               // 청구 담당자 연락처
+  memo?: string;                       // 청구 관련 특이사항
+  isDefault?: boolean;                 // 기본 청구지 여부
+}
 
 export interface Customer {
   id: string;
@@ -1257,19 +1091,15 @@ export interface Customer {
   driveFolderId?: string;
   prepaidBalance?: number; // 선수금 (예치금) 잔액
   transactionStatus?: CustomerTransactionStatus; // ALLOWED: 정상거래, RESTRICT_NEW: 추가계약금지(기존계약유지), BLOCKED_ALL: 전면차단(장비회수·계약금지)
-  blockedReason?: string; // 거래 차단 사유
-  blockedAt?: string; // 거래 차단 일시
-  blockedBy?: string; // 거래 차단 처분자
-  defaultBillingDay?: number; // 계산서 기본 마감일 (예: 30일/월말, 0: 미지정)
-  defaultStatementClosingDay?: number; // 명세서 기본 마감일 (예: 25일)
-  defaultFreightBillingStandard?: '3/5' | '2/4'; // 운송료 청구기준 기본값 ('3/5' | '2/4')
-  defaultTaxInvoiceIssueType?: TaxInvoiceIssueType; // 계산서 발행 조건 기본값 ('FORWARD': 정발행 | 'REVERSE': 역발행)
-  defaultPaymentMethod?: PaymentMethodType; // 약정 결제조건 기본값 ('CASH': 현금 기본 | 'BILL': 어음 | 'BOND': 채권)
-  defaultPaymentTermsNote?: string; // 약정 결제비고 기본값 (특약조건)
+  defaultBillingDay?: number; // 청구서(세금계산서) 기본 마감일 (예: 30일/월말)
+  defaultStatementClosingDay?: number; // 거래명세서 기본 마감일 (예: 25일)
   paymentDueDay?: number; // 결제일 (1~30, 31: 말일)
-  paymentDueMonthOffset?: number; // 0: 당월, 1: 익월, 2: 익익월, 3: 익익익월, 기본값 1
+  paymentDueMonthOffset?: number; // 0: 당월(M0), 1: 익월(M1), 2: 익익월(M2), 3: 익익익월(M3), 기본값 1
   paymentTermDays?: number; // Net Terms 결제기한 (발행 후 N일)
   bankAccounts?: CustomerBankAccount[]; // 고객사 다중 계좌 목록
+
+  // 💳 고객사 산하 복수 청구지 목록 (순번 1: 본사 OO팀, 순번 2: 본사 XX팀 등)
+  billingTargets?: BillingTarget[];
   
   // 🌟 [신규] 고객사 기본 옵션/보양/부착물/요구사양 자동 재사용 마스터 (수량 제외 순수 품목명)
   defaultPaidOptions?: string;       // 기본 유상옵션 품목 (예: '협착난간대, 상부덮개, 소화기함' - 장비 대수 비례 수량 표기 제외)
@@ -1281,7 +1111,7 @@ export interface Customer {
   // 📄 사업자등록증 및 💳 통장사본 증빙 스토리지
   businessCertFileUrl?: string;      // 사업자등록증 첨부/스토리지 URL
   taxOffice?: string;                // 관할 세무서 (예: '평택세무서')
-  openingDate?: string;              // 개업연월일(일자)
+  openingDate?: string;              // 개업연월일 (YYYY-MM-DD)
   headOfficeAddress?: string;        // 본점 소재지
   passbookFileUrl?: string;          // 고객사 대표 통장사본 URL (이미지/PDF)
   passbookFileName?: string;         // 고객사 대표 통장사본 파일명
@@ -1290,7 +1120,7 @@ export interface Customer {
   taxType?: string;                  // 과세유형 (예: '부가가치세 일반과세자', '간이과세자', '면세사업자')
   taxTypeCd?: string;                // 과세유형 코드 ('01', '02', '03' 등)
   businessStatus?: 'ACTIVE' | 'SUSPENDED' | 'CLOSED' | 'UNREGISTERED'; // 사업자 상태
-  closedDate?: string;               // 폐업일자(일자)
+  closedDate?: string;               // 폐업일자 (YYYY-MM-DD)
   lastStatusCheckDate?: string;      // 최근 국세청 상태조회 일시
 
   createdAt: string;
@@ -1341,80 +1171,176 @@ export interface DeveloperDeviceProfile {
   tenant_id?: string;
 }
 
+/** 🚚 IT 장비 배송/물류 방식 */
+export type ITDeliveryMethod = 'COURIER' | 'QUICK' | 'DIRECT_INSTALL' | 'FREIGHT' | 'PICKUP';
+
+export const IT_DELIVERY_METHODS: ITDeliveryMethod[] = ['COURIER', 'QUICK', 'DIRECT_INSTALL', 'FREIGHT', 'PICKUP'];
+
+export const IT_DELIVERY_METHOD_LABELS: Record<ITDeliveryMethod, string> = {
+  COURIER: '택배 발송 (운송장)',
+  QUICK: '퀵서비스 (당일)',
+  DIRECT_INSTALL: '엔지니어 직배송/설치',
+  FREIGHT: '화물 용차 (탑차)',
+  PICKUP: '방문 수령/반납'
+};
+
 export interface CustomerSite {
   id: string;
   siteMasterId?: string | null;   // 상속받은 옵션 그룹 ID (선택적 참조)
   customerId?: string;
-  name: string;                   // 고객현장 고유 현장명
-  address: string;                // 고객현장 고유 주소
-  isActive?: boolean;             // 고객현장 가동 여부 (true: 가동중, false: 종료/완공)
-  contactName: string;
-  contact: string;
-  email: string;
-  contacts?: SiteContactPerson[]; // 👥 실제 동시 2명 이상 현장 담당자 목록 (장비, 마감, 안전)
-  billingContactName?: string;    // 마감담당자 성명
-  billingContactPhone?: string;   // 마감담당자 전화번호
-  billingContactEmail?: string;   // 마감담당자 이메일
-  safetyContactName?: string;     // 안전담당자 성명
-  safetyContactPhone?: string;    // 안전담당자 전화번호
-  safetyContactEmail?: string;    // 안전담당자 이메일
-  paymentDueMonthOffset?: number; // 0: 당월, 1: 익월, 2: 익익월, 3: 익익익월
-  
-  // 🌟 고객현장 전용 옵션/보양/부착물/요구사양 (고객 현장관리에서 직접 설정 및 옵션그룹 상속 저장)
-  paidOptions?: string;              // 현장 전용 유상옵션 품목
-  protection?: string;               // 현장 전용 무상옵션
-  attachments?: string;              // 현장 전용 부착물
-  checkedSpecs?: Record<string, any>; // 현장 전용 요구 사양 체크 상태
-  billingDay?: number;               // 계산서 마감일 (0: 미지정)
-  statementClosingDay?: number;      // 명세서 마감일
-  paymentDueDay?: number;            // 약정 결제일 (1~30, 31: 말일)
-  paymentMethod?: PaymentMethodType; // 약정 결제조건 ('CASH': 현금 기본 | 'BILL': 어음 | 'BOND': 채권)
-  paymentTermsNote?: string;         // 약정 결제비고 (특약조건, 예: '300만원이상 채권', '또는 채권')
-  freightBillingStandard?: '3/5' | '2/4'; // 현장 전용 운송료 청구기준 ('3/5' 기본 | '2/4')
-  taxInvoiceIssueType?: TaxInvoiceIssueType; // 계산서 발행 조건 ('FORWARD': 정발행 기본 | 'REVERSE': 역발행)
+  name: string;                   // 설치/납품처 명칭 (예: '판교 R&D 본사 5층 개발본부')
+  address: string;                // 도로명 주소
+  addressDetail?: string;         // 상세 위치 (층, 호수, 랙 번호 등)
+  isActive?: boolean;             // 가동 여부
+  contactName?: string;           // 수령 담당자 성명
+  contact?: string;               // 수령 담당자 연락처
+  contactPhone?: string;          // 수령 담당자 연락처
+  department?: string;            // 수령 부서
+  deliveryMethod?: ITDeliveryMethod; // 기본 배송 수단
+  hasFreightElevator?: boolean;   // 화물 엘리베이터 유무
+  requiresSecurityPass?: boolean; // 보안 출입 사전등록 필요 여부
+  accessNotes?: string;           // 반입/주차/출입 안내
+  presetOptions?: any;            // IT 사전세팅/옵션
+
+  // 하위 호환 필드 (점진적 레거시 호환)
+  email?: string;
+  contacts?: SiteContactPerson[];
+  billingDay?: number;
+  statementClosingDay?: number;
+  paymentDueDay?: number;
+  paymentDueMonthOffset?: number;
+  billingContactName?: string;
+  billingContactPhone?: string;
+  billingContactEmail?: string;
+  safetyContactName?: string;
+  safetyContactPhone?: string;
+  safetyContactEmail?: string;
+  paidOptions?: string;
+  protection?: string;
+  attachments?: string;
+  checkedSpecs?: Record<string, any>;
 
   createdAt: string;
   updatedAt?: string;
+}
+
+export type ProductCategory = 
+  | 'LAPTOP' 
+  | 'DESKTOP' 
+  | 'MONITOR' 
+  | 'TV' 
+  | 'SERVER' 
+  | 'NETWORK' 
+  | 'TABLET' 
+  | 'PRINTER' 
+  | 'SOFTWARE' 
+  | 'OTHER';
+
+export const PRODUCT_CATEGORIES: ProductCategory[] = [
+  'LAPTOP', 'DESKTOP', 'MONITOR', 'TV', 'SERVER', 'NETWORK', 'TABLET', 'PRINTER', 'SOFTWARE', 'OTHER'
+];
+
+export const PRODUCT_CATEGORY_LABELS: Record<ProductCategory, string> = {
+  LAPTOP: '노트북',
+  DESKTOP: '데스크탑/PC',
+  MONITOR: '모니터',
+  TV: 'TV/디스플레이',
+  SERVER: '서버/스토리지',
+  NETWORK: '네트워크장비',
+  TABLET: '태블릿',
+  PRINTER: '복합기/프린터',
+  SOFTWARE: '소프트웨어',
+  OTHER: '기타 IT'
+};
+
+export interface StorageDrive {
+  slot: number | string;
+  type: string;
+  size: string;
+  model?: string;
+}
+
+/** 📷 IT 제품 사진 위치/구분 태그 (최대 4장: 전면, 후면, 내부, 기타) */
+export type ProductPhotoTag = 'FRONT' | 'REAR' | 'INSIDE' | 'OTHER';
+
+export const PRODUCT_PHOTO_TAGS: ProductPhotoTag[] = ['FRONT', 'REAR', 'INSIDE', 'OTHER'];
+
+export const PRODUCT_PHOTO_TAG_LABELS: Record<ProductPhotoTag, string> = {
+  FRONT: '전면',
+  REAR: '후면',
+  INSIDE: '내부',
+  OTHER: '기타'
+};
+
+/** 📷 IT 제품 사진 자료 엔티티 (제품당 최대 4장) */
+export interface ProductPhoto {
+  id: string;                          // 고유 ID
+  tag: ProductPhotoTag | string;       // 사진 구분 (FRONT: 전면, REAR: 후면, INSIDE: 내부, OTHER: 기타)
+  tagLabel?: string;                   // 표시 라벨
+  url: string;                         // 이미지 URL (DataURL 또는 R2/HTTP 스토리지 URL)
+  caption?: string;                    // 사진 설명/메모
+  sortOrder?: number;                  // 정렬 순서 (0~3)
+  createdAt?: string;                  // 등록 일시
 }
 
 export interface Product {
   id: string;
+  category?: ProductCategory;
   modelName: string;
-  shortName?: string;            // 실무 축약 모델명 (예: '1930', 'GS1930', 'GS-1930')
-  feet: number;
+  shortName?: string;
+  feet?: number;                 // 하위 호환용 (화면 인치 또는 랙 유닛 등 대체 가능)
   spec: string;
   manufacturer: string;
-  isActive?: boolean; // 사용/미사용 (단종/매각 등)
-  
-  // 🌟 [신규 확장] 장비 제원표 상세 규격 (1대1 매핑)
-  powerSource?: string;          // 동력 (예: '배터리', '디젤', '전동')
-  workingHeight?: string;        // 작업 높이 (예: '6.57 M')
-  platformHeight?: string;       // 발판 높이 (예: '4.57 M')
-  weight?: string;               // 장비 중량 (예: '1,148 Kg')
-  machineDimensions?: string;    // 장비 크기 전장x전폭x전고 (예: '1.80 x 0.81 x 1.92 M')
-  platformDimensions?: string;   // 플랫폼 크기 길이x폭 (예: '1.55 x 0.66 M')
-  gradeability?: string;         // 등판 능력 (예: '25 %')
-  speed?: string;                // 주행 속도 (예: '3.4 Km/h')
-  asContact?: string;            // A/S 접수처 (예: '031-334-5296')
+  isActive?: boolean;
+  releaseYear?: string;
+  warrantyType?: string;
+  bundledAccessories?: string;
 
-  // 🌟 [신규 확장] 작업대 확장 전/후 적재중량 및 안전 기준
-  capacityPreExt?: string;       // 확장 전 적재중량 (예: '272 kg' - 작업자 2인)
-  capacityPostExtMain?: string;  // 확장 후 본체 적재중량 (예: '159 kg' - 작업자 1인)
-  capacityPostExtDeck?: string;  // 확장 후 확장부 적재중량 (예: '113 kg' - 작업자 1인)
-  maxWindSpeed?: string;         // 최대 허용 풍속 (예: '12.5 m/s 이내')
+  // 하드웨어 스펙 및 확장 슬롯
+  cpu?: string;
+  onboardRam?: number;
+  ramSlots?: number;
+  maxRam?: number;
+  baseRam?: string;
+  storageSlots?: number;
+  storageFormFactors?: string;
+  baseStorage?: string;
+  gpuType?: 'INTEGRATED' | 'DEDICATED' | 'HYBRID';
+  defaultGpu?: string;
+  gpuSlots?: number;
 
-  // 기존 안전/문서 URL
-  maxHeightCapacity?: string;    // 작업최대높이/적재용량
-  safetyCertDate?: string;       // 안전인증년월일 (예: '2009-09-14', '2024-03-01')
-  safetyCertUrl?: string;
+  // 카테고리별 특화 제원
+  displaySize?: number;
+  resolution?: string;
+  panelType?: string;
+  refreshRate?: string;
+  aspectRatio?: string;
+  weight?: string;
+  formFactor?: string;
+  rackUnit?: number;
+  cpuSockets?: number;
+  networkPorts?: string;
+  powerRedundancy?: boolean;
+  printType?: string;
+  printSpeed?: string;
+  paperSize?: string;
+  defaultOs?: string;
+  tvStandType?: string;
+
+  // 사진 자료 (최대 4장: 전면, 후면, 내부, 기타)
+  photos?: ProductPhoto[];
+
+  // 문서 및 다운로드 URL
   specSheetUrl?: string;
-  emergencyGuideUrl?: string;
+  manualUrl?: string;
+  driverDownloadUrl?: string;
   createdAt: string;
   updatedAt?: string;
+  tenant_id?: string;
 }
 
 /**
- * 🔒 협착방지봉 옵션 소유권 구분
+ * 🔒 협착방지봉(Anti-entrapment Safety Bar) 옵션 소유권 구분
  * - 'VENDOR': 임차거래처 소유 (※ 주기장 입고 시 절대 탈거 금지, 원형 보존 필수. 탈거 시 분실/원상복구 비용 피청구 방지)
  * - 'OURS': 당사(기연) 소유 (※ 임차처 최종 반납 전 반드시 탈거하여 당사 부품고로 회수)
  * - 'NONE': 미장착 (협착방지봉 없음)
@@ -1461,14 +1387,30 @@ export interface Asset {
   assetNo: string; // 관리번호
   vendorId?: string; // 임차처/매입처 외래키
   vendorAssetNo?: string; // 타사(임차처) 원래 관리번호
-  serialNo?: string; // 제조번호
+  serialNo?: string; // 제조번호 (S/N / Service Tag)
+  wiredMac?: string; // 유선 MAC 주소
+  wifiMac?: string; // 무선 MAC 주소
+  imei?: string; // 태블릿/셀룰러 IMEI
   manufacturer?: string;
-  manufactureYear?: string; // 제조년도 (예: 2023)
+  manufactureYear?: string; // 제조년도 (예: 2024)
   ownerType: 'OWNED' | 'RENTED'; // 당사자산 / 임차자산
-  assetNature?: 'PHYSICAL' | 'VIRTUAL'; // 자산 구분 ('PHYSICAL': 실물, 'VIRTUAL': 가상)
-  yard?: string; // 주기장 (예: '용인')
-  antiEntrapmentOwnership?: AntiEntrapmentOwnership; // 협착방지봉 소유권 ('VENDOR': 임차처 소유, 'OURS': 당사 소유, 'NONE': 미장착)
   status: 'AVAILABLE' | 'ASSIGNED' | 'OUTBOUND_INSPECTION' | 'AWAITING_TRANSPORT' | 'RENTED' | 'REPAIRING' | 'RENTED_RETURNED' | 'SOLD' | 'LOST' | 'DISPOSED';
+
+  // IT 실물 자산 실장 하드웨어 커스텀 스펙 (확장/업그레이드)
+  ramConfig?: string; // 예: "16GB (8GB*2)", "32GB (온보드 16GB + 슬롯1 16GB)"
+  totalRamGb?: number; // 총 장착 RAM (GB)
+  storageDrives?: StorageDrive[]; // 슬롯별 실장 드라이브 목록
+  totalStorageText?: string; // 예: "512GB NVMe + 1TB NVMe = 1.5TB"
+  installedGpu?: string; // 실제 사용 GPU (내장/외장 모델명)
+  installedOs?: string; // 실제 설치 OS
+  customSpec?: string; // 자산별 커스텀 사양 요약
+
+  // 소프트웨어 라이선스 관리
+  licenseKey?: string; // 소프트웨어 라이선스/제품키
+  licenseExpiryDate?: string; // 라이선스 만료일
+  licenseType?: 'PERPETUAL' | 'SUBSCRIPTION' | 'DSP' | 'FPP' | 'VOLUME';
+
+  antiEntrapmentOwnership?: AntiEntrapmentOwnership; // 하위 호환용
   
   maintenanceScore?: number; // 정비 소요 점수 (0이 최상 상태)
 
@@ -1509,6 +1451,7 @@ export interface Asset {
   memo?: string;
   safetyInspectionUrl?: string;
   preDeliveryChecklistUrl?: string;
+  assetNature?: 'PHYSICAL' | 'VIRTUAL';
   createdAt: string;
   updatedAt: string;
 }
@@ -1527,8 +1470,8 @@ export function isVirtualAsset(a?: Partial<Asset> | null): boolean {
 /**
  * IFRS 회계기준 자산 월별 자동 감가상각 계산 함수
  * - 매월 말일 기준으로 상각경과 월수를 계산하여 감가상각누계액 및 미상각 잔액(장부가치) 산출
- * - 매각된 자산 (status === 'SOLD')은 매각일 시점까지만 감가상각 적용 (매각 이후 상각 정지)
- * - 감가상각누계액: 1원 단위 반올림 처리
+ * - 매각된 자산 (status === 'SOLD')은 매각일(disposalDate) 시점까지만 감가상각 적용 (매각 이후 상각 정지)
+ * - 감가상각누계액: 1원 단위 반올림 처리 (Math.round)
  * - 미상각 잔액 (장부가치) = 취득원가 - 감가상각누계액
  */
 export function calculateAssetDepreciation(asset: Asset, asOfDate: Date = new Date()): {
@@ -1623,7 +1566,7 @@ export interface ConsumableLot {
   inboundDate: string; // 입고일
   unitPrice: number; // 해당 로트의 입고 단가
   initialQty: number; // 최초 입고 수량
-  currentQty: number; // 현재 주기장 잔여 수량
+  currentQty: number; // 현재 주기장(HQ) 잔여 수량
   purchaseRequestId?: string; // 연결된 구매 이력
   createdAt: string;
   updatedAt?: string;
@@ -1642,7 +1585,7 @@ export interface ConsumableLog {
   id: string;
   consumableId: string;
   lotId?: string; // 연결된 로트 ID
-  type: 'INBOUND' | 'OUTBOUND' | 'ADJUST' | 'TRANSFER_TO_VEHICLE' | 'RETURN_TO_HQ';
+  type: 'INBOUND' | 'OUTBOUND' | 'ADJUST';
   quantity: number;
   unitPrice: number;
   supplier?: string;
@@ -1716,7 +1659,7 @@ export interface StocktakingAuditItem {
   assetNo?: string; // 신규 추가
   modelName: string;
   unit: string;
-  unitPrice: number; // 장비인 경우 장부잔존가액 또는 취득원가
+  unitPrice: number; // 장비인 경우 장부잔존가액(Net Book Value) 또는 취득원가
   systemQty: number;
   actualQty: number;
   diffQty: number; // actualQty - systemQty
@@ -1750,7 +1693,7 @@ export interface ContractAsset {
   expectedModel?: string;
   status?: 'RENTED' | 'RETURNED' | 'ASSIGNED' | 'OUTBOUND_INSPECTION' | 'AWAITING_TRANSPORT' | 'SOLD' | string;
   actualReturnDate?: string;
-  inRegisteredAt?: string;   // 💡 전산 입고 처리 일시
+  inRegisteredAt?: string;   // 💡 전산 입고 처리 일시 (ISO String)
   monthlyRentalFee: number;
   dailyRentalFee: number;
   salePrice?: number; // 💡 자산 매각 계약 시 매각 공급가액
@@ -1771,19 +1714,30 @@ export interface SaleContractTerms {
   lumpSumDueTerm?: string; // 일시불 완납 기한 ('IMMEDIATE' | 'DELIVERY' | '7_DAYS' | '14_DAYS' | 'MONTH_10')
   installmentDownRate?: number; // 계약금 비율 (예: 20%)
   installmentDownAmount?: number; // 계약금 금액 (원)
-  installmentDownDate?: string; // 계약금 납기일(일자)
+  installmentDownDate?: string; // 계약금 납기일 (YYYY-MM-DD)
   installmentBalanceAmount?: number; // 잔금 금액 (원)
-  installmentBalanceDueDate?: string; // 잔금 납기일(일자)
+  installmentBalanceDueDate?: string; // 잔금 납기일 (YYYY-MM-DD)
   bankAccount?: string; // 입금 지정 계좌
 
-  deliveryDate?: string; // 장비 인도 예정일(일자)
-  deliveryLocationType?: 'YARD' | 'BUYER_SITE'; // 당사 주기장 상차도 | 매수처 도착도
+  deliveryDate?: string; // 장비 인도 예정일 (YYYY-MM-DD)
+  deliveryLocationType?: 'YARD' | 'BUYER_SITE'; // 당사 주기장 상차도(FOB) | 매수처 도착도
   deliverySiteAddress?: string; // 도착도 시 상세 주소
   freightBearer?: 'BUYER' | 'SELLER'; // 운송비 부담 주체: 매수자 부담(기본) | 당사(기연) 부담
 
-  useStandardAsIsClause?: boolean; // 현상태 인수 및 하자담보책임 면책 특약 동의 여부
+  useStandardAsIsClause?: boolean; // 현상태 인수(As-Is) 및 하자담보책임 면책 특약 동의 여부
   specialNotes?: string; // 추가 특약 사항 전문
 }
+
+/** 🛡️ IT 렌탈 보증금 라이프사이클 상태 */
+export type DepositStatus = 'UNPAID' | 'HELD' | 'PARTIAL_OFFSET' | 'FULLY_OFFSET' | 'REFUNDED';
+
+export const DEPOSIT_STATUS_LABELS: Record<DepositStatus, { label: string; color: string; badgeClass: string }> = {
+  UNPAID: { label: '보증금 미입금', color: '#9ca3af', badgeClass: 'badge-secondary' },
+  HELD: { label: '보증금 보관중', color: '#10b981', badgeClass: 'badge-success' },
+  PARTIAL_OFFSET: { label: '보증금 일부상계', color: '#f59e0b', badgeClass: 'badge-warning' },
+  FULLY_OFFSET: { label: '보증금 전액상계', color: '#3b82f6', badgeClass: 'badge-info' },
+  REFUNDED: { label: '보증금 반환완료', color: '#6366f1', badgeClass: 'badge-primary' }
+};
 
 export interface Contract {
   id: string;
@@ -1791,17 +1745,43 @@ export interface Contract {
   contractType?: ContractType; // 💡 신규 추가: 'RENTAL' (기본값) | 'SALE' (자산 매각 계약)
   saleTerms?: SaleContractTerms; // 💡 자산 매각 계약 전용 상세 조건
   customerId: string;
-  customerName?: string;
+  billingTargetId?: string;       // 💳 고객사 산하 지정 청구지 ID
+  billingTargetName?: string;     // 💳 지정 청구지 명칭 (예: '본사 IT운영팀', '수원사업장')
   contactId?: string;
-  siteId?: string;
+  siteId?: string;                // 📍 지정 설치/납품처 ID (1:1 귀속)
+
+  // ⏱️ IT 계약 기간 및 과금 체계 (단기 렌탈 vs 장기 약정)
+  contractPeriodType?: 'SHORT_TERM' | 'LONG_TERM'; // 'SHORT_TERM'(일/주/월 단기) | 'LONG_TERM'(장기 약정)
+  termMonths?: number;            // 약정 개월 수 (12, 24, 36개월 등)
+  earlyTerminationFeeRate?: number; // 중도해지 위약금율 (기본 10%)
+  depositAmount?: number;         // 약정 보증금 총액
+  depositBalance?: number;        // 현재 가용 잔여 보증금
+  depositStatus?: DepositStatus;  // 보증금 상태 ('UNPAID', 'HELD', 'PARTIAL_OFFSET', 'FULLY_OFFSET', 'REFUNDED')
+  depositPaidDate?: string;       // 보증금 입금 확인 일자 (YYYY-MM-DD)
+  depositBankTransactionId?: string; // 보증금 입금 매핑 통장 거래 ID
+  depositRefundedDate?: string;   // 보증금 반환 일자 (YYYY-MM-DD)
+  depositRefundAmount?: number;   // 반환 금액 (원)
+  depositRefundBank?: string;     // 반환 은행명
+  depositRefundAccount?: string;  // 반환 계좌번호
+  depositRefundHolder?: string;   // 반환 예금주
+  depositMemo?: string;           // 보증금 관리 메모
+  pureRentalFee?: number;         // 순 렌탈료 합계
+  isDeliverySetupFeeBilled?: boolean; // 운반설치비 등 청구 여부
+  deliverySetupFeeAmount?: number; // 운반설치비 등 청구 금액
+
+  // 🚚 IT 5대 배송 및 설치 물류 체계
+  deliveryMethod?: ITDeliveryMethod; // COURIER, QUICK, DIRECT_INSTALL, FREIGHT, PICKUP
+  courierCompany?: string;        // 택배사
+  trackingNo?: string;            // 운송장번호
+  installTechName?: string;       // 설치 담당 엔지니어
+
   startDate: string;
   endDate: string;
-  billingDay: number; // 계산서 마감일 (예: 25 → 매월 25일 발행, 청구기간: 전월26~당월25)
-  statementClosingDay?: number; // 명세서 마감일
-  freightBillingStandard?: '3/5' | '2/4'; // 운송료 청구기준 ('3/5' 기본 | '2/4')
+  billingDay: number; // 청구서 발행일 (예: 25 → 매월 25일 발행, 청구기간: 전월26~당월25)
+  statementClosingDay?: number; // 거래명세서 마감일 (구버전 호환)
   lateInterestRate: number; // 연체이자율 (%), 기본값 0 = 미발생
   paymentDueDay?: number; // 납기일 (1~30, 31: 말일)
-  paymentDueMonthOffset?: number; // 0: 당월, 1: 익월, 2: 익익월, 3: 익익익월
+  paymentDueMonthOffset?: number; // 0: 당월(M0), 1: 익월(M1), 2: 익익월(M2), 3: 익익익월(M3)
   status: 'ACTIVE' | 'EXTENDED' | 'SHORTENED' | 'SUCCEEDED' | 'COMPLETED';
   successorContractId?: string;
   predecessorContractId?: string; // 승계 전 이전 계약 ID
@@ -1811,13 +1791,13 @@ export interface Contract {
   driveFolderId?: string;
   salespersonId?: string; // 계약담당자 (영업사원 ID)
   // 💡 직전 청구 마일스톤 메타데이터 (청구 발행 시 자동 트리거 갱신)
-  lastBillingDate?: string; // 최근 렌탈료 청구 발행일(일자)
-  lastBilledPeriodStart?: string; // 최근 청구 시작일(일자)
-  lastBilledPeriodEnd?: string; // 최근 청구 종료일(일자)
-  lastBilledYm?: string; // 최근 청구 귀속월(연월)
+  lastBillingDate?: string; // 최근 렌탈료 청구 발행일 (YYYY-MM-DD)
+  lastBilledPeriodStart?: string; // 최근 청구 시작일 (YYYY-MM-DD)
+  lastBilledPeriodEnd?: string; // 최근 청구 종료일 (YYYY-MM-DD)
+  lastBilledYm?: string; // 최근 청구 귀속월 (YYYY-MM)
   billingCount?: number; // 누적 발행 청구 건수
-  packageSentAt?: string; // 💡 계약서패키지(PDF+인증서 등) 발송 일시
-  // 💡 결재선 연동 및 사전 입력 승인 필드
+  packageSentAt?: string; // 💡 계약서패키지(PDF+인증서 등) 발송 일시 (ISO string)
+  // 💡 결재선 연동 및 사전 입력 승인(Staging-to-Live) 필드
   approvalStatus?: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED';
   approvalRequestId?: string;
   stagedExtend?: {
@@ -1836,8 +1816,8 @@ export interface ContractHistory {
   id: string;
   contractId: string;
   changeType: 'REGISTER' | 'EXTEND' | 'SHORTEN' | 'SUCCEED' | 'TERMINATE' | 'EXCHANGE' | 'FEE_CHANGE' | 'AS_SERVICE'
-           | 'BILLING_CREATED' | 'BILLING_SENT' | 'BILLING_CANCELLED' | 'BILLING_REGENERATED' | 'PAYMENT_RECEIVED' | 'PAYMENT_CANCELLED' | 'DOCUMENT_SENT' | 'MONTHLY_CHECKLIST_SENT' | 'ASSET_SOLD'
-           | 'ASSET_PERIOD_CHANGE' | 'ADD_ASSET' | 'SALESPERSON_CHANGE';
+           | 'BILLING_CREATED' | 'BILLING_SENT' | 'BILLING_CANCELLED' | 'BILLING_REGENERATED' | 'PAYMENT_RECEIVED' | 'PAYMENT_CANCELLED' | 'DOCUMENT_SENT' | 'ASSET_SOLD'
+           | 'ASSET_PERIOD_CHANGE' | 'ADD_ASSET' | 'DEPOSIT_RECEIVED' | 'DEPOSIT_OFFSET' | 'DEPOSIT_REFUNDED';
   changeDate: string;
   prevEndDate?: string;
   newEndDate?: string;
@@ -1921,7 +1901,7 @@ export interface Billing {
   customStatementCreatedBy?: string;         // 작성자
   approvalStatus?: 'DRAFT' | 'PENDING' | 'APPROVED' | 'REJECTED'; // 결재선 승인 상태
   approvalRequestId?: string;                // 결재 요청 FK
-  stagedCustomStatement?: {                  // 💡 전결권자 승인 대기 중인 변경 예정 데이터
+  stagedCustomStatement?: {                  // 💡 전결권자 승인 대기 중인 변경 예정 데이터 (Staging)
     reason: string;
     items: CustomStatementItem[];
     originalSummary?: string;
@@ -1934,21 +1914,19 @@ export interface Billing {
 }
 
 
-/** 입고 불량 증상별 청구 항목 (증상당 사진 최대 2장 및 예상/합의 수리비용) */
 export interface InboundClaimDefectItem {
   id: string;
-  checkitemId?: string;        // 정비항목관리 마스터 ID
-  category: string;            // 정비 구분 (외관/파손, 전장/배터리 등)
-  symptomName: string;         // 불량 증상명
-  estimatedCost: number;       // 증상당 예상 수리비용
-  agreedCost?: number;         // 협상 후 조정/합의 수리비용
-  photos: string[];            // 증상당 사진 (최대 2장)
-  memo?: string;               // 증상 상세 비고
+  checkitemId?: string;
+  category: string;
+  symptomName: string;
+  estimatedCost: number;
+  agreedCost?: number;
+  photos: string[];
+  memo?: string;
 }
 
 export type ClaimNegotiationStatus = 'PENDING_NEGOTIATION' | 'SENT_TO_CUSTOMER' | 'AGREED';
 
-/** 입고 불량 수리비 청구 통합 메타데이터 (repairs.defectsJson 및 외상미수금 대장 1:1 연동) */
 export interface InboundDefectClaimMeta {
   kind: 'INBOUND_DEFECT_CLAIM_V1';
   receivableId: string;
@@ -1956,38 +1934,38 @@ export interface InboundDefectClaimMeta {
   assetId?: string;
   assetNo: string;
   modelName?: string;
-  ownerType?: 'OWN' | 'RENTED';         // 자사장비 / 임차장비 구분
-  vendorName?: string;                  // 임차처명 (임차자산인 경우)
+  ownerType?: 'OWN' | 'RENTED';
+  vendorName?: string;
   customerId?: string;
   customerName: string;
   siteId?: string;
   siteName: string;
-  siteAddress?: string;                 // 현장 주소
+  siteAddress?: string;
   contractId?: string;
   contractNo?: string;
-  outboundDate?: string;                // 계약 출고일(대여 시작일)
-  inboundDate: string;                  // 최근 입고일자
-  billingDay?: number;                  // 명세서/계산서 마감일
+  outboundDate?: string;
+  inboundDate: string;
+  billingDay?: number;
   salespersonId?: string;
   salespersonName?: string;
-  customerContactName?: string;         // 고객/현장 담당자 성함
-  customerPhone?: string;               // 고객/현장 담당자 연락처
-  customerEmail?: string;               // 고객 세금계산서/청구 이메일
+  customerContactName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
   registeredById?: string;
   registeredByName?: string;
   registeredAt: string;
-  inspectorMemo?: string;               // 출고팀 검수자 현장 소견 메모 (영업 협상 메모와 분리 보존)
-  displayName?: string;                 // 명세서 표기명 (영업사원 조정 가능)
-  initialEstimatedAmount: number;       // 최초 예상 수리비 합계
-  agreedAmount: number;                 // 최종 합의(조정) 수리비 합계
+  inspectorMemo?: string;
+  displayName?: string;
+  initialEstimatedAmount: number;
+  agreedAmount: number;
   negotiationStatus: ClaimNegotiationStatus;
-  sentAt?: string;                      // 고객 전달(이메일/카톡) 일시
+  sentAt?: string;
   sentChannel?: 'EMAIL' | 'KAKAO_SHARE' | 'PDF_DOWNLOAD';
   sentToEmail?: string;
-  agreedAt?: string;                    // 최종 합의 완료 일시
-  agreedBy?: string;                    // 합의 처리 담당자명
-  negotiationMemo?: string;             // 고객 협상 및 수리비 조정 사유 메모
-  defectItems: InboundClaimDefectItem[]; // 불량 증상 목록 (증상당 사진 최대 2장, 예상 수리비용)
+  agreedAt?: string;
+  agreedBy?: string;
+  negotiationMemo?: string;
+  defectItems: InboundClaimDefectItem[];
 }
 
 /** 외상미수금 대장 — 운송료·수리비·청소비·타사구상금 분할 청산 관리 */
@@ -1996,7 +1974,7 @@ export interface Receivable {
   contractId?: string;
   customerId?: string;
   type: 'TRANSPORT' | 'REPAIR' | 'CLEANING' | 'VENDOR_CLAIM' | 'OTHER';
-  totalAmount: number;        // 외상 총액 (수리비 협상 완료 시 최종 합의 금액으로 갱신)
+  totalAmount: number;        // 외상 총액
   billedAmount: number;       // 청구된 누적 금액
   // remainingAmount = totalAmount - billedAmount (계산값)
   internalDescription: string; // 내부 장부 기재명
@@ -2006,7 +1984,7 @@ export interface Receivable {
   repairId?: string;           // 수리비 연동 시 repairs.id
   vendorName?: string;         // 타사 구상금인 경우 임차처명
   assetNo?: string;            // 대상 장비번호
-  claimMeta?: InboundDefectClaimMeta; // 런타임/로컬 캐시용 입고 불량 청구 상세 메타
+  claimMeta?: InboundDefectClaimMeta;
   createdAt: string;
   updatedAt: string;
 }
@@ -2016,12 +1994,13 @@ export interface Payment {
   billingId?: string | null;
   paymentDate: string;
   amount: number;
-  method: string; // 'BANK_TRANSFER' | 'CARD' | 'CASH'
+  method: string; // 'BANK_TRANSFER' | 'CARD' | 'CASH' | 'PREPAID' | 'DEPOSIT_OFFSET'
   memo: string;
   feeAdjustment?: number; // 송금수수료 등 차액 자동 감액 상계액 (500원/1,000원 등)
+  depositOffsetContractId?: string; // 보증금 상계 계약 ID (method === 'DEPOSIT_OFFSET' 시)
   createdAt: string;
   updatedAt?: string;
-  // 상계(역분개) 필드: 취소 시 원 행을 삭제하지 않고 음수 상계 행을 추가한다
+  // 상계(역분개) 필드: 취소 시 원 행을 삭제하지 않고 음수 상계 행을 추가한다 (G-10)
   reversalOf?: string;      // 이 행이 상계 행이면 원 수납 행 ID
   reversedBy?: string;      // 이 행이 상계된 경우 상계 행 ID
   reversalReason?: string;
@@ -2054,9 +2033,8 @@ export const isActiveDepositLink = (l: Pick<PaymentDepositLink, 'reversedBy' | '
 
 export type DeliveryStatus = 'PENDING' | 'DISPATCHED' | 'DELIVERED' | 'CANCELLED' | 'REQUESTED' | 'COMPLETED';
 
-/** 전사 표준 차종/톤수 옵션 목록 */
+/** 전사 표준 차종/톤수 옵션 목록 (SSOT) */
 export const VEHICLE_TYPE_OPTIONS: string[] = [
-  '1T',
   '1.4T',
   '2.5T',
   '3.5T',
@@ -2068,7 +2046,6 @@ export const VEHICLE_TYPE_OPTIONS: string[] = [
   '11T',
   '노배드',
   '1.2T 셀프',
-  '2.5T 셀프',
   '3.5T 셀프',
   '4T 셀프',
   '5T 셀프',
@@ -2089,11 +2066,11 @@ export interface Delivery {
   status: DeliveryStatus; // 배차 4단계 진행상태 (PENDING: 배차전, DISPATCHED: 배차완료, DELIVERED: 운송완료, CANCELLED: 배차취소)
   requestDate: string;
   scheduledDate?: string;
-  loadingDate?: string; // 상차 일자(일자)
+  loadingDate?: string; // 상차 일자 (YYYY-MM-DD)
   loadingTimeSlot?: string; // 상차 시간 구분 (오전/오후/희망시간)
   loadingCompletedAt?: string; // 출고팀 상차완료 처리 일시
   unloadingCompletedAt?: string; // 입고팀 하차완료/입고완료 처리 일시
-  unloadingDate?: string; // 하차 일자(일자)
+  unloadingDate?: string; // 하차 일자 (YYYY-MM-DD)
   unloadingTimeSlot?: string; // 하차 시간 구분 (오전/오후/희망시간)
   originAddress?: string; // 상차지
   pickupType?: 'HQ_YARD' | 'VENDOR_YARD' | 'CUSTOMER_SITE'; // 상차 구분
@@ -2217,8 +2194,8 @@ export interface Vendor {
   bizItem?: string;                  // 종목
   isActive?: boolean;
   memo?: string;
-  firstTradeDate?: string;       // 최초 거래개시일(일자)
-  lastTradeDate?: string;        // 최근 거래일(일자)
+  firstTradeDate?: string;       // 최초 거래개시일 (YYYY-MM-DD)
+  lastTradeDate?: string;        // 최근 거래일 (YYYY-MM-DD)
   totalPurchaseAmount?: number;  // 누적 거래액 (원, 매입거래 누계액)
 
   // 🏛️ [신규] 국세청 홈택스 휴폐업 및 과세유형
@@ -2321,9 +2298,9 @@ export interface Repair {
   
   // 4. 고장 증상 및 정비 내용
   issueCategory?: string;
-  inspectionItemId?: string;   // [NEW] 정비 항목 마스터 ID 매핑
-  inspectionItemCode?: string; // [NEW] 정비 항목 코드 맵핑
-  degradationScore?: number;   // [NEW] 정비점수 누적 점수
+  inspectionItemId?: string;   // [NEW] 정비 항목 마스터 ID 매핑 (InspectionChecklistItem.id)
+  inspectionItemCode?: string; // [NEW] 정비 항목 코드 맵핑 (e.g. CHK-0000001)
+  degradationScore?: number;   // [NEW] 정비점수 누적 점수 (e.g. +15)
   durationMinutes?: number;    // [NEW] 실제 정비 소요시간 (분 단위, 예: 30, 45, 60, 90)
   spentManHours?: number;      // [NEW] 실제 투입 공수 (M/H 단위 = durationMinutes / 60)
   issueDescription?: string;
@@ -2400,89 +2377,6 @@ export interface Repair {
   updatedAt: string;
 }
 
-export type AsRouteEventType =
-  | 'CLOCK_IN'          // 출근
-  | 'DEPART_TO_SITE'    // 현장 출발
-  | 'ARRIVE_AT_SITE'    // 현장 도착
-  | 'WORK_START'        // 작업 시작
-  | 'PARTS_SOURCING'    // 부품 수급 이동 (당사 주기장 / 타 차량 접선 / 임차처 방문)
-  | 'REVISIT_SCHEDULED' // 재방문 일정 등록 (익일/타일자 재방문 스케줄 확정)
-  | 'WORK_COMPLETE'     // 작업 완료
-  | 'MOVE_NEXT_SITE'    // 다음 현장 이동
-  | 'RETURN_TO_YARD'    // 주기장 복귀
-  | 'CLOCK_OUT';        // 퇴근
-
-export type AsPartsSourcingType = 'HQ_YARD' | 'COLLEAGUE_VAN' | 'RENTAL_VENDOR';
-
-export type AsRouteStage =
-  | 'WAITING'
-  | 'DEPARTED'
-  | 'ARRIVED'
-  | 'WORKING'
-  | 'PARTS_SOURCING'
-  | 'REVISIT_SCHEDULED'
-  | 'MOVING_NEXT'
-  | 'COMPLETED';
-
-export interface RepairTimelineEvent {
-  id: string;
-  eventType: 'CALL_MADE' | 'TRANSIT_START' | 'ARRIVED' | 'COMPLETED' | AsRouteEventType | string;
-  label: string;
-  mechanicId?: string;
-  mechanicName?: string;
-  detail?: string;
-  timestamp: string;
-  workDate?: string;
-  repairId?: string;
-  ticketNo?: string;
-  customerId?: string;
-  customerName?: string;
-  siteId?: string;
-  siteName?: string;
-  siteAddress?: string;
-  assetId?: string;
-  assetNo?: string;
-  modelName?: string;
-  nextRepairId?: string;
-  nextSiteName?: string;
-  sourcingType?: AsPartsSourcingType;
-  sourcingTargetName?: string;
-  partName?: string;
-  revisitDate?: string;
-  durationMinutes?: number;
-}
-
-/** 🚐 AS팀 일자별 현장 동선 및 업무단계 실시간 기록 모델 (as_route_logs) */
-export interface AsRouteLog {
-  id: string;
-  workDate: string;          // YYYY-MM-DD
-  mechanicId: string;
-  mechanicName: string;
-  eventType: AsRouteEventType;
-  eventLabel: string;        // 출근 | 현장 출발 | 현장 도착 | 작업 시작 | 부품 수급 이동 | 재방문 일정 등록 | 작업 완료 | 다음 현장 이동 | 주기장 복귀 | 퇴근
-  repairId?: string;
-  ticketNo?: string;
-  customerId?: string;
-  customerName?: string;
-  siteId?: string;
-  siteName?: string;
-  siteAddress?: string;
-  assetId?: string;
-  assetNo?: string;
-  modelName?: string;
-  nextRepairId?: string;
-  nextSiteName?: string;
-  sourcingType?: AsPartsSourcingType;
-  sourcingTargetName?: string;
-  partName?: string;
-  revisitDate?: string;
-  durationMinutes?: number;  // 직전 단계 대비 소요시간(분)
-  memo?: string;
-  recordedAt: string;        // ISO 8601
-  createdAt: string;
-  updatedAt: string;
-}
-
 
 
 // 💡 호환용 타입 알리아스 (단일 물리 테이블: repairs)
@@ -2501,7 +2395,7 @@ export interface InspectionChecklistItem {
   relatedManualIds?: string[];
   recommendedConsumableIds?: string[]; // 추천 소모품 ID 목록
   standardManHours?: number;           // 표준 작업 공수 (M/H 단위, 예: 0.5, 1.5)
-  actionGuide?: string;                // 표준 조치 절차
+  actionGuide?: string;                // 표준 조치 절차 (SOP)
   createdAt: string;
   updatedAt?: string;
 }
@@ -2518,7 +2412,7 @@ export interface EquipmentManual {
   fileSize: number;             // 바이트 단위 용량 (영상/링크 시 0)
   fileSizeLabel?: string;       // 표시용 크기 (예: '14.2 MB' 또는 '08:24')
   version: string;              // 개정 버전 (예: 'Rev. 2024-C')
-  uploadDate: string;           // 등록일자(일자)
+  uploadDate: string;           // 등록일자 (YYYY-MM-DD)
   uploadedBy: string;           // 등록자
   memo?: string;                // 비고 및 가이드 요약
   inspectionItemCodes?: string[];// 연계 정비점검항목 코드 (선택)
@@ -2603,8 +2497,7 @@ export function extractYoutubeVideoId(url: string): string | null {
 }
 
 export type TaskCategory = 
-  | 'DISPATCH_REQUEST'            // 출고/회수/교환 배차 지시
-  | 'ASSET_ASSIGNMENT'            // 출고 요청 장비 할당
+  | 'DISPATCH_REQUEST'            // 출고/회수/대차 배차 지시
   | 'OUTBOUND_PDI_INSPECTION'     // 출고 전 PDI 기능 및 안전옵션 검수
   | 'OUTBOUND_SHIPMENT_START'     // PDI 합격 장비 상차 및 화물 출발
   | 'SITE_ARRIVAL_CONFIRM'        // 현장 도착 하차 및 가동 개시 확인
@@ -2616,9 +2509,9 @@ export type TaskCategory =
   | 'OUTBOUND_REPAIR_DEFECT'      // 출고 결함/교체 장비 주기장 정비
   | 'CLAIM_DAMAGE_BILLING'        // 고객 과실 파손 구상권 청구
   | 'EXCHANGE_CHAIN_INSPECTION'   // 대차 입출고 1:1 검수 체인
-  | 'BILLING_APPROVAL_SEND'       // 월말 렌탈 명세서 승인 및 계산서 발행
+  | 'BILLING_APPROVAL_SEND'       // 월말 렌탈 청구서 승인 및 계산서 발행
   | 'DELINQUENCY_COLLECTION'      // 연체 채권 독촉 및 수납 확약
-  | 'PURCHASE_SETTLEMENT_AUDIT'   // 매입 계산서 대사 및 지급 승인
+  | 'PURCHASE_SETTLEMENT_AUDIT'   // 매입 정산서 대사 및 지급 승인
   | 'ASSET_DISPOSAL_HANDOVER'     // 매각 장비 실물 인도 및 잔금 수납
   | 'CONSUMABLE_RESTOCK'          // 안전재고 미달 소모품 긴급 발주
   | 'CONSUMABLE_PURCHASE_APPROVAL'// 소모품 구매 신청 결재 승인
@@ -2823,7 +2716,7 @@ export interface OfficialMailConfig {
 
 export interface CashFlowSnapshot {
   id: string;
-  snapshotDate: string; // 스냅샷 작성일(일자)
+  snapshotDate: string; // 스냅샷 작성일 (YYYY-MM-DD)
   startingBalance: number; // 스냅샷 시점의 통장 총잔액
   projectedInflow: number; // 향후 30일 수납 예정액
   projectedOpex: number; // 향후 30일 일반 지출예정액
@@ -2896,7 +2789,7 @@ export interface DepreciationLog {
 }
 
 // ============================================================
-// 월말 매입 정산
+// 월말 매입 정산 (Purchase Settlement)
 // ============================================================
 
 export type PurchaseSettlementType = 'TRANSPORT' | 'CONSUMABLE' | 'EQUIPMENT_LEASE' | 'EXTERNAL_REPAIR';
@@ -2922,7 +2815,7 @@ export interface PurchaseSettlement {
   memo?: string;
   // 국세청 전자세금계산서 (매입) 연동 필드
   taxInvoiceNo?: string;              // 국세청 24자리 승인번호
-  taxInvoiceIssueDate?: string;       // 세금계산서 작성일자(일자)
+  taxInvoiceIssueDate?: string;       // 세금계산서 작성일자 (YYYY-MM-DD)
   taxInvoiceSupplyAmount?: number;    // 세금계산서 공급가액
   taxInvoiceVatAmount?: number;       // 세금계산서 부가세액
   taxInvoiceTotalAmount?: number;     // 세금계산서 합계금액
@@ -2979,45 +2872,7 @@ export interface ExternalLease {
   updatedAt: string;
 }
 
-/** 📝 영업전개 흐름 4단계 구분 */
-export type SalesJournalStage = '영업개시' | '제안' | '견적' | '거래개시';
-
-/** 📝 Groq LLM 영업일지 자연어 추출 포맷 */
-export interface SalesJournalExtractedData {
-  journalDate: string;          // 작성일
-  customerName: string;         // 고객명
-  contactName: string;          // 상대방 이름
-  contactTitle: string;         // 상대방 직책
-  stage: SalesJournalStage;     // 상담내용 구분 (영업개시 | 제안 | 견적 | 거래개시)
-  summary: string;              // 상담내용 요약
-  nextSchedule?: string;        // 다음일정 내용
-  nextScheduleDate?: string;    // 다음일정 일자
-}
-
-/** 📝 영업일지 엔티티 (원문 + Groq LLM 추출 데이터 통합 저장) */
-export interface SalesJournal {
-  id: string;
-  journalDate: string;          // 작성일
-  salespersonId: string;        // 작성 영업사원 ID
-  salespersonName: string;      // 작성 영업사원 성명
-  department?: string;          // 소속 부서명
-  customerId?: string;          // 매칭된 고객 ID (있는 경우)
-  customerName: string;         // 고객명
-  contactName?: string;         // 상대방 이름
-  contactTitle?: string;        // 상대방 직책
-  stage: SalesJournalStage;     // 영업개시 | 제안 | 견적 | 거래개시
-  summary: string;              // 상담내용 요약
-  nextSchedule?: string;        // 다음일정 설명
-  nextScheduleDate?: string;    // 다음일정 날짜
-  rawContent: string;           // 자유 자연어 작성 원문
-  extractedJson?: SalesJournalExtractedData | Record<string, any>; // Groq LLM 추출 원본 데이터 포맷
-  aiModel?: string;             // 추출에 사용된 LLM 모델명
-  createdAt: string;
-  updatedAt?: string;
-  tenant_id?: string;
-}
-
-/** 📊 월간 결산 손익계산서 엔티티 */
+/** 📊 월간 결산 손익계산서 엔티티 (Financial Income Statement) */
 export interface MonthlyIncomeStatement {
   id: string; // e.g. 'IS-2026-08'
   targetYm: string; // 'YYYY-MM'
@@ -3098,7 +2953,7 @@ export interface MonthlyIncomeStatement {
 
 
 // ============================================================
-// 7. 법인 차량 및 차량운행일지/주유 영수증 관리
+// 7. 법인 차량 및 차량운행일지/주유 영수증 관리 (Corporate Fleet & Logs)
 // ============================================================
 
 export type CorporateVehicleType = '승합차' | '화물/탑차' | '승용차' | '전기차';
@@ -4453,7 +4308,7 @@ const generateMockAssets = (products: Product[]): Asset[] => {
     });
   }
 
-  // 임차 자산 테스트용 모의 데이터 3건 주입
+  // 임차 자산(RENTED) 테스트용 모의 데이터 3건 주입
   assets.push({
     id: 'asset-rent-1',
     modelName: 'GS3246',
@@ -4625,6 +4480,86 @@ const mockDataAssets = generateMockAssets(mockDataProducts);
 const mockDataCont = generateMockContracts(mockDataCust.customers, mockDataCust.contacts, mockDataCust.sites, mockDataAssets);
 export const SEED_TENANTS: Tenant[] = [
   {
+    id: 'tenant-ebro-it',
+    tenantCode: 'EBRO_IT',
+    solutionType: 'IT',
+    systemName: 'e-Bro IT ERP',
+    displayName: 'eBroIT 렌탈',
+    corporateName: '주식회사 이브로아이티',
+    tradeName: '(주)이브로아이티',
+    businessNumber: '123-86-56789',
+    corporateRegistrationNumber: '110111-8888888',
+    representativeName: '이정용',
+    openingDate: '2026-01-01',
+    businessAddress: '서울특별시 금천구 가산디지털1로 186 (eBro IT 데모 센터)',
+    headOfficeAddress: '서울특별시 금천구 가산디지털1로 186',
+    businessCategory: '정보통신업 / 임대서비스업',
+    businessItem: '컴퓨터 및 주변장치 임대업',
+    tel: '02-1588-0000',
+    fax: '02-1588-0001',
+    salesPhone: '010-3344-5566',
+    taxEmail: 'tax@ebro-it.com',
+    taxOffice: '금천세무서장',
+    websiteUrl: 'https://it-demo.ebro.run',
+    ciUrl: '/favicon.svg',
+    logoUrl: '/favicon.svg',
+    subdomain: 'it-demo',
+    targetRepo: 'DragonRPA/ebro_it',
+    status: 'ACTIVE',
+    isDefault: true,
+    subscription: {
+      memo: '공식 IT 렌탈 데모 시연 및 테스트 전용 테넌트',
+      plan: 'ENTERPRISE',
+      status: 'ACTIVE',
+      startDate: '2026-01-01',
+      endDate: '2029-12-31',
+      maxUsers: 0,
+      maxAssets: 0,
+      autoRenew: true,
+      billingCycle: 'YEARLY',
+      monthlyFee: 0,
+      gracePeriodDays: 30,
+      licenseKey: 'EBR-DEMO-IT-20291231-LIVE'
+    },
+    features: {
+      r2Config: {
+        updatedAt: '2026-10-19T08:00:00.000Z',
+        r2AccountId: '35014a2514680107d74e1e68d96e6c32',
+        r2BucketName: 'ebro-it-demo',
+        r2AccessKeyId: '109db3cb8cf82f919041be9fa3d41250',
+        r2PublicDomain: 'https://pub-a2468b66c450440dab37e0c02d516ca6.r2.dev',
+        r2SecretAccessKey: 'f80aed8584d0735c7350feb780e2e6665ca0cdf53895d80042fea758b6045c88'
+      },
+      telegramBot: false,
+      customDomain: 'it-demo.ebro.run',
+      kakaoContract: true,
+      agentAiEnabled: true,
+      autoTaxInvoice: true,
+      voiceAssistance: true,
+      callRecordingStt: true,
+      specialFeatures: [
+        'tab:truck_dispatch:audit_settle',
+        'btn:truck_dispatch:bulk_approve',
+        'btn:courier_dispatch:direct_dispatch'
+      ],
+      officialMailConfig: {
+        googleEmail: '77.victor.lee@gmail.com',
+        gmailAppPassword: 'hqqgtwtsjimvqmeb',
+        smtpProvider: 'GMAIL',
+        smtpHost: 'smtp.gmail.com',
+        smtpPort: 465,
+        isDevMode: false,
+        contractFolder: '렌탈계약서_증빙',
+        consumableFolder: '소모품납품증빙',
+        deliveryFolder: '출고의뢰_증빙',
+        maintenanceFolder: '정비보고서_증빙',
+        updatedAt: new Date().toISOString()
+      }
+    },
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: new Date().toISOString()
+  },
+  {
     id: 'tenant-giyeonlift',
     tenantCode: 'GIYEONLIFT',
     solutionType: 'AWP',
@@ -4656,7 +4591,7 @@ export const SEED_TENANTS: Tenant[] = [
     email: 'giyeonlift@naver.com',
     websiteUrl: '',
     
-    // 🛡️ 법정 개인정보 보호책임자
+    // 🛡️ 법정 개인정보 보호책임자 (CPO)
     privacyOfficer: {
       name: '이수용',
       position: '대표이사 / 관리부 총괄',
@@ -4696,22 +4631,37 @@ export const SEED_TENANTS: Tenant[] = [
     yards: [
       {
         id: 'yard-01',
-        yardCode: 'YARD-YONGIN',
-        name: '당사 보관소',
+        yardCode: 'YARD-HWASUNG',
+        name: '기연리프트 화성 주기장',
         isDefault: true,
+        address: '기연리프트 화성 주기장',
+        addressDetail: '',
+        operatingCapacity: 200,
+        managerName: '야드관리팀',
+        managerPhone: '031-334-5296',
+        tel: '031-334-5296',
+        operatingHours: '07:00 ~ 18:00',
+        memo: '주력 출고/입고/정비 복합 주기장 (트레일러/셀프로더 진입 가능)',
+        createdAt: '2013-04-03T00:00:00.000Z',
+      },
+      {
+        id: 'yard-02',
+        yardCode: 'YARD-YONGIN',
+        name: '용인 본사 주기장',
+        isDefault: false,
         address: '경기도 용인시 처인구 모현읍 갈담로112번길 21-3',
-        addressDetail: '당사 보관소',
-        operatingCapacity: 250,
-        managerName: '김원진 부장',
-        managerPhone: '010-2018-1223',
+        addressDetail: '본사 주기장',
+        operatingCapacity: 50,
+        managerName: '이수용',
+        managerPhone: '031-334-5295',
         tel: '031-334-5295',
         operatingHours: '08:30 ~ 17:30',
-        memo: '본사 주력 출고/입고/정비 복합 주기장',
+        memo: '본사 부속 대기/수리 주기장',
         createdAt: '2013-04-03T00:00:00.000Z',
       }
     ],
 
-    mainYardAddress: '경기도 용인시 처인구 모현읍 갈담로112번길 21-3',
+    mainYardAddress: '기연리프트 화성 주기장',
     bankAccounts: [
       {
         bankName: '신한은행',
@@ -4738,19 +4688,6 @@ export const SEED_TENANTS: Tenant[] = [
       autoTaxInvoice: true,
       voiceAssistance: true,
       agentAiEnabled: false,
-      officialMailConfig: {
-        googleEmail: 'giyeonlift7@naver.com',
-        gmailAppPassword: 'WEFWT3MYX5CQ',
-        smtpProvider: 'NAVER',
-        smtpHost: 'smtp.naver.com',
-        smtpPort: 465,
-        isDevMode: false,
-        contractFolder: '렌탈계약서_증빙',
-        consumableFolder: '소모품납품증빙',
-        deliveryFolder: '출고의뢰_증빙',
-        maintenanceFolder: '정비보고서_증빙',
-        updatedAt: '2026-01-01T00:00:00.000Z'
-      }
     },
     subscription: {
       plan: 'ENTERPRISE',
@@ -4768,12 +4705,11 @@ export const SEED_TENANTS: Tenant[] = [
     },
     stampImageUrl: OFFICIAL_STAMP_BASE64,
     status: 'ACTIVE',
-    isDefault: true,
+    isDefault: false,
     createdAt: '2013-04-03T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: new Date().toISOString(),
     allowCustomBillingStatement: true,
-    allowContractTradeOutbound: true,
-    specialFeatures: ['tab:truck_dispatch:audit_settle', 'btn:truck_dispatch:bulk_approve', 'btn:courier_dispatch:direct_dispatch', 'btn:contracts:trade_outbound'], // 💡 특수 거래명세서 기능 활성화
+    specialFeatures: ['tab:truck_dispatch:audit_settle', 'btn:truck_dispatch:bulk_approve', 'btn:courier_dispatch:direct_dispatch'], // 💡 특수 거래명세서 기능 활성화
     excelMappingRules: {
       contractAssetsStartRow: 44,
       contractModelCol: 1,
@@ -4897,20 +4833,7 @@ export const SEED_TENANTS: Tenant[] = [
       kakaoContract: true,
       autoTaxInvoice: true,
       voiceAssistance: true,
-      agentAiEnabled: true,
-      officialMailConfig: {
-        googleEmail: 'giyeonlift7@naver.com',
-        gmailAppPassword: 'WEFWT3MYX5CQ',
-        smtpProvider: 'NAVER',
-        smtpHost: 'smtp.naver.com',
-        smtpPort: 465,
-        isDevMode: false,
-        contractFolder: '렌탈계약서_증빙',
-        consumableFolder: '소모품납품증빙',
-        deliveryFolder: '출고의뢰_증빙',
-        maintenanceFolder: '정비보고서_증빙',
-        updatedAt: '2026-01-01T00:00:00.000Z'
-      }
+      agentAiEnabled: true
     },
     subscription: {
       plan: 'ENTERPRISE',
@@ -4930,10 +4853,9 @@ export const SEED_TENANTS: Tenant[] = [
     status: 'ACTIVE',
     isDefault: false,
     createdAt: '2026-01-01T00:00:00.000Z',
-    updatedAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: new Date().toISOString(),
     allowCustomBillingStatement: true,
-    allowContractTradeOutbound: true,
-    specialFeatures: ['tab:truck_dispatch:audit_settle', 'btn:truck_dispatch:bulk_approve', 'btn:courier_dispatch:direct_dispatch', 'btn:contracts:trade_outbound'],
+    specialFeatures: ['tab:truck_dispatch:audit_settle', 'btn:truck_dispatch:bulk_approve', 'btn:courier_dispatch:direct_dispatch'],
     excelMappingRules: {
       contractAssetsStartRow: 44,
       contractModelCol: 1,
@@ -5017,7 +4939,6 @@ const SEED_ROLE_CONFIG: Record<string, Record<string, { canView: boolean; canSav
     consumable_inout: { canView: true, canSave: true },
     consumable_stock: { canView: true, canSave: true },
     consumable: { canView: true, canSave: true },
-    as_route_tracking: { canView: true, canSave: false },
     leave_application: { canView: true, canSave: true },
     vehicle_log: { canView: true, canSave: true }
   },
@@ -5037,7 +4958,6 @@ const SEED_ROLE_CONFIG: Record<string, Record<string, { canView: boolean; canSav
     smart_dispatch4: { canView: true, canSave: true },
     smart_return: { canView: true, canSave: true },
     smart_as_request: { canView: true, canSave: true },
-    as_route_tracking: { canView: true, canSave: false },
     receivable: { canView: true, canSave: true },
     delinquency: { canView: true, canSave: true },
     billing: { canView: true, canSave: false },
@@ -5070,7 +4990,6 @@ const SEED_ROLE_CONFIG: Record<string, Record<string, { canView: boolean; canSav
     dashboard: { canView: true, canSave: false },
     repairs: { canView: true, canSave: true },
     field_as: { canView: true, canSave: true },
-    as_route_tracking: { canView: true, canSave: true },
     inspection_checklist: { canView: true, canSave: true },
     consumable_purchase: { canView: true, canSave: true },
     consumable_inout: { canView: true, canSave: true },
@@ -5160,13 +5079,13 @@ const SEED_BANK_MATCHING_RULES: BankMatchingRule[] = [];
 
 const SEED_OFFICIAL_MAIL_CONFIG: OfficialMailConfig[] = [
   {
-    id: 'cfg-tenant-giyeonlift',
-    tenantId: 'tenant-giyeonlift',
-    googleEmail: 'giyeonlift7@naver.com',
+    id: 'default-config',
+    tenantId: 'tenant-ebro-it',
+    googleEmail: '77.victor.lee@gmail.com',
     googlePassword: '',
-    gmailAppPassword: 'WEFWT3MYX5CQ',
-    smtpProvider: 'NAVER',
-    smtpHost: 'smtp.naver.com',
+    gmailAppPassword: 'hqqgtwtsjimvqmeb',
+    smtpProvider: 'GMAIL',
+    smtpHost: 'smtp.gmail.com',
     smtpPort: 465,
     contractFolder: '렌탈계약서_증빙',
     consumableFolder: '소모품납품증빙',
@@ -5177,7 +5096,7 @@ const SEED_OFFICIAL_MAIL_CONFIG: OfficialMailConfig[] = [
     currentInsuranceEndDate: '2027-03-05',
     nextInsuranceStartDate: '2027-03-05',
     nextInsuranceEndDate: '2028-03-05',
-    updatedAt: '2026-01-01T00:00:00.000Z'
+    updatedAt: new Date().toISOString()
   }
 ];
 
@@ -5265,7 +5184,7 @@ export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
     manufacturer: 'Skyjack',
     targetSpecFt: 19,
     category: 'PARTS_BOOK',
-    title: '[Skyjack] SJ-3219/3226 부품 카탈로그',
+    title: '[Skyjack] SJ-3219/3226 부품 카탈로그 (Parts Manual)',
     fileName: 'Skyjack_SJ3219_Parts_Manual_RevC.pdf',
     fileSize: 18450000,
     fileSizeLabel: '17.6 MB',
@@ -5289,7 +5208,7 @@ export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
     manufacturer: 'Skyjack',
     targetSpecFt: 19,
     category: 'ERROR_CODE',
-    title: '[Skyjack] 시저리프트 플래시 에러코드 진단표',
+    title: '[Skyjack] 시저리프트 플래시 에러코드 진단표 (Fault Codes)',
     fileName: 'Skyjack_Flash_Code_Guide_2024.pdf',
     fileSize: 4200000,
     fileSizeLabel: '4.0 MB',
@@ -5313,7 +5232,7 @@ export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
     manufacturer: 'Genie',
     targetSpecFt: 19,
     category: 'WIRING_DIAGRAM',
-    title: '[Genie] GS-1930/2032 전기배선 및 유압 회로도',
+    title: '[Genie] GS-1930/2032 전기배선 및 유압 회로도 (Schematics)',
     fileName: 'Genie_GS1930_Schematic_RevE.pdf',
     fileSize: 9800000,
     fileSizeLabel: '9.3 MB',
@@ -5337,7 +5256,7 @@ export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
     manufacturer: 'Skyjack',
     targetSpecFt: 19,
     category: 'OPERATOR_MANUAL',
-    title: '[Skyjack] SJ-3219 운전자 조작 매뉴얼',
+    title: '[Skyjack] SJ-3219 운전자 조작 매뉴얼 (User Guide)',
     fileName: 'Skyjack_SJ3219_Operator_Manual.pdf',
     fileSize: 12100000,
     fileSizeLabel: '11.5 MB',
@@ -5352,7 +5271,7 @@ export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
     errorCodes: [],
     majorParts: ['비상 하강 수동 레버', '플랫폼 확장 잠금 핀', '풋스위치'],
     symptoms: ['비상 하강 레버 미작동', '확장 플랫폼 걸림', '키 스위치 불량'],
-    aiSummary: '운전자 기본 조작법, 허용 하중, 상/하부 컨트롤 박스 전환, 정전 시 수동 비상하강 레버 당김 절차 설명.',
+    aiSummary: '운전자 기본 조작법, 허용 하중(227kg), 상/하부 컨트롤 박스 전환, 정전 시 수동 비상하강 레버 당김 절차 설명.',
     createdAt: '2026-08-25T11:00:00.000Z'
   },
   {
@@ -5411,7 +5330,7 @@ export const SEED_EQUIPMENT_MANUALS: EquipmentManual[] = [
     manufacturer: 'Genie',
     category: 'ERROR_CODE',
     mediaType: 'YOUTUBE',
-    title: '[사내 정비영상] Genie GS-1930 에러 18번 틸트 경사 센서 영점 보정',
+    title: '[사내 정비영상] Genie GS-1930 에러 18번 틸트 경사 센서 영점 보정(Level Calibration)',
     fileName: 'Genie_GS1930_Tilt_Calibration.mp4',
     fileUrl: 'https://www.youtube.com/watch?v=3JZ_D3ELwOQ',
     externalUrl: 'https://www.youtube.com/watch?v=3JZ_D3ELwOQ',
@@ -5772,7 +5691,7 @@ export const SEED_DEVELOPER_AUTHORIZED_DEVICES: DeveloperDeviceProfile[] = [
     deviceId: 'DEV-PC-PRIMARY-01',
     developerId: 'sys-admin',
     developerName: '대표 개발자 (시스템 총괄)',
-    machineName: 'D-RPA_PRESIDENT (대표 개발자 공인 워크스테이션)',
+    machineName: '대표 개발자 공인 워크스테이션',
     macAddress: 'D4-AB-61-46-47-82',
     hardwareFingerprint: 'HW-47A4-E661-24C32G',
     platform: 'Win32/x86_64',
@@ -5782,31 +5701,31 @@ export const SEED_DEVELOPER_AUTHORIZED_DEVICES: DeveloperDeviceProfile[] = [
     note: '기본 공인 개발자 메인 PC (사전 인가)',
     registeredAt: '2026-10-11T00:00:00.000Z',
     lastVerifiedAt: '2026-10-11T00:00:00.000Z',
-    tenant_id: 'tenant-giyeonlift'
+    tenant_id: 'tenant-ebro-it'
   },
   {
-    id: 'DEV-PC-PRIMARY-01-ALT',
-    deviceId: 'DEV-PC-PRIMARY-01-ALT',
+    id: 'DEV-PC-PRIMARY-ALT',
+    deviceId: 'DEV-PC-PRIMARY-ALT',
     developerId: 'sys-admin',
     developerName: '대표 개발자 (시스템 총괄)',
-    machineName: 'D-RPA_PRESIDENT (대표 개발자 공인 워크스테이션 고해상도)',
+    machineName: '대표 개발자 보조/이전 워크스테이션',
     macAddress: 'D4-AB-61-46-47-82',
     hardwareFingerprint: 'HW-6A2F-F12E-24C32G',
     platform: 'Win32/x86_64',
     status: 'ACTIVE',
-    isPrimary: true,
+    isPrimary: false,
     emergencyBreakGlassUsed: false,
-    note: '기본 공인 개발자 메인 PC (사전 인가)',
+    note: '기본 공인 개발자 보조 기기 (사전 인가)',
     registeredAt: '2026-10-11T00:00:00.000Z',
     lastVerifiedAt: '2026-10-11T00:00:00.000Z',
-    tenant_id: 'tenant-giyeonlift'
+    tenant_id: 'tenant-ebro-it'
   },
   {
     id: 'DEV-PC-PRIMARY-02',
     deviceId: 'DEV-PC-PRIMARY-02',
     developerId: 'sys-admin',
     developerName: '대표 개발자 (시스템 총괄)',
-    machineName: 'D-RPA_PRESIDENT (Wi-Fi 2 메인 어댑터)',
+    machineName: '대표 개발자 보조 워크스테이션',
     macAddress: 'D4-AB-61-46-47-81',
     hardwareFingerprint: 'HW-D4AB-6146-4781-MASTER',
     platform: 'Win32/x86_64',
@@ -5814,23 +5733,6 @@ export const SEED_DEVELOPER_AUTHORIZED_DEVICES: DeveloperDeviceProfile[] = [
     isPrimary: false,
     emergencyBreakGlassUsed: false,
     note: '보조 개발 PC (사전 인가)',
-    registeredAt: '2026-10-11T00:00:00.000Z',
-    lastVerifiedAt: '2026-10-11T00:00:00.000Z',
-    tenant_id: 'tenant-giyeonlift'
-  },
-  {
-    id: 'DEV-PC-PRIMARY-03',
-    deviceId: 'DEV-PC-PRIMARY-03',
-    developerId: 'sys-admin',
-    developerName: '대표 개발자 (시스템 총괄)',
-    machineName: 'D-RPA_PRESIDENT (이더넷 I226-V)',
-    macAddress: '18-3D-2D-58-F1-8C',
-    hardwareFingerprint: 'HW-5AA3-E370-24C',
-    platform: 'Win32/x86_64',
-    status: 'ACTIVE',
-    isPrimary: false,
-    emergencyBreakGlassUsed: false,
-    note: '공인 개발 단말기 원클릭 등록 (이더넷)',
     registeredAt: '2026-10-11T00:00:00.000Z',
     lastVerifiedAt: '2026-10-11T00:00:00.000Z',
     tenant_id: 'tenant-giyeonlift'
@@ -5847,15 +5749,15 @@ export const ALL_DB_KEYS = [
   'cashFlowSnapshots', 'outboundInspections', 'depreciationLogs',
   'purchaseSettlements', 'purchaseSettlementItems', 'settlementPaymentLogs', 'externalLeases',
   'annualLeaveQuotas', 'leaveUsages', 'overtimeRecords', 'payrollClosings', 'inspectionChecklistItems',
-  'prepaidTransactions', 'delinquencyActionLogs', 'mechanicConsumableStocks', 'receivables', 'legalNoticeLogs', 'legalNoticeTemplates',
+  'prepaidTransactions', 'delinquencyActionLogs', 'receivables', 'legalNoticeLogs', 'legalNoticeTemplates',
   'corporateVehicles', 'vehicleOperationLogs', 'vehicleFuelLogs',
   'approvalRules', 'ruleConsensus', 'approvalRequests', 'approvalSteps', 'delegationRecords',
-  'stocktakingAudits', 'stocktakingAuditItems', 'collectedParts', 'equipmentManuals', 'standardOptions',
+  'stocktakingAudits', 'stocktakingAuditItems', 'equipmentManuals', 'standardOptions',
   'printStations', 'printQueue', 'customRoles', 'rolePermissions', 'privacyAccessLogs', 'errorReports',
-  'monthlyIncomeStatements', 'developerAuthorizedDevices', 'salesJournals'
+  'monthlyIncomeStatements', 'developerAuthorizedDevices'
 ];
 
-// 🛡️ [전사 외래키 참조 무결성 룰 SSOT]: schema.sql 전수 파싱 기반
+// 🛡️ [전사 외래키(Foreign Key) 참조 무결성 룰 SSOT]: schema.sql 전수 파싱 기반
 const FK_RULES_MAP: Record<string, { targetTable: string; targetProp: string | null; notNull: boolean }> = {
   'departments.parentDepartmentId': { targetTable: 'departments', targetProp: 'departments', notNull: false },
   'users.departmentId': { targetTable: 'departments', targetProp: 'departments', notNull: false },
@@ -6124,7 +6026,7 @@ class LocalDB {
     this.inMemoryCache.set(key, decryptedData);
 
     // 2. 브라우저 localStorage: 고유식별정보, 금융계좌, 연락처 등 법정 보호 개인정보를 100% 암호화하여 저장
-    // 💡 로그/대용량 트랜잭션은 localStorage 용량 잠식을 방지하기 위해 로컬 캐시를 건너뜁니다 (인메모리 및 Supabase 영구 보존)
+    // 💡 로그/대용량 트랜잭션은 localStorage 용량(5MB) 잠식을 방지하기 위해 로컬 캐시를 건너뜁니다 (인메모리 및 Supabase 영구 보존)
     const SKIP_LOCAL_STORAGE_TABLES = new Set([
       'privacyAccessLogs', 'privacy_access_logs', 'printQueue', 'walkieTalkieHistory'
     ]);
@@ -6143,7 +6045,7 @@ class LocalDB {
       }
       safeLocalStorageSet(`erp_${key}`, str);
     } catch (e: any) {
-      console.warn(`[LocalDB Quota Exceeded] localStorage 용량 한도 초과로 erp_${key} 키를 인메모리에 안전하게 보존합니다:`, e?.message || e);
+      console.warn(`[LocalDB Quota Exceeded] localStorage 용량 한도(5MB) 초과로 erp_${key} 키를 인메모리에 안전하게 보존합니다:`, e?.message || e);
     }
   }
 
@@ -6266,17 +6168,6 @@ class LocalDB {
       } catch (e) {}
     }
 
-    // 🌐 [0.5순위] 데모 모드(awp-demo.ebro.run 등)에서는 (주)e-Bro렌탈 데모 테넌트 최우선 반환
-    if (isDemoMode()) {
-      const demoTenant = list.find(t => {
-        const code = (t.tenantCode || '').toLowerCase();
-        const subField = (t.subdomain || '').toLowerCase();
-        const dName = (t.displayName || '').toLowerCase();
-        return code === 'ebro_awp' || subField === 'awp-demo' || dName.includes('e-bro') || dName.includes('ebro') || t.id === 'giyeun';
-      });
-      if (demoTenant) return demoTenant;
-    }
-
     // 🌐 [1순위] 브라우저 접속 도메인의 서브도메인 기반 자동 테넌트 매핑 (*.ebro.run)
     if (typeof window !== 'undefined' && window.location?.hostname) {
       const hostname = window.location.hostname.toLowerCase();
@@ -6292,8 +6183,9 @@ class LocalDB {
                  code === sub ||
                  sub.startsWith(code) ||
                  code.startsWith(sub) ||
-                 (sub.includes('demo') && (code === 'ebro_awp' || subField === 'awp-demo') ||
-                 sub.includes('giyeon') && (code === 'giyeonlift' || code === 'giyeon')) ||
+                 (sub.includes('it-demo') && (code === 'ebro_it' || subField === 'it-demo')) ||
+                 (sub.includes('demo') && !sub.includes('it') && (code === 'ebro_awp' || subField === 'awp-demo')) ||
+                 (sub.includes('giyeon') && (code === 'giyeonlift' || code === 'giyeon')) ||
                  (sub.includes('giyeonlift') && (code === 'giyeonlift' || code === 'giyeon')) ||
                  (sub.includes('giyeun') && (code === 'giyeonlift' || code === 'giyeun')) ||
                  (sub.includes('giyuen') && (code === 'giyeonlift' || code === 'giyeun')) ||
@@ -6359,7 +6251,7 @@ class LocalDB {
   get permissions() { 
     const raw = this.get<MenuPermission>('permissions', SEED_PERMISSIONS); 
     const validUserIds = new Set(this.users.map(u => u.id));
-    // userId가 유실되었거나, users 마스터 대장에 없는 유령/퇴사자 권한 찌꺼기 85건을 localStorage에서 즉각 100% 물리 삭제!
+    // userId가 유실(null)되었거나, users 마스터 대장에 없는 유령/퇴사자 권한 찌꺼기 85건을 localStorage에서 즉각 100% 물리 삭제!
     const cleanPermissions = raw.filter(p => p && p.userId && validUserIds.has(p.userId));
     if (cleanPermissions.length !== raw.length) {
       this.set('permissions', cleanPermissions);
@@ -6393,13 +6285,6 @@ class LocalDB {
         defProt = String(defProt).trim();
         changed = true;
       }
-      if (c.defaultCheckedSpecs && typeof (c.defaultCheckedSpecs as any).__protection === 'string') {
-        const storedProt = (c.defaultCheckedSpecs as any).__protection;
-        if (defProt !== storedProt) {
-          defProt = storedProt;
-          changed = true;
-        }
-      }
       let defAtt = c.defaultAttachments;
       if (Array.isArray(defAtt)) {
         defAtt = (defAtt as any[]).flat().map(s => String(s).trim()).filter(Boolean).join(', ');
@@ -6411,60 +6296,13 @@ class LocalDB {
         defAtt = (c.defaultCheckedSpecs as any).__attachments;
         changed = true;
       }
-      let defFreightStd = c.defaultFreightBillingStandard;
-      if (!defFreightStd && c.defaultCheckedSpecs && ((c.defaultCheckedSpecs as any).__freightBillingStandard === '2/4' || (c.defaultCheckedSpecs as any).__freightBillingStandard === '3/5')) {
-        defFreightStd = (c.defaultCheckedSpecs as any).__freightBillingStandard;
-        changed = true;
-      }
-      let defTaxIssueType: TaxInvoiceIssueType = c.defaultTaxInvoiceIssueType === 'REVERSE' ? 'REVERSE' : 'FORWARD';
-      if (!c.defaultTaxInvoiceIssueType && c.defaultCheckedSpecs && ((c.defaultCheckedSpecs as any).__taxInvoiceIssueType === 'FORWARD' || (c.defaultCheckedSpecs as any).__taxInvoiceIssueType === 'REVERSE')) {
-        defTaxIssueType = (c.defaultCheckedSpecs as any).__taxInvoiceIssueType;
-      } else if (!c.defaultTaxInvoiceIssueType && (!c.defaultCheckedSpecs || !(c.defaultCheckedSpecs as any).__taxInvoiceIssueType)) {
-        const cleanBizNo = String(c.bizRegNo || '').replace(/[^0-9]/g, '');
-        if (cleanBizNo === '1188100241' || (c.name || '').includes('세보엠이씨')) {
-          defTaxIssueType = 'REVERSE';
-        }
-      }
-      if (c.defaultTaxInvoiceIssueType !== defTaxIssueType) {
-        changed = true;
-      }
-      let defPaymentMethod: PaymentMethodType = (c.defaultPaymentMethod === 'BILL' || c.defaultPaymentMethod === 'BOND') ? c.defaultPaymentMethod : 'CASH';
-      if (!c.defaultPaymentMethod && c.defaultCheckedSpecs && ((c.defaultCheckedSpecs as any).__paymentMethod === 'CASH' || (c.defaultCheckedSpecs as any).__paymentMethod === 'BILL' || (c.defaultCheckedSpecs as any).__paymentMethod === 'BOND')) {
-        defPaymentMethod = (c.defaultCheckedSpecs as any).__paymentMethod;
-      }
-      let defPaymentTermsNote = c.defaultPaymentTermsNote ?? ((c.defaultCheckedSpecs && typeof (c.defaultCheckedSpecs as any).__paymentTermsNote === 'string') ? (c.defaultCheckedSpecs as any).__paymentTermsNote : '');
-      if (c.defaultPaymentMethod !== defPaymentMethod || (c.defaultPaymentTermsNote || '') !== defPaymentTermsNote) {
-        changed = true;
-      }
       let dueMonthOffset = c.paymentDueMonthOffset !== undefined && c.paymentDueMonthOffset !== null ? c.paymentDueMonthOffset : 1;
       let dueDay = c.paymentDueDay || 25;
       if (c.paymentDueMonthOffset !== dueMonthOffset || c.paymentDueDay !== dueDay) {
         changed = true;
       }
-      // 2단계 거래 차단 상태(RESTRICT_NEW / BLOCKED_ALL) 및 차단 메타데이터를 defaultCheckedSpecs에서 복원
-      let txStatus: CustomerTransactionStatus = c.transactionStatus || 'ALLOWED';
-      const storedTxStatus = c.defaultCheckedSpecs && (c.defaultCheckedSpecs as any).__transactionStatus;
-      if (txStatus === 'BLOCKED') {
-        if (storedTxStatus === 'RESTRICT_NEW' || storedTxStatus === 'BLOCKED_ALL') {
-          txStatus = storedTxStatus;
-        } else {
-          txStatus = 'BLOCKED_ALL';
-        }
-        changed = true;
-      }
-      let blkReason = c.blockedReason ?? ((c.defaultCheckedSpecs && typeof (c.defaultCheckedSpecs as any).__blockedReason === 'string' && (c.defaultCheckedSpecs as any).__blockedReason) ? (c.defaultCheckedSpecs as any).__blockedReason : undefined);
-      let blkAt = c.blockedAt ?? ((c.defaultCheckedSpecs && typeof (c.defaultCheckedSpecs as any).__blockedAt === 'string' && (c.defaultCheckedSpecs as any).__blockedAt) ? (c.defaultCheckedSpecs as any).__blockedAt : undefined);
-      let blkBy = c.blockedBy ?? ((c.defaultCheckedSpecs && typeof (c.defaultCheckedSpecs as any).__blockedBy === 'string' && (c.defaultCheckedSpecs as any).__blockedBy) ? (c.defaultCheckedSpecs as any).__blockedBy : undefined);
-      if (txStatus === 'ALLOWED') {
-        blkReason = undefined;
-        blkAt = undefined;
-        blkBy = undefined;
-      }
-      if (c.transactionStatus !== txStatus || c.blockedReason !== blkReason || c.blockedAt !== blkAt || c.blockedBy !== blkBy) {
-        changed = true;
-      }
       if (changed) {
-        return { ...c, transactionStatus: txStatus, blockedReason: blkReason, blockedAt: blkAt, blockedBy: blkBy, defaultPaidOptions: defPaid, defaultProtection: defProt, defaultAttachments: defAtt, defaultFreightBillingStandard: defFreightStd, defaultTaxInvoiceIssueType: defTaxIssueType, defaultPaymentMethod: defPaymentMethod, defaultPaymentTermsNote: defPaymentTermsNote, paymentDueMonthOffset: dueMonthOffset, paymentDueDay: dueDay };
+        return { ...c, defaultPaidOptions: defPaid, defaultProtection: defProt, defaultAttachments: defAtt, paymentDueMonthOffset: dueMonthOffset, paymentDueDay: dueDay };
       }
       return c;
     }).sort((a, b) => compareCustomerNames(a?.name, b?.name));
@@ -6478,12 +6316,6 @@ class LocalDB {
 
   get siteMasters() {
     const raw = this.get<SiteMaster>('siteMasters', []);
-    const replaceLegacyCommas = (val?: string) => {
-      if (!val || typeof val !== 'string') return val;
-      return val
-        .split('상,하부 모서리 8개소 보양').join('상·하부 모서리 8개소 보양')
-        .split('점멸등,비상하강,비상정지 청결').join('점멸등·비상하강·비상정지 청결');
-    };
     return raw.map(sm => {
       if (!sm) return sm;
       let att = sm.attachments;
@@ -6494,11 +6326,8 @@ class LocalDB {
       } else if ((att === undefined || att === null) && sm.checkedSpecs && typeof (sm.checkedSpecs as any).__attachments === 'string') {
         att = (sm.checkedSpecs as any).__attachments;
       }
-      const nextPaid = replaceLegacyCommas(sm.paidOptions);
-      const nextProt = replaceLegacyCommas(sm.protection);
-      const nextAtt = replaceLegacyCommas(att);
-      if (nextPaid !== sm.paidOptions || nextProt !== sm.protection || nextAtt !== sm.attachments) {
-        return { ...sm, paidOptions: nextPaid, protection: nextProt, attachments: nextAtt };
+      if (att !== sm.attachments) {
+        return { ...sm, attachments: att };
       }
       return sm;
     });
@@ -6507,23 +6336,11 @@ class LocalDB {
 
   get sites() {
     const raw = this.get<CustomerSite>('sites', SEED_SITES);
-    const replaceLegacyCommas = (val?: string) => {
-      if (!val || typeof val !== 'string') return val;
-      return val
-        .split('상,하부 모서리 8개소 보양').join('상·하부 모서리 8개소 보양')
-        .split('점멸등,비상하강,비상정지 청결').join('점멸등·비상하강·비상정지 청결');
-    };
     
     return raw.map(s => {
       if (!s) return s;
       
       let changed = false;
-      let specs = s.checkedSpecs;
-      if (Array.isArray(specs)) {
-        specs = {};
-        changed = true;
-      }
-
       let paid = s.paidOptions;
       if (Array.isArray(paid)) {
         paid = (paid as any[]).flat().map(v => String(v).trim()).filter(Boolean).join(', ');
@@ -6532,8 +6349,6 @@ class LocalDB {
         paid = String(paid);
         changed = true;
       }
-      const normPaid = replaceLegacyCommas(paid);
-      if (normPaid !== paid) { paid = normPaid; changed = true; }
 
       let prot = s.protection;
       if (Array.isArray(prot)) {
@@ -6543,15 +6358,12 @@ class LocalDB {
         prot = String(prot);
         changed = true;
       }
-      if (specs && typeof (specs as any).__protection === 'string') {
-        const storedProt = (specs as any).__protection;
-        if (prot !== storedProt) {
-          prot = storedProt;
-          changed = true;
-        }
+
+      let specs = s.checkedSpecs;
+      if (Array.isArray(specs)) {
+        specs = {};
+        changed = true;
       }
-      const normProt = replaceLegacyCommas(prot);
-      if (normProt !== prot) { prot = normProt; changed = true; }
 
       let att = s.attachments;
       if (Array.isArray(att)) {
@@ -6564,100 +6376,14 @@ class LocalDB {
         att = (specs as any).__attachments;
         changed = true;
       }
-      const normAtt = replaceLegacyCommas(att);
-      if (normAtt !== att) { att = normAtt; changed = true; }
-
-      let freightStd = s.freightBillingStandard;
-      if (!freightStd && specs && ((specs as any).__freightBillingStandard === '2/4' || (specs as any).__freightBillingStandard === '3/5')) {
-        freightStd = (specs as any).__freightBillingStandard;
-        changed = true;
-      }
-
-      let taxIssueType: TaxInvoiceIssueType = s.taxInvoiceIssueType === 'REVERSE' ? 'REVERSE' : 'FORWARD';
-      if (!s.taxInvoiceIssueType && specs && ((specs as any).__taxInvoiceIssueType === 'FORWARD' || (specs as any).__taxInvoiceIssueType === 'REVERSE')) {
-        taxIssueType = (specs as any).__taxInvoiceIssueType;
-      } else if (!s.taxInvoiceIssueType && (!specs || !(specs as any).__taxInvoiceIssueType)) {
-        if (s.customerId === 'CUST-0000022') {
-          taxIssueType = 'REVERSE';
-        }
-      }
-      if (s.taxInvoiceIssueType !== taxIssueType) {
-        changed = true;
-      }
-
-      let payMethod: PaymentMethodType = (s.paymentMethod === 'BILL' || s.paymentMethod === 'BOND') ? s.paymentMethod : 'CASH';
-      if (!s.paymentMethod && specs && ((specs as any).__paymentMethod === 'CASH' || (specs as any).__paymentMethod === 'BILL' || (specs as any).__paymentMethod === 'BOND')) {
-        payMethod = (specs as any).__paymentMethod;
-      }
-      let payNote = s.paymentTermsNote ?? ((specs && typeof (specs as any).__paymentTermsNote === 'string') ? (specs as any).__paymentTermsNote : '');
-      if (s.paymentMethod !== payMethod || (s.paymentTermsNote || '') !== payNote) {
-        changed = true;
-      }
 
       const isActiveVal = s.isActive !== false;
       if (s.isActive === undefined) {
         changed = true;
       }
 
-      // contacts 배열에서 장비담당자(EQUIPMENT), 마감담당자(CLOSING) 및 안전담당자(SAFETY) 플랫 필드 자동 복원
-      let contactName = s.contactName;
-      let contact = s.contact;
-      let email = s.email;
-      let billingContactName = s.billingContactName;
-      let billingContactPhone = s.billingContactPhone;
-      let billingContactEmail = s.billingContactEmail;
-      let safetyContactName = s.safetyContactName;
-      let safetyContactPhone = s.safetyContactPhone;
-      let safetyContactEmail = s.safetyContactEmail;
-
-      if (Array.isArray(s.contacts) && s.contacts.length > 0) {
-        const eq = s.contacts.find(c => c && c.contactType === 'EQUIPMENT' && c.isActive !== false && (c.name || c.contact))
-          || s.contacts.find(c => c && c.isPrimary && c.isActive !== false && (c.name || c.contact))
-          || s.contacts.find(c => c && c.isActive !== false && (c.name || c.contact))
-          || s.contacts.find(c => c && (c.name || c.contact));
-        if (eq) {
-          if (!contactName && eq.name) { contactName = eq.name; changed = true; }
-          if (!contact && eq.contact) { contact = eq.contact; changed = true; }
-          if (!email && eq.email) { email = eq.email; changed = true; }
-        }
-        const closing = s.contacts.find(c => c && c.contactType === 'CLOSING' && c.isActive !== false)
-          || s.contacts.find(c => c && c.contactType === 'CLOSING');
-        if (closing) {
-          if (!billingContactName && closing.name) { billingContactName = closing.name; changed = true; }
-          if (!billingContactPhone && closing.contact) { billingContactPhone = closing.contact; changed = true; }
-          if (!billingContactEmail && closing.email) { billingContactEmail = closing.email; changed = true; }
-        }
-        const safety = s.contacts.find(c => c && c.contactType === 'SAFETY' && c.isActive !== false)
-          || s.contacts.find(c => c && c.contactType === 'SAFETY');
-        if (safety) {
-          if (!safetyContactName && safety.name) { safetyContactName = safety.name; changed = true; }
-          if (!safetyContactPhone && safety.contact) { safetyContactPhone = safety.contact; changed = true; }
-          if (!safetyContactEmail && safety.email) { safetyContactEmail = safety.email; changed = true; }
-        }
-      }
-
       if (changed) {
-        return {
-          ...s,
-          paidOptions: paid,
-          protection: prot,
-          attachments: att,
-          checkedSpecs: specs,
-          freightBillingStandard: freightStd,
-          taxInvoiceIssueType: taxIssueType,
-          paymentMethod: payMethod,
-          paymentTermsNote: payNote,
-          isActive: isActiveVal,
-          contactName,
-          contact,
-          email,
-          billingContactName,
-          billingContactPhone,
-          billingContactEmail,
-          safetyContactName,
-          safetyContactPhone,
-          safetyContactEmail
-        };
+        return { ...s, paidOptions: paid, protection: prot, attachments: att, checkedSpecs: specs, isActive: isActiveVal };
       }
       return s;
     });
@@ -6670,16 +6396,7 @@ class LocalDB {
   get products() { return this.get<Product>('products', SEED_PRODUCTS); }
   set products(val: Product[]) { this.set('products', val); }
 
-  get assets() {
-    const raw = this.get<Asset>('assets', SEED_ASSETS);
-    return raw.map(a => {
-      if (!a) return a;
-      if (!a.yard || String(a.yard).trim() === '') {
-        return { ...a, yard: '용인' };
-      }
-      return a;
-    });
-  }
+  get assets() { return this.get<Asset>('assets', SEED_ASSETS); }
   set assets(val: Asset[]) { this.set('assets', val); }
 
   get inspectionChecklistItems() {
@@ -6689,23 +6406,8 @@ class LocalDB {
 
   get standardOptions() {
     const list = this.get<StandardOption>('standardOptions', []);
-    let changed = false;
-    const filtered = list
-      .filter(o => {
-        if (!o || /^opt_(paid|prot|att)_/.test(String(o.id || ''))) {
-          changed = true;
-          return false;
-        }
-        return true;
-      })
-      .map(o => {
-        if (o.name && o.name.includes(',')) {
-          changed = true;
-          return { ...o, name: o.name.replace(/\s*,\s*/g, '·') };
-        }
-        return o;
-      });
-    if (changed) {
+    const filtered = list.filter(o => o && !/^opt_(paid|prot|att)_/.test(String(o.id || '')));
+    if (filtered.length !== list.length) {
       this.set('standardOptions', filtered);
     }
     return filtered;
@@ -6725,17 +6427,11 @@ class LocalDB {
   get consumablePurchases() { return this.get<ConsumablePurchaseRequest>('consumablePurchases', SEED_CONSUMABLE_PURCHASES); }
   set consumablePurchases(val: ConsumablePurchaseRequest[]) { this.set('consumablePurchases', val); }
 
-  get mechanicConsumableStocks() { return this.get<MechanicConsumableStock>('mechanicConsumableStocks', []); }
-  set mechanicConsumableStocks(val: MechanicConsumableStock[]) { this.set('mechanicConsumableStocks', val); }
-
   get stocktakingAudits() { return this.get<StocktakingAudit>('stocktakingAudits', []); }
   set stocktakingAudits(val: StocktakingAudit[]) { this.set('stocktakingAudits', val); }
 
   get stocktakingAuditItems() { return this.get<StocktakingAuditItem>('stocktakingAuditItems', []); }
   set stocktakingAuditItems(val: StocktakingAuditItem[]) { this.set('stocktakingAuditItems', val); }
-
-  get collectedParts() { return this.get<CollectedPart>('collectedParts', []); }
-  set collectedParts(val: CollectedPart[]) { this.set('collectedParts', val); }
 
   get contracts() { 
     const raw = this.get<Contract>('contracts', SEED_CONTRACTS);
@@ -6759,31 +6455,7 @@ class LocalDB {
   get contractHistories() { return this.contractHistory; }
   set contractHistories(val: ContractHistory[]) { this.contractHistory = val; }
 
-  get deliveries() {
-    const raw = this.get<Delivery>('deliveries', SEED_DELIVERIES);
-    return raw.map(d => {
-      if (!d) return d;
-      if (d.memo && typeof d.memo === 'string') {
-        const bMatch = d.memo.match(/\[BUNDLE:([^|\]]+)\|(\d+)\|([^|\]]+)\]/);
-        if (bMatch) {
-          const parsedGroupId = bMatch[1].trim();
-          const parsedOrder = parseInt(bMatch[2], 10);
-          const parsedOrigCat = bMatch[3].trim() as any;
-          const cleanMemo = d.memo.replace(/\s*\[BUNDLE:[^\]]+\]/g, '').trim();
-          return {
-            ...d,
-            memo: cleanMemo,
-            bundleGroupId: d.bundleGroupId !== undefined ? d.bundleGroupId : parsedGroupId,
-            bundleOrder: d.bundleOrder !== undefined ? d.bundleOrder : (isNaN(parsedOrder) ? 1 : parsedOrder),
-            originalDispatchCategory: d.originalDispatchCategory || parsedOrigCat,
-            dispatchCategory: d.bundleGroupId === null ? d.dispatchCategory : ('경유/합짐' as const),
-            dropoffType: d.bundleGroupId === null ? d.dropoffType : (d.dropoffType || 'MULTI_STOP')
-          };
-        }
-      }
-      return d;
-    });
-  }
+  get deliveries() { return this.get<Delivery>('deliveries', SEED_DELIVERIES); }
   set deliveries(val: Delivery[]) { this.set('deliveries', val); }
 
   get transportCompanies() { return this.get<TransportCompany>('transportCompanies', SEED_TRANSPORT_COMPANIES); }
@@ -6827,7 +6499,7 @@ class LocalDB {
 
   get repairs() {
     const list = this.get<Repair>('repairs', SEED_REPAIRS);
-    // 🌟 현장 도로명 주소 보강 (원격 DB 미반영 환경에서도 무누락 상속)
+    // 🌟 현장 도로명 주소(siteAddress) 보강 (원격 DB 미반영 환경에서도 무누락 상속)
     return list.map(r => {
       if (r.siteAddress && r.siteAddress.trim()) return r;
       let addr = '';
@@ -6866,10 +6538,7 @@ class LocalDB {
     const tenantsList = this.tenants || [];
     const byId = new Map<string, OfficialMailConfig>();
     for (const c of cached) {
-      if (c && (c.id || c.tenantId)) {
-        const normKey = c.tenantId ? `cfg-${c.tenantId}` : c.id;
-        byId.set(normKey, { ...c, id: normKey });
-      }
+      if (c && c.id) byId.set(c.id, c);
     }
     for (const t of tenantsList) {
       if (!t || !t.id) continue;
@@ -6881,24 +6550,24 @@ class LocalDB {
         byId.set(cfgId, {
           id: cfgId,
           tenantId: t.id,
-          googleEmail: mailCfg?.googleEmail || prev.googleEmail || '',
-          googlePassword: mailCfg?.googlePassword || prev.googlePassword || '',
-          gmailAppPassword: mailCfg?.gmailAppPassword || prev.gmailAppPassword || '',
-          smtpProvider: mailCfg?.smtpProvider || prev.smtpProvider || 'NAVER',
-          smtpHost: mailCfg?.smtpHost || prev.smtpHost || 'smtp.naver.com',
-          smtpPort: mailCfg?.smtpPort || prev.smtpPort || 465,
+          googleEmail: mailCfg?.googleEmail ?? prev.googleEmail ?? '',
+          googlePassword: mailCfg?.googlePassword ?? prev.googlePassword ?? '',
+          gmailAppPassword: mailCfg?.gmailAppPassword ?? prev.gmailAppPassword ?? '',
+          smtpProvider: mailCfg?.smtpProvider ?? prev.smtpProvider ?? 'NAVER',
+          smtpHost: mailCfg?.smtpHost ?? prev.smtpHost ?? 'smtp.naver.com',
+          smtpPort: mailCfg?.smtpPort ?? prev.smtpPort ?? 465,
           contractFolder: mailCfg?.contractFolder ?? prev.contractFolder ?? '렌탈계약서_증빙',
           consumableFolder: mailCfg?.consumableFolder ?? prev.consumableFolder ?? '소모품납품증빙',
           deliveryFolder: mailCfg?.deliveryFolder ?? prev.deliveryFolder ?? '출고의뢰_증빙',
           maintenanceFolder: mailCfg?.maintenanceFolder ?? prev.maintenanceFolder ?? '정비보고서_증빙',
           isDevMode: mailCfg?.isDevMode ?? prev.isDevMode ?? true,
           mirrorRecursive: mailCfg?.mirrorRecursive ?? prev.mirrorRecursive ?? true,
-          r2AccountId: r2Cfg?.r2AccountId || mailCfg?.r2AccountId || prev.r2AccountId || '',
-          r2BucketName: r2Cfg?.r2BucketName || mailCfg?.r2BucketName || prev.r2BucketName || '',
-          r2AccessKeyId: r2Cfg?.r2AccessKeyId || mailCfg?.r2AccessKeyId || prev.r2AccessKeyId || '',
-          r2SecretAccessKey: r2Cfg?.r2SecretAccessKey || mailCfg?.r2SecretAccessKey || prev.r2SecretAccessKey || '',
-          r2PublicDomain: r2Cfg?.r2PublicDomain || mailCfg?.r2PublicDomain || prev.r2PublicDomain || '',
-          updatedAt: mailCfg?.updatedAt || r2Cfg?.updatedAt || t.updatedAt || prev.updatedAt || '2026-01-01T00:00:00.000Z'
+          r2AccountId: r2Cfg?.r2AccountId ?? mailCfg?.r2AccountId ?? prev.r2AccountId ?? '',
+          r2BucketName: r2Cfg?.r2BucketName ?? mailCfg?.r2BucketName ?? prev.r2BucketName ?? '',
+          r2AccessKeyId: r2Cfg?.r2AccessKeyId ?? mailCfg?.r2AccessKeyId ?? prev.r2AccessKeyId ?? '',
+          r2SecretAccessKey: r2Cfg?.r2SecretAccessKey ?? mailCfg?.r2SecretAccessKey ?? prev.r2SecretAccessKey ?? '',
+          r2PublicDomain: r2Cfg?.r2PublicDomain ?? mailCfg?.r2PublicDomain ?? prev.r2PublicDomain ?? '',
+          updatedAt: mailCfg?.updatedAt || r2Cfg?.updatedAt || t.updatedAt || prev.updatedAt || new Date().toISOString()
         });
       }
     }
@@ -6917,7 +6586,7 @@ class LocalDB {
 
   // 💡 [Zero Silent Failures / 1000-Row Pagination Bug Fix]
   // Supabase의 기본 select('*')는 최대 1000건까지만 반환합니다.
-  // 데이터가 1000건을 초과하면 이후 생성된 데이터가 프론트엔드에 동기화되지 않고 무음 누락되는 심각한 결함이 있었습니다.
+  // 데이터가 1000건을 초과하면 이후 생성된 데이터가 프론트엔드에 동기화되지 않고 무음 누락(Silent Drop)되는 심각한 결함이 있었습니다.
   // 이를 해결하기 위해 while 문과 range()를 사용하여 테이블의 모든 레코드를 페이지네이션으로 100% 무누락 조회합니다.
   private async fetchAllFromSupabase(tableName: string): Promise<any[]> {
     if (!supabase) return [];
@@ -6928,7 +6597,6 @@ class LocalDB {
       const { data, error } = await supabase
         .from(tableName)
         .select('*')
-        .order('id', { ascending: true })
         .range(page * pageSize, (page + 1) * pageSize - 1);
         
       if (error) {
@@ -7002,17 +6670,9 @@ class LocalDB {
   get developerAuthorizedDevices() { return this.get<DeveloperDeviceProfile>('developerAuthorizedDevices', SEED_DEVELOPER_AUTHORIZED_DEVICES); }
   set developerAuthorizedDevices(val: DeveloperDeviceProfile[]) { this.set('developerAuthorizedDevices', val); }
 
-  get salesJournals() { return this.get<SalesJournal>('salesJournals', []); }
-  set salesJournals(val: SalesJournal[]) { this.set('salesJournals', val); }
-
-  get asRouteLogs() { return this.get<AsRouteLog>('asRouteLogs', []); }
-  set asRouteLogs(val: AsRouteLog[]) { this.set('asRouteLogs', val); }
-
   // Supabase 테이블 맵핑
   private mapToSupabaseTable(key: string): string {
     const mapping: Record<string, string> = {
-      asRouteLogs: 'as_route_logs',
-      salesJournals: 'sales_journals',
       monthlyIncomeStatements: 'monthly_income_statements',
       errorReports: 'error_reports',
       privacyAccessLogs: 'privacy_access_logs',
@@ -7063,7 +6723,6 @@ class LocalDB {
       settlementPaymentLogs: 'settlement_payment_logs',
       externalLeases: 'external_leases',
       inspectionChecklistItems: 'inspection_checklist_items',
-      mechanicConsumableStocks: 'mechanic_consumable_stocks',
       receivables: 'receivables',
       annualLeaveQuotas: 'annual_leave_quotas',
       leaveUsages: 'leave_usages',
@@ -7074,7 +6733,6 @@ class LocalDB {
       vehicleFuelLogs: 'vehicle_fuel_logs',
       stocktakingAudits: 'stocktaking_audits',
       stocktakingAuditItems: 'stocktaking_audit_items',
-      collectedParts: 'collected_parts',
       equipmentManuals: 'equipment_manuals',
       standardOptions: 'standard_options',
       approvalRules: 'approval_rules',
@@ -7100,7 +6758,7 @@ class LocalDB {
       console.error("Supabase pending write error:", err);
       const errMsg = err?.message || String(err);
       if (errMsg.includes('Failed to fetch') || errMsg.includes('NetworkError')) {
-        throw new Error(`원격 Supabase DB 통신 장애:\n\n인터넷 네트워크 연결 상태, 사내 방화벽 정책 또는 Supabase 서버 상태를 확인해 주세요.\n(로컬 데이터는 안전하게 보존되었습니다.)`);
+        throw new Error(`원격 Supabase DB 통신 장애 (Failed to fetch):\n\n인터넷 네트워크 연결 상태, 사내 방화벽 정책 또는 Supabase 서버 상태를 확인해 주세요.\n(로컬 데이터는 안전하게 보존되었습니다.)`);
       }
       throw err;
     } finally {
@@ -7216,33 +6874,14 @@ class LocalDB {
     }
 
     // consumables 호환 (name ➔ modelName, supplier 추론) - 반드시 consumables 테이블에만 한정 적용
-    if (tableName === 'assets') {
-      if (!normalized.assetNature) {
-        normalized.assetNature = isVirtualAsset(normalized) ? 'VIRTUAL' : 'PHYSICAL';
-      }
-      if (!normalized.yard || String(normalized.yard).trim() === '') {
-        normalized.yard = '용인';
-      }
-    }
-    if (tableName === 'deliveries' && normalized.memo && typeof normalized.memo === 'string') {
-      const bMatch = normalized.memo.match(/\[BUNDLE:([^|\]]+)\|(\d+)\|([^|\]]+)\]/);
-      if (bMatch) {
-        if (!normalized.bundleGroupId) normalized.bundleGroupId = bMatch[1].trim();
-        if (!normalized.bundleOrder) normalized.bundleOrder = parseInt(bMatch[2], 10) || 1;
-        if (!normalized.originalDispatchCategory) normalized.originalDispatchCategory = bMatch[3].trim();
-        normalized.dispatchCategory = '경유/합짐';
-        if (!normalized.dropoffType) normalized.dropoffType = 'MULTI_STOP';
-        normalized.memo = normalized.memo.replace(/\s*\[BUNDLE:[^\]]+\]/g, '').trim();
-      }
-    }
     if (tableName === 'consumables') {
       if (normalized.name && !normalized.modelName) {
         normalized.modelName = normalized.name;
       }
       if (normalized.modelName && !normalized.supplier) {
         if (normalized.modelName.includes('JLG')) normalized.supplier = 'JLG';
-        else if (normalized.modelName.includes('지니')) normalized.supplier = '지니';
-        else if (normalized.modelName.includes('스카이잭')) normalized.supplier = '스카이잭';
+        else if (normalized.modelName.includes('지니')) normalized.supplier = '지니 (Genie)';
+        else if (normalized.modelName.includes('스카이잭')) normalized.supplier = '스카이잭 (Skyjack)';
         else normalized.supplier = '공용';
       }
     }
@@ -7261,21 +6900,6 @@ class LocalDB {
       } else if (typeof normalized.protection !== 'string') {
         normalized.protection = String(normalized.protection).trim();
       }
-    }
-    if (normalized.checkedSpecs && typeof normalized.checkedSpecs === 'object' && typeof normalized.checkedSpecs.__protection === 'string') {
-      normalized.protection = normalized.checkedSpecs.__protection;
-    }
-    if (!normalized.freightBillingStandard && normalized.checkedSpecs && typeof normalized.checkedSpecs === 'object' && (normalized.checkedSpecs.__freightBillingStandard === '2/4' || normalized.checkedSpecs.__freightBillingStandard === '3/5')) {
-      normalized.freightBillingStandard = normalized.checkedSpecs.__freightBillingStandard;
-    }
-    if (!normalized.taxInvoiceIssueType && normalized.checkedSpecs && typeof normalized.checkedSpecs === 'object' && (normalized.checkedSpecs.__taxInvoiceIssueType === 'FORWARD' || normalized.checkedSpecs.__taxInvoiceIssueType === 'REVERSE')) {
-      normalized.taxInvoiceIssueType = normalized.checkedSpecs.__taxInvoiceIssueType;
-    }
-    if (!normalized.paymentMethod && normalized.checkedSpecs && typeof normalized.checkedSpecs === 'object' && (normalized.checkedSpecs.__paymentMethod === 'CASH' || normalized.checkedSpecs.__paymentMethod === 'BILL' || normalized.checkedSpecs.__paymentMethod === 'BOND')) {
-      normalized.paymentMethod = normalized.checkedSpecs.__paymentMethod;
-    }
-    if (normalized.paymentTermsNote === undefined && normalized.checkedSpecs && typeof normalized.checkedSpecs === 'object' && typeof normalized.checkedSpecs.__paymentTermsNote === 'string') {
-      normalized.paymentTermsNote = normalized.checkedSpecs.__paymentTermsNote;
     }
     if (normalized.attachments !== undefined && normalized.attachments !== null) {
       if (Array.isArray(normalized.attachments)) {
@@ -7299,21 +6923,6 @@ class LocalDB {
       } else if (typeof normalized.defaultProtection !== 'string') {
         normalized.defaultProtection = String(normalized.defaultProtection).trim();
       }
-    }
-    if (normalized.defaultCheckedSpecs && typeof normalized.defaultCheckedSpecs === 'object' && typeof normalized.defaultCheckedSpecs.__protection === 'string') {
-      normalized.defaultProtection = normalized.defaultCheckedSpecs.__protection;
-    }
-    if (!normalized.defaultFreightBillingStandard && normalized.defaultCheckedSpecs && typeof normalized.defaultCheckedSpecs === 'object' && (normalized.defaultCheckedSpecs.__freightBillingStandard === '2/4' || normalized.defaultCheckedSpecs.__freightBillingStandard === '3/5')) {
-      normalized.defaultFreightBillingStandard = normalized.defaultCheckedSpecs.__freightBillingStandard;
-    }
-    if (!normalized.defaultTaxInvoiceIssueType && normalized.defaultCheckedSpecs && typeof normalized.defaultCheckedSpecs === 'object' && (normalized.defaultCheckedSpecs.__taxInvoiceIssueType === 'FORWARD' || normalized.defaultCheckedSpecs.__taxInvoiceIssueType === 'REVERSE')) {
-      normalized.defaultTaxInvoiceIssueType = normalized.defaultCheckedSpecs.__taxInvoiceIssueType;
-    }
-    if (!normalized.defaultPaymentMethod && normalized.defaultCheckedSpecs && typeof normalized.defaultCheckedSpecs === 'object' && (normalized.defaultCheckedSpecs.__paymentMethod === 'CASH' || normalized.defaultCheckedSpecs.__paymentMethod === 'BILL' || normalized.defaultCheckedSpecs.__paymentMethod === 'BOND')) {
-      normalized.defaultPaymentMethod = normalized.defaultCheckedSpecs.__paymentMethod;
-    }
-    if (normalized.defaultPaymentTermsNote === undefined && normalized.defaultCheckedSpecs && typeof normalized.defaultCheckedSpecs === 'object' && typeof normalized.defaultCheckedSpecs.__paymentTermsNote === 'string') {
-      normalized.defaultPaymentTermsNote = normalized.defaultCheckedSpecs.__paymentTermsNote;
     }
     if (normalized.defaultAttachments !== undefined && normalized.defaultAttachments !== null) {
       if (Array.isArray(normalized.defaultAttachments)) {
@@ -7344,39 +6953,6 @@ class LocalDB {
         if (!normalized.specialFeatures && normalized.features?.specialFeatures) {
           normalized.specialFeatures = normalized.features.specialFeatures;
         }
-        if (normalized.allowContractTradeOutbound === undefined) {
-          normalized.allowContractTradeOutbound = normalized.features?.allowContractTradeOutbound ?? true;
-        }
-        if (
-          normalized.allowContractTradeOutbound !== false &&
-          Array.isArray(normalized.specialFeatures) &&
-          !normalized.specialFeatures.includes('btn:contracts:trade_outbound') &&
-          normalized.features?.allowContractTradeOutbound !== false
-        ) {
-          normalized.specialFeatures = [...normalized.specialFeatures, 'btn:contracts:trade_outbound'];
-        }
-        if (normalized.id === 'tenant-giyeonlift' || normalized.id === 'tenant-ebro-awp') {
-          const tradeMenus = [
-            'trade_products',
-            'trade_purchases',
-            'trade_contracts',
-            'trade_outbounds',
-            'courier_dispatch',
-            'trade_billing',
-            'trade_returns',
-            'trade_profitability'
-          ];
-          if (Array.isArray(normalized.allowedPages) && normalized.allowedPages.length > 0) {
-            const nextAllowed = [...normalized.allowedPages];
-            tradeMenus.forEach(tm => {
-              if (!nextAllowed.includes(tm)) nextAllowed.push(tm);
-            });
-            normalized.allowedPages = nextAllowed;
-          }
-          if (Array.isArray(normalized.hiddenPages)) {
-            normalized.hiddenPages = normalized.hiddenPages.filter((hm: string) => !tradeMenus.includes(hm));
-          }
-        }
         if (!normalized.excelMappingRules && normalized.features?.excelMappingRules) {
           normalized.excelMappingRules = normalized.features.excelMappingRules;
         }
@@ -7404,13 +6980,10 @@ class LocalDB {
     return normalized;
   }
 
-  private inFlightTablePulls = new Map<string, Promise<any[] | null>>();
-
   // 단일 테이블만 Supabase에서 pull (메뉴 전환 시 관련 테이블만 선택적 로딩용)
   /**
    * Supabase PostgREST 기본 1,000건 제한을 극복하여 대용량 테이블(billing_details 등)의 전체 레코드를 무누락 전수 로드합니다.
    * 중앙 플랫폼 테이블(tenants 등)은 centralSupabase(ebro-platform-core)에서 직접 조회합니다.
-   * 일시적 네트워크 순단(TypeError: Failed to fetch 등) 발생 시 최대 3회 지수 백오프 재시도를 수행합니다.
    */
   private async fetchAllRowsFromSupabase(tableName: string): Promise<any[]> {
     const targetClient = CENTRAL_TABLE_NAMES.has(tableName) ? centralSupabase : supabase;
@@ -7420,54 +6993,14 @@ class LocalDB {
     let from = 0;
 
     while (true) {
-      let data: any[] | null = null;
-      let lastError: any = null;
-      const MAX_RETRIES = 3;
+      const { data, error } = await targetClient
+        .from(tableName)
+        .select('*')
+        .range(from, from + PAGE_SIZE - 1);
 
-      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-        try {
-          const res = await targetClient
-            .from(tableName)
-            .select('*')
-            .order('id', { ascending: true })
-            .range(from, from + PAGE_SIZE - 1);
-
-          if (!res.error) {
-            data = res.data;
-            lastError = null;
-            break;
-          }
-          lastError = res.error;
-        } catch (err: any) {
-          lastError = err;
-        }
-
-        const errMsg = String(lastError?.message || lastError || '');
-        const isTransientNetworkError =
-          errMsg.includes('Failed to fetch') ||
-          errMsg.includes('NetworkError') ||
-          errMsg.includes('Load failed') ||
-          errMsg.includes('fetch failed') ||
-          errMsg.includes('502') ||
-          errMsg.includes('503') ||
-          errMsg.includes('504') ||
-          errMsg.includes('520');
-
-        if (!isTransientNetworkError || attempt === MAX_RETRIES) {
-          break;
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 250 * attempt));
-      }
-
-      if (lastError) {
-        const errMsg = String(lastError?.message || lastError || '');
-        if (tableName === 'as_route_logs' && (errMsg.includes('Could not find') || errMsg.includes('relation') || lastError?.code === 'PGRST205' || lastError?.code === '42P01')) {
-          await autoApplyAsRouteLogsDdl();
-          return [];
-        }
-        console.error(`[db.ts] Supabase fetchAllRows failed for ${tableName} (range ${from}-${from + PAGE_SIZE - 1}):`, lastError);
-        throw new Error(`[Supabase DB 조회 실패] ${tableName}\n\n사유: ${lastError.message || String(lastError)}`);
+      if (error) {
+        console.error(`[db.ts] Supabase fetchAllRows failed for ${tableName} (range ${from}-${from + PAGE_SIZE - 1}):`, error);
+        throw new Error(`[Supabase DB 조회 실패] ${tableName}\n\n사유: ${error.message || String(error)}`);
       }
 
       if (!data || data.length === 0) break;
@@ -7480,48 +7013,34 @@ class LocalDB {
     return allRows;
   }
 
-  // 단일 테이블만 Supabase에서 pull (메뉴 전환 시 관련 테이블만 선택적 로딩용 — 중복 동시 호출 병합)
+  // 단일 테이블만 Supabase에서 pull (메뉴 전환 시 관련 테이블만 선택적 로딩용)
   async pullTableFromSupabase(key: string): Promise<any[] | null> {
-    const existing = this.inFlightTablePulls.get(key);
-    if (existing) {
-      return existing;
-    }
-
-    const promise = (async () => {
-      try {
-        const tableName = this.mapToSupabaseTable(key);
-        const targetClient = CENTRAL_TABLE_NAMES.has(tableName) ? centralSupabase : supabase;
-        if (!targetClient) return null;
-        const data = await this.fetchAllRowsFromSupabase(tableName);
-        let normalizedData = this.normalizePayloadKeys(data, tableName);
-        if (key === 'customRoles' && (!normalizedData || normalizedData.length === 0)) {
-          normalizedData = SEED_CUSTOM_ROLES;
-          const { error } = await targetClient.from('custom_roles').upsert(
-            SEED_CUSTOM_ROLES.map(r => this.sanitizeSupabasePayload(r, 'custom_roles')),
-            { onConflict: 'id' }
-          );
-          if (error) {
-            throw new Error(`[Supabase custom_roles 초기 시드 저장 실패]: ${error.message}`);
-          }
-        } else if (key === 'rolePermissions' && (!normalizedData || normalizedData.length === 0)) {
-          normalizedData = SEED_ROLE_PERMISSIONS;
-        }
-        this.set(key as keyof LocalDB, normalizedData);
-        return normalizedData;
-      } finally {
-        this.inFlightTablePulls.delete(key);
+    const tableName = this.mapToSupabaseTable(key);
+    const targetClient = CENTRAL_TABLE_NAMES.has(tableName) ? centralSupabase : supabase;
+    if (!targetClient) return null;
+    const data = await this.fetchAllRowsFromSupabase(tableName);
+    let normalizedData = this.normalizePayloadKeys(data, tableName);
+    if (key === 'customRoles' && (!normalizedData || normalizedData.length === 0)) {
+      normalizedData = SEED_CUSTOM_ROLES;
+      const { error } = await targetClient.from('custom_roles').upsert(
+        SEED_CUSTOM_ROLES.map(r => this.sanitizeSupabasePayload(r, 'custom_roles')),
+        { onConflict: 'id' }
+      );
+      if (error) {
+        throw new Error(`[Supabase custom_roles 초기 시드 저장 실패]: ${error.message}`);
       }
-    })();
-
-    this.inFlightTablePulls.set(key, promise);
-    return promise;
+    } else if (key === 'rolePermissions' && (!normalizedData || normalizedData.length === 0)) {
+      normalizedData = SEED_ROLE_PERMISSIONS;
+    }
+    this.set(key as keyof LocalDB, normalizedData);
+    return normalizedData;
   }
 
 
   async pullFromSupabase(): Promise<void> {
     if (!supabase && !centralSupabase) return;
 
-    // 대기 중인 모든 로컬 백그라운드 쓰기가 완료될 때까지 대기
+    // 대기 중인 모든 로컬 백그라운드 쓰기(insert/update/delete)가 완료될 때까지 대기
     if (this.pendingWrites.length > 0) {
       await this.awaitPendingWrites();
     }
@@ -7566,7 +7085,7 @@ class LocalDB {
     }
 
     if (pullErrors.length > 0) {
-      throw new Error(`[원격 DB 동기화 오류 발생]\n\n${pullErrors.join('\n')}`);
+      throw new Error(`[원격 DB 동기화(Pull) 오류 발생]\n\n${pullErrors.join('\n')}`);
     }
   }
 
@@ -7658,20 +7177,11 @@ class LocalDB {
       case 'privacyAccessLogs':   prefix = 'PLOG-';   break;
       case 'errorReports':        prefix = 'ERR-';    break;
       case 'monthlyIncomeStatements': prefix = 'IS-'; break;
-      case 'salesJournals':       prefix = 'SJ-';     break;
       default:
         prefix = key.slice(0, 4).toUpperCase() + '-';
     }
 
-    const hwmKey = `ebro_id_hwm_${key}`;
     let maxNum = 0;
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        const savedHwm = parseInt(window.localStorage.getItem(hwmKey) || '0', 10);
-        if (!isNaN(savedHwm) && savedHwm > maxNum) maxNum = savedHwm;
-      }
-    } catch {}
-
     const regex = new RegExp(`^${prefix}(\\d+)`, 'i');
     const fallbackRegex = new RegExp(`^${key.slice(0, 4)}-(\\d+)`, 'i');
 
@@ -7689,37 +7199,7 @@ class LocalDB {
       }
     });
 
-    // contractAssets(CAST-) 채번 시 삭제된 슬롯 ID가 재사용되어 타 배차 cargoItems와 충돌하는 현상 원천 차단
-    if (key === 'contractAssets') {
-      (this.deliveries || []).forEach((d: any) => {
-        if (!d?.cargoItems) return;
-        const cargoRaw = typeof d.cargoItems === 'string' ? d.cargoItems : JSON.stringify(d.cargoItems);
-        const matches = cargoRaw.match(/CAST-(\d+)/gi);
-        if (matches) {
-          matches.forEach(m => {
-            const num = parseInt(m.replace(/^CAST-/i, ''), 10);
-            if (!isNaN(num) && num > maxNum) maxNum = num;
-          });
-        }
-      });
-      (this.outboundInspections || []).forEach((ins: any) => {
-        const caId = ins?.contractAssetId;
-        if (typeof caId === 'string') {
-          const m = caId.match(regex);
-          if (m) {
-            const num = parseInt(m[1], 10);
-            if (!isNaN(num) && num > maxNum) maxNum = num;
-          }
-        }
-      });
-    }
-
     const nextNum = maxNum + 1;
-    try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(hwmKey, String(nextNum));
-      }
-    } catch {}
     const paddedNum = String(nextNum).padStart(7, '0');
     return `${prefix}${paddedNum}`;
   }
@@ -7743,15 +7223,6 @@ class LocalDB {
       // contracts 테이블 프론트엔드 전용 상태 필드 및 구버전/미존재 컬럼 격리
       if (resolvedTable === 'contracts' && ['packageSentAt', 'approvalStatus', 'approvalRequestId', 'stagedExtend', 'saleTerms', 'paymentDay'].includes(key)) { continue; }
       if (resolvedTable === 'contract_history' && ['approvalStatus', 'approvalRequestId'].includes(key)) { continue; }
-      if (resolvedTable === 'contract_history' && key === 'changeType') {
-        const LEGACY_SAFE_CHANGE_TYPE_MAP: Record<string, string> = {
-          MONTHLY_CHECKLIST_SENT: 'DOCUMENT_SENT',
-          ADD_ASSET: 'REGISTER',
-          ASSET_PERIOD_CHANGE: 'EXTEND'
-        };
-        sanitized['changeType'] = LEGACY_SAFE_CHANGE_TYPE_MAP[String(val)] || val;
-        continue;
-      }
       if (resolvedTable === 'contract_assets' && ['outboundDeliveryId', 'inboundDeliveryId'].includes(key)) { continue; }
       if (resolvedTable === 'contract_assets' && key === 'assetId' && (val === '' || val === null || val === undefined)) {
         sanitized['assetId'] = null;
@@ -7787,26 +7258,7 @@ class LocalDB {
       if (key === 'createdAt' && TABLES_WITHOUT_CREATED_AT.has(resolvedTable || '')) {
         continue;
       }
-      if (resolvedTable === 'assets' && (key === 'antiEntrapmentOwnership' || key === 'isReactivating')) {
-        continue;
-      }
-      if (resolvedTable === 'deliveries' && ['bundleGroupId', 'bundleOrder', 'originalDispatchCategory'].includes(key)) {
-        continue;
-      }
-      if (resolvedTable === 'deliveries' && key === 'dispatchCategory' && val === '경유/합짐') {
-        const fallbackCat =
-          (obj.originalDispatchCategory && ['출고', '입고', '교환', '반납', '정비', '이동'].includes(obj.originalDispatchCategory))
-            ? obj.originalDispatchCategory
-            : obj.type === 'RETURN'
-              ? '반납'
-              : obj.type === 'INBOUND'
-                ? '입고'
-                : obj.type === 'EXCHANGE'
-                  ? '교환'
-                  : obj.type === 'MOVEMENT'
-                    ? '이동'
-                    : '출고';
-        sanitized['dispatchCategory'] = fallbackCat;
+      if (resolvedTable === 'assets' && key === 'antiEntrapmentOwnership') {
         continue;
       }
       if (resolvedTable === 'customers') {
@@ -7818,7 +7270,7 @@ class LocalDB {
           if (obj.paymentTermDays === undefined) sanitized['paymentTermDays'] = val;
           continue;
         }
-        if (key === 'defaultAttachments' || key === 'defaultFreightBillingStandard' || key === 'defaultTaxInvoiceIssueType') {
+        if (key === 'defaultAttachments') {
           continue;
         }
       }
@@ -7843,8 +7295,7 @@ class LocalDB {
         if (obj.contractId === undefined) sanitized['contractId'] = val;
         continue;
       }
-      if (resolvedTable === 'customer_sites' && ['billingContactName', 'billingContactPhone', 'billingContactEmail', 'safetyContactName', 'safetyContactPhone', 'safetyContactEmail', 'attachments', 'freightBillingStandard', 'taxInvoiceIssueType', 'paymentMethod', 'paymentTermsNote'].includes(key)) { continue; }
-      if (resolvedTable === 'customers' && ['defaultFreightBillingStandard', 'defaultTaxInvoiceIssueType', 'defaultPaymentMethod', 'defaultPaymentTermsNote'].includes(key)) { continue; }
+      if (resolvedTable === 'customer_sites' && ['billingContactName', 'billingContactPhone', 'billingContactEmail', 'safetyContactName', 'safetyContactPhone', 'safetyContactEmail', 'attachments'].includes(key)) { continue; }
       if (resolvedTable === 'site_masters' && !['id', 'name', 'isActive', 'paidOptions', 'protection', 'checkedSpecs', 'createdAt', 'updatedAt', 'tenant_id', 'tenantId'].includes(key)) { continue; }
       // equipment_manuals mediaType -> media_type 정제
       if (resolvedTable === 'equipment_manuals' && key === 'mediaType') {
@@ -7888,14 +7339,10 @@ class LocalDB {
       if (resolvedTable === 'users' && !['id', 'loginId', 'passwordHash', 'name', 'departmentId', 'position', 'duty', 'tier_level', 'department', 'managerId', 'role', 'status', 'baseSalary', 'phone', 'email', 'address', 'birthDate', 'joinDate', 'retireDate', 'profileImageUrl', 'customRoleId', 'tenant_id', 'createdAt', 'updatedAt'].includes(key)) {
         continue;
       }
-      // receivables 테이블 전용 허용 컬럼 방어벽 (런타임 claimMeta 등 가상 프로퍼티 원천 격리)
-      if (resolvedTable === 'receivables' && !['id', 'contractId', 'customerId', 'vendorName', 'assetNo', 'type', 'occurredDate', 'internalDescription', 'displayName', 'totalAmount', 'billedAmount', 'status', 'repairId', 'tenant_id', 'createdAt', 'updatedAt'].includes(key)) {
-        continue;
-      }
 
-      // ─── 🛡️ [전사 외래키 가디언 방어벽 시작] ───
+      // ─── 🛡️ [전사 외래키(FK) 가디언 방어벽 시작] ───
 
-      // 1. 의사 널 문자열 전면 정제 (공백, 'null', 'undefined', 'none', 'n/a' 등)
+      // 1. 의사 널(Pseudo-null) 문자열 전면 정제 (공백, 'null', 'undefined', 'none', 'n/a' 등)
       if (typeof val === 'string') {
         const trimmed = val.trim();
         const lower = trimmed.toLowerCase();
@@ -7981,220 +7428,35 @@ class LocalDB {
       sanitized[key] = val;
     }
 
-    // site_masters 및 customer_sites의 attachments/protection/freightBillingStandard 컬럼 및 checkedSpecs 동기화
+    // site_masters 및 customer_sites의 attachments 컬럼 및 checkedSpecs.__attachments 동기화
     if (resolvedTable === 'site_masters' || resolvedTable === 'customer_sites') {
-      const existingSiteObj = (resolvedTable === 'customer_sites' && obj.id)
-        ? (this.sites || []).find(s => s && s.id === obj.id)
-        : (resolvedTable === 'site_masters' && obj.id)
-          ? (this.siteMasters || []).find(m => m && m.id === obj.id)
-          : null;
-      const baseSpecs = (sanitized.checkedSpecs && typeof sanitized.checkedSpecs === 'object' && !Array.isArray(sanitized.checkedSpecs))
-        ? { ...sanitized.checkedSpecs }
-        : (obj.checkedSpecs && typeof obj.checkedSpecs === 'object' && !Array.isArray(obj.checkedSpecs))
-          ? { ...obj.checkedSpecs }
-          : (existingSiteObj?.checkedSpecs && typeof existingSiteObj.checkedSpecs === 'object' && !Array.isArray(existingSiteObj.checkedSpecs))
-            ? { ...existingSiteObj.checkedSpecs }
-            : {};
-      let specsModified = false;
-
       if (obj.attachments !== undefined) {
         sanitized.attachments = obj.attachments ? String(obj.attachments) : '';
-        baseSpecs.__attachments = sanitized.attachments;
-        specsModified = true;
-      }
-
-      if (resolvedTable === 'customer_sites' && (obj.freightBillingStandard === '2/4' || obj.freightBillingStandard === '3/5')) {
-        baseSpecs.__freightBillingStandard = obj.freightBillingStandard;
-        specsModified = true;
-      }
-
-      if (resolvedTable === 'customer_sites') {
-        const effectiveTaxIssueType: TaxInvoiceIssueType = (obj.taxInvoiceIssueType === 'FORWARD' || obj.taxInvoiceIssueType === 'REVERSE')
-          ? obj.taxInvoiceIssueType
-          : (baseSpecs.__taxInvoiceIssueType === 'FORWARD' || baseSpecs.__taxInvoiceIssueType === 'REVERSE')
-            ? baseSpecs.__taxInvoiceIssueType
-            : (obj.customerId === 'CUST-0000022' || existingSiteObj?.customerId === 'CUST-0000022' ? 'REVERSE' : 'FORWARD');
-        if (baseSpecs.__taxInvoiceIssueType !== effectiveTaxIssueType) {
-          baseSpecs.__taxInvoiceIssueType = effectiveTaxIssueType;
-          specsModified = true;
-        }
-        const effectivePayMethod: PaymentMethodType = (obj.paymentMethod === 'CASH' || obj.paymentMethod === 'BILL' || obj.paymentMethod === 'BOND')
-          ? obj.paymentMethod
-          : (baseSpecs.__paymentMethod === 'CASH' || baseSpecs.__paymentMethod === 'BILL' || baseSpecs.__paymentMethod === 'BOND')
-            ? baseSpecs.__paymentMethod
-            : 'CASH';
-        if (baseSpecs.__paymentMethod !== effectivePayMethod) {
-          baseSpecs.__paymentMethod = effectivePayMethod;
-          specsModified = true;
-        }
-        if (obj.paymentTermsNote !== undefined) {
-          baseSpecs.__paymentTermsNote = String(obj.paymentTermsNote || '').trim();
-          specsModified = true;
-        }
-      }
-
-      if (resolvedTable === 'customer_sites' && obj.protection !== undefined) {
-        const fullProt = obj.protection
-          ? (Array.isArray(obj.protection)
-              ? obj.protection.flat().map((v: any) => String(v).trim()).filter(Boolean).join(', ')
-              : String(obj.protection))
-          : '';
-        baseSpecs.__protection = fullProt;
-        specsModified = true;
-        // 원격 DB customer_sites.protection 컬럼이 legacy VARCHAR(20)인 환경을 방어 (20자 초과 시 'CUSTOM' 저장 후 checkedSpecs.__protection에서 100% 복원)
-        sanitized.protection = fullProt.length > 20 ? 'CUSTOM' : fullProt;
-      }
-
-      if (specsModified) {
-        sanitized.checkedSpecs = baseSpecs;
-      }
-      if (resolvedTable === 'customer_sites') {
-        delete sanitized.attachments;
-        delete sanitized.freightBillingStandard;
-        delete sanitized.taxInvoiceIssueType;
-        delete sanitized.paymentMethod;
-        delete sanitized.paymentTermsNote;
+        const baseSpecs = (sanitized.checkedSpecs && typeof sanitized.checkedSpecs === 'object' && !Array.isArray(sanitized.checkedSpecs))
+          ? sanitized.checkedSpecs
+          : (obj.checkedSpecs && typeof obj.checkedSpecs === 'object' && !Array.isArray(obj.checkedSpecs) ? obj.checkedSpecs : {});
+        sanitized.checkedSpecs = {
+          ...baseSpecs,
+          __attachments: sanitized.attachments
+        };
       }
     }
 
-    // customers의 defaultAttachments/defaultProtection/defaultFreightBillingStandard/defaultTaxInvoiceIssueType 컬럼 및 defaultCheckedSpecs 동기화
+    // customers의 defaultAttachments 컬럼 및 defaultCheckedSpecs.__attachments 동기화
     if (resolvedTable === 'customers') {
-      const existingCustObj = obj.id ? (this.customers || []).find(c => c && c.id === obj.id) : null;
-      const baseSpecs = (sanitized.defaultCheckedSpecs && typeof sanitized.defaultCheckedSpecs === 'object' && !Array.isArray(sanitized.defaultCheckedSpecs))
-        ? { ...sanitized.defaultCheckedSpecs }
-        : (obj.defaultCheckedSpecs && typeof obj.defaultCheckedSpecs === 'object' && !Array.isArray(obj.defaultCheckedSpecs))
-          ? { ...obj.defaultCheckedSpecs }
-          : (existingCustObj?.defaultCheckedSpecs && typeof existingCustObj.defaultCheckedSpecs === 'object' && !Array.isArray(existingCustObj.defaultCheckedSpecs))
-            ? { ...existingCustObj.defaultCheckedSpecs }
-            : {};
-      let specsModified = false;
-
       if (obj.defaultAttachments !== undefined) {
         sanitized.defaultAttachments = obj.defaultAttachments ? String(obj.defaultAttachments) : '';
-        baseSpecs.__attachments = sanitized.defaultAttachments;
-        specsModified = true;
-      }
-
-      if (obj.defaultFreightBillingStandard === '2/4' || obj.defaultFreightBillingStandard === '3/5') {
-        baseSpecs.__freightBillingStandard = obj.defaultFreightBillingStandard;
-        specsModified = true;
-      }
-
-      if (obj.defaultTaxInvoiceIssueType === 'FORWARD' || obj.defaultTaxInvoiceIssueType === 'REVERSE') {
-        baseSpecs.__taxInvoiceIssueType = obj.defaultTaxInvoiceIssueType;
-        specsModified = true;
-      } else if (!baseSpecs.__taxInvoiceIssueType) {
-        const cleanBizNo = String(obj.bizRegNo || existingCustObj?.bizRegNo || '').replace(/[^0-9]/g, '');
-        baseSpecs.__taxInvoiceIssueType = (cleanBizNo === '1188100241' || String(obj.name || existingCustObj?.name || '').includes('세보엠이씨')) ? 'REVERSE' : 'FORWARD';
-        specsModified = true;
-      }
-      if (obj.defaultPaymentMethod === 'CASH' || obj.defaultPaymentMethod === 'BILL' || obj.defaultPaymentMethod === 'BOND') {
-        baseSpecs.__paymentMethod = obj.defaultPaymentMethod;
-        specsModified = true;
-      } else if (!baseSpecs.__paymentMethod) {
-        baseSpecs.__paymentMethod = 'CASH';
-        specsModified = true;
-      }
-      if (obj.defaultPaymentTermsNote !== undefined) {
-        baseSpecs.__paymentTermsNote = String(obj.defaultPaymentTermsNote || '').trim();
-        specsModified = true;
-      }
-
-      if (obj.defaultProtection !== undefined) {
-        const fullProt = obj.defaultProtection
-          ? (Array.isArray(obj.defaultProtection)
-              ? obj.defaultProtection.flat().map((v: any) => String(v).trim()).filter(Boolean).join(', ')
-              : String(obj.defaultProtection))
-          : '';
-        baseSpecs.__protection = fullProt;
-        specsModified = true;
-        // 원격 DB customers.defaultProtection 컬럼이 legacy VARCHAR(20)인 환경을 방어 (20자 초과 시 'CUSTOM' 저장 후 defaultCheckedSpecs.__protection에서 100% 복원)
-        sanitized.defaultProtection = fullProt.length > 20 ? 'CUSTOM' : fullProt;
-      }
-
-      // 원격 DB customers_transactionStatus_check ('ALLOWED', 'BLOCKED') 제약조건 100% 준수 및 2단계 차단 구분(__transactionStatus) 영구 보존
-      if (obj.transactionStatus !== undefined || sanitized.transactionStatus !== undefined || obj.blockedReason !== undefined || obj.blockedAt !== undefined || obj.blockedBy !== undefined) {
-        const rawTxStatus = obj.transactionStatus ?? sanitized.transactionStatus ?? existingCustObj?.transactionStatus ?? baseSpecs.__transactionStatus ?? 'ALLOWED';
-        if (rawTxStatus === 'RESTRICT_NEW' || rawTxStatus === 'BLOCKED_ALL' || rawTxStatus === 'BLOCKED') {
-          const exactStage = rawTxStatus === 'RESTRICT_NEW'
-            ? 'RESTRICT_NEW'
-            : (rawTxStatus === 'BLOCKED_ALL'
-                ? 'BLOCKED_ALL'
-                : (baseSpecs.__transactionStatus === 'RESTRICT_NEW' ? 'RESTRICT_NEW' : 'BLOCKED_ALL'));
-          baseSpecs.__transactionStatus = exactStage;
-          const effReason = obj.blockedReason !== undefined ? obj.blockedReason : existingCustObj?.blockedReason;
-          const effAt = obj.blockedAt !== undefined ? obj.blockedAt : existingCustObj?.blockedAt;
-          const effBy = obj.blockedBy !== undefined ? obj.blockedBy : existingCustObj?.blockedBy;
-          if (effReason !== undefined) baseSpecs.__blockedReason = effReason || '';
-          if (effAt !== undefined) baseSpecs.__blockedAt = effAt || '';
-          if (effBy !== undefined) baseSpecs.__blockedBy = effBy || '';
-          specsModified = true;
-          if (obj.transactionStatus !== undefined || sanitized.transactionStatus !== undefined) {
-            sanitized.transactionStatus = 'BLOCKED';
-          }
-        } else {
-          baseSpecs.__transactionStatus = 'ALLOWED';
-          delete baseSpecs.__blockedReason;
-          delete baseSpecs.__blockedAt;
-          delete baseSpecs.__blockedBy;
-          specsModified = true;
-          if (obj.transactionStatus !== undefined || sanitized.transactionStatus !== undefined) {
-            sanitized.transactionStatus = 'ALLOWED';
-          }
-        }
-      }
-
-      if (specsModified) {
-        sanitized.defaultCheckedSpecs = baseSpecs;
-      }
-      delete sanitized.defaultAttachments;
-      delete sanitized.defaultFreightBillingStandard;
-      delete sanitized.defaultTaxInvoiceIssueType;
-      delete sanitized.defaultPaymentMethod;
-      delete sanitized.defaultPaymentTermsNote;
-      delete sanitized.blockedReason;
-      delete sanitized.blockedAt;
-      delete sanitized.blockedBy;
-    }
-
-    // deliveries 테이블의 경유/합짐 묶음 메타데이터([BUNDLE:bundleGroupId|bundleOrder|originalDispatchCategory])를 memo에 동기화하여 원격 DB 스키마 제약 없이 100% 영구 보존
-    if (resolvedTable === 'deliveries') {
-      const existingDel = obj.id ? (this.deliveries || []).find(d => d && d.id === obj.id) : null;
-      const hasBundleFieldInUpdate =
-        'bundleGroupId' in obj ||
-        'bundleOrder' in obj ||
-        'originalDispatchCategory' in obj ||
-        obj.dispatchCategory === '경유/합짐' ||
-        'memo' in obj ||
-        Boolean(existingDel?.bundleGroupId);
-      if (hasBundleFieldInUpdate) {
-        const effectiveGroupId = 'bundleGroupId' in obj ? obj.bundleGroupId : existingDel?.bundleGroupId;
-        const effectiveOrder = ('bundleOrder' in obj ? obj.bundleOrder : existingDel?.bundleOrder) || 1;
-        const effectiveOrigCat =
-          ('originalDispatchCategory' in obj ? obj.originalDispatchCategory : existingDel?.originalDispatchCategory) ||
-          (existingDel?.dispatchCategory && existingDel.dispatchCategory !== '경유/합짐' ? existingDel.dispatchCategory : null) ||
-          (obj.type === 'RETURN' || existingDel?.type === 'RETURN'
-            ? '반납'
-            : obj.type === 'INBOUND' || existingDel?.type === 'INBOUND'
-              ? '입고'
-              : obj.type === 'EXCHANGE' || existingDel?.type === 'EXCHANGE'
-                ? '교환'
-                : obj.type === 'MOVEMENT' || existingDel?.type === 'MOVEMENT'
-                  ? '이동'
-                  : '출고');
-        const baseMemo = (sanitized.memo !== undefined ? String(sanitized.memo || '') : String(existingDel?.memo || ''))
-          .replace(/\s*\[BUNDLE:[^\]]+\]/g, '')
-          .trim();
-        if (effectiveGroupId) {
-          const bundleTag = `[BUNDLE:${effectiveGroupId}|${effectiveOrder}|${effectiveOrigCat}]`;
-          sanitized.memo = baseMemo ? `${baseMemo} ${bundleTag}` : bundleTag;
-        } else if ('bundleGroupId' in obj || 'memo' in obj) {
-          sanitized.memo = baseMemo;
-        }
+        const baseSpecs = (sanitized.defaultCheckedSpecs && typeof sanitized.defaultCheckedSpecs === 'object' && !Array.isArray(sanitized.defaultCheckedSpecs))
+          ? sanitized.defaultCheckedSpecs
+          : (obj.defaultCheckedSpecs && typeof obj.defaultCheckedSpecs === 'object' && !Array.isArray(obj.defaultCheckedSpecs) ? obj.defaultCheckedSpecs : {});
+        sanitized.defaultCheckedSpecs = {
+          ...baseSpecs,
+          __attachments: sanitized.defaultAttachments
+        };
       }
     }
 
-    // consumables 테이블 호환
+    // consumables 테이블 호환 (name, spec)
     if (resolvedTable === 'consumables') {
       if (!sanitized.name && obj.modelName) {
         sanitized.name = obj.modelName;
@@ -8261,10 +7523,6 @@ class LocalDB {
 
       if (obj.specialFeatures !== undefined) {
         mergedFeatures.specialFeatures = obj.specialFeatures;
-        featuresTouched = true;
-      }
-      if (obj.allowContractTradeOutbound !== undefined) {
-        mergedFeatures.allowContractTradeOutbound = obj.allowContractTradeOutbound;
         featuresTouched = true;
       }
       if (obj.excelMappingRules !== undefined) {
@@ -8418,7 +7676,6 @@ class LocalDB {
       legal_notice_logs: 'legalNoticeLogs',
       legal_notice_templates: 'legalNoticeTemplates',
       inspection_checklist_items: 'inspectionChecklistItems',
-      mechanic_consumable_stocks: 'mechanicConsumableStocks',
       depreciation_logs: 'depreciationLogs',
       annual_leave_quotas: 'annualLeaveQuotas',
       leave_usages: 'leaveUsages',
@@ -8426,7 +7683,6 @@ class LocalDB {
       payroll_closings: 'payrollClosings',
       stocktaking_audits: 'stocktakingAudits',
       stocktaking_audit_items: 'stocktakingAuditItems',
-      collected_parts: 'collectedParts',
       equipment_manuals: 'equipmentManuals',
       standard_options: 'standardOptions',
       standardOptions: 'standardOptions',
@@ -8442,10 +7698,6 @@ class LocalDB {
       monthlyIncomeStatements: 'monthlyIncomeStatements',
       developer_authorized_devices: 'developerAuthorizedDevices',
       developerAuthorizedDevices: 'developerAuthorizedDevices',
-      sales_journals: 'salesJournals',
-      salesJournals: 'salesJournals',
-      as_route_logs: 'asRouteLogs',
-      asRouteLogs: 'asRouteLogs',
     };
     return (reverseMapping[key] || key) as keyof LocalDB;
   }
@@ -8458,24 +7710,6 @@ class LocalDB {
     return list.find(item => item && item.id === id) || null;
   }
 
-  // 모델명 기준 제품정보(products)의 제조사(manufacturer) 자동 매칭 헬퍼 (SSOT 보장)
-  public resolveAssetManufacturer(modelName?: string, rawManufacturer?: string): string {
-    const cleanModel = (modelName || '').trim();
-    const normModel = cleanModel.replace(/[\s\-_]/g, '').toUpperCase();
-    if (normModel && Array.isArray(this.products)) {
-      const matched = this.products.find(p => {
-        if (!p) return false;
-        const pm = (p.modelName || '').replace(/[\s\-_]/g, '').toUpperCase();
-        const ps = (p.shortName || '').replace(/[\s\-_]/g, '').toUpperCase();
-        return pm === normModel || (ps !== '' && ps === normModel);
-      });
-      if (matched && matched.manufacturer && String(matched.manufacturer).trim()) {
-        return String(matched.manufacturer).trim();
-      }
-    }
-    return (rawManufacturer || '').trim();
-  }
-
   // 헬퍼 메소드들 - CRUD 시뮬레이션 및 백그라운드 Supabase 업로드
   addRow<T extends { id: string }>(key: keyof LocalDB | string, row: Omit<T, 'id'> & { id?: string }): T {
     return this.insertRow<T>(key, row);
@@ -8486,41 +7720,12 @@ class LocalDB {
     const list = ((this[tableKey] || []) as unknown) as T[];
     const newId = row.id || this.generateNextId(tableKey as string, list as any, row);
     const nowIso = new Date().toISOString();
-    const formattedRow: any = {
+    const formattedRow = {
       createdAt: nowIso,
       updatedAt: nowIso,
       ...(row as any),
       id: newId
     };
-    if (tableKey === 'assets') {
-      if (!formattedRow.yard || String(formattedRow.yard).trim() === '') {
-        formattedRow.yard = '용인';
-      }
-      if (formattedRow.modelName) {
-        const autoMfg = this.resolveAssetManufacturer(formattedRow.modelName, formattedRow.manufacturer);
-        if (autoMfg) {
-          formattedRow.manufacturer = autoMfg;
-        }
-      }
-    }
-    if (tableKey === 'customers') {
-      const nextSpecs = (formattedRow.defaultCheckedSpecs && typeof formattedRow.defaultCheckedSpecs === 'object' && !Array.isArray(formattedRow.defaultCheckedSpecs))
-        ? { ...formattedRow.defaultCheckedSpecs }
-        : {};
-      const tx = formattedRow.transactionStatus || 'ALLOWED';
-      if (tx === 'ALLOWED') {
-        nextSpecs.__transactionStatus = 'ALLOWED';
-        delete nextSpecs.__blockedReason;
-        delete nextSpecs.__blockedAt;
-        delete nextSpecs.__blockedBy;
-      } else {
-        nextSpecs.__transactionStatus = tx === 'RESTRICT_NEW' ? 'RESTRICT_NEW' : 'BLOCKED_ALL';
-        if (formattedRow.blockedReason !== undefined) nextSpecs.__blockedReason = formattedRow.blockedReason || '';
-        if (formattedRow.blockedAt !== undefined) nextSpecs.__blockedAt = formattedRow.blockedAt || '';
-        if (formattedRow.blockedBy !== undefined) nextSpecs.__blockedBy = formattedRow.blockedBy || '';
-      }
-      formattedRow.defaultCheckedSpecs = nextSpecs;
-    }
     const newRow = formattedRow as unknown as T;
     const existingIdx = list.findIndex(item => item && item.id === newId);
     if (existingIdx > -1) {
@@ -8543,29 +7748,6 @@ class LocalDB {
             const msg = error.message || String(error);
             console.error(`Supabase upsert failed for ${tableName}:`, error);
 
-            if (tableName === 'assets' && (msg.includes('yard') || msg.includes('assetNature') || msg.includes('column') || msg.includes('Could not find') || msg.includes('violates check constraint') || msg.includes('assets_status_check') || error.code === '23514')) {
-              const applied = await autoApplyAssetsDdl();
-              if (applied) {
-                await new Promise(r => setTimeout(r, 200));
-                const retryRes = await targetClient.from(tableName).upsert([payloadForSupabase], { onConflict: 'id' });
-                if (!retryRes.error) {
-                  return retryRes.data;
-                }
-              }
-            }
-
-            if (tableName === 'as_route_logs' && (msg.includes('Could not find') || msg.includes('relation') || msg.includes('as_route_logs') || msg.includes('column') || msg.includes('violates check constraint') || error.code === 'PGRST205' || error.code === 'PGRST204' || error.code === '42P01' || error.code === '42703' || error.code === '23514')) {
-              const applied = await autoApplyAsRouteLogsDdl();
-              if (applied) {
-                await new Promise(r => setTimeout(r, 200));
-                const retryRes = await targetClient.from(tableName).upsert([payloadForSupabase], { onConflict: 'id' });
-                if (!retryRes.error) {
-                  return retryRes.data;
-                }
-              }
-              return null;
-            }
-
             if (tableName === 'tenants' && (msg.includes('targetRepo') || msg.includes('solutionType') || msg.includes('stampImageUrl') || msg.includes('stampBase64') || msg.includes('column') || msg.includes('Could not find'))) {
               const applied = await autoApplyTenantsDdl();
               if (applied) {
@@ -8574,17 +7756,6 @@ class LocalDB {
                 if (!retryRes.error) {
                   return retryRes.data;
                 }
-              }
-            }
-
-            if (tableName === 'contract_history' && msg.includes('contract_history_changeType_check')) {
-              const fallbackPayload = {
-                ...payloadForSupabase,
-                changeType: 'DOCUMENT_SENT'
-              };
-              const retryRes = await targetClient.from(tableName).upsert([fallbackPayload], { onConflict: 'id' });
-              if (!retryRes.error) {
-                return retryRes.data;
               }
             }
 
@@ -8618,44 +7789,11 @@ class LocalDB {
     if (index === -1) return null;
     const originalItem = list[index];
     const nowIso = new Date().toISOString();
-    const updatedPayload: any = {
+    const updatedPayload = {
       ...updates,
       updatedAt: nowIso
     };
-    const mergedItem: any = { ...list[index], ...updatedPayload };
-    if (tableKey === 'assets') {
-      if (!mergedItem.yard || String(mergedItem.yard).trim() === '') {
-        updatedPayload.yard = '용인';
-        mergedItem.yard = '용인';
-      }
-      if (mergedItem.modelName) {
-        const autoMfg = this.resolveAssetManufacturer(mergedItem.modelName, mergedItem.manufacturer);
-        if (autoMfg) {
-          updatedPayload.manufacturer = autoMfg;
-          mergedItem.manufacturer = autoMfg;
-        }
-      }
-    }
-    if (tableKey === 'customers') {
-      const nextSpecs = (mergedItem.defaultCheckedSpecs && typeof mergedItem.defaultCheckedSpecs === 'object' && !Array.isArray(mergedItem.defaultCheckedSpecs))
-        ? { ...mergedItem.defaultCheckedSpecs }
-        : {};
-      const tx = mergedItem.transactionStatus || 'ALLOWED';
-      if (tx === 'ALLOWED') {
-        nextSpecs.__transactionStatus = 'ALLOWED';
-        delete nextSpecs.__blockedReason;
-        delete nextSpecs.__blockedAt;
-        delete nextSpecs.__blockedBy;
-      } else {
-        nextSpecs.__transactionStatus = tx === 'RESTRICT_NEW' ? 'RESTRICT_NEW' : 'BLOCKED_ALL';
-        if (mergedItem.blockedReason !== undefined) nextSpecs.__blockedReason = mergedItem.blockedReason || '';
-        if (mergedItem.blockedAt !== undefined) nextSpecs.__blockedAt = mergedItem.blockedAt || '';
-        if (mergedItem.blockedBy !== undefined) nextSpecs.__blockedBy = mergedItem.blockedBy || '';
-      }
-      mergedItem.defaultCheckedSpecs = nextSpecs;
-      updatedPayload.defaultCheckedSpecs = nextSpecs;
-    }
-    const updated = mergedItem as unknown as T;
+    const updated = { ...list[index], ...updatedPayload } as unknown as T;
     list[index] = updated;
     this.set(tableKey, list);
 
@@ -8700,17 +7838,6 @@ class LocalDB {
           if (error) {
             const msg = error.message || String(error);
             console.error(`Supabase update failed for ${tableName}:`, error);
-
-            if (tableName === 'assets' && (msg.includes('yard') || msg.includes('assetNature') || msg.includes('column') || msg.includes('Could not find') || msg.includes('violates check constraint') || msg.includes('assets_status_check') || error.code === '23514')) {
-              const applied = await autoApplyAssetsDdl();
-              if (applied) {
-                await new Promise(r => setTimeout(r, 200));
-                const retryRes = await targetClient.from(tableName).update(payloadForSupabase as any).eq('id', id);
-                if (!retryRes.error) {
-                  return retryRes.data;
-                }
-              }
-            }
 
             if (tableName === 'tenants' && (msg.includes('targetRepo') || msg.includes('solutionType') || msg.includes('stampImageUrl') || msg.includes('stampBase64') || msg.includes('column') || msg.includes('Could not find'))) {
               const applied = await autoApplyTenantsDdl();
@@ -8901,7 +8028,7 @@ class LocalDB {
   }
 
 
-  // 조직도 및 구성원 일괄 저장 - 기존 데이터를 전부 덮어씌움
+  // 조직도 및 구성원 일괄 저장 (Batch) - 기존 데이터를 전부 덮어씌움
   async saveOrganizationBatch(departments: Department[], users: User[]): Promise<void> {
     // 🛡️ [테스터 배제] 테스터 계정 원천 차단
     const isTester = (u: any) =>
@@ -9070,7 +8197,7 @@ export async function logPrivacyAccess(
 
 
 // ==========================================
-// 유통 영업 스키마
+// 유통 영업 (Trade & Distribution) 스키마
 // ==========================================
 
 export interface TradeProduct {
@@ -9128,16 +8255,6 @@ export interface TradeInventoryLot {
 export interface TradeSalesOrder {
   id: string;
   customerId: string;
-  contractId?: string;
-  contractNo?: string;
-  siteId?: string;
-  siteName?: string;
-  billingMode?: 'RENTAL_MERGED' | 'STANDALONE';
-  targetBillingYm?: string;
-  linkedReceivableId?: string;
-  linkedBillingId?: string;
-  deliveryMethod?: 'COURIER' | 'DIRECT' | 'BUNDLE_WITH_RENTAL';
-  linkedRentalDeliveryId?: string;
   orderDate: string;
   status: 'PENDING' | 'CONFIRMED' | 'SHIPPED' | 'DELIVERED' | 'RETURNED' | 'CANCELLED';
   totalSalesAmount: number;
@@ -9171,10 +8288,8 @@ export interface TradeSalesOrderLine {
 export interface TradeOutbound {
   id: string;
   orderId: string;
-  contractId?: string;
-  linkedRentalDeliveryId?: string;
   status: 'REQUESTED' | 'ALLOCATED' | 'PACKED' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
-  deliveryType?: 'COURIER' | 'DIRECT' | 'BUNDLE_WITH_RENTAL';
+  deliveryType?: 'COURIER' | 'DIRECT';
   courierName?: string;
   trackingNumber?: string;
   shippingCost?: number;

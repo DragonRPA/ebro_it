@@ -9,6 +9,9 @@ import { SortableTh } from '../components/SortableTh';
 import { useSortableData } from '../hooks/useSortableData';
 import { createHangulMatcher } from '../utils/hangulSearch';
 import { ProductPhotoManager } from '../components/ProductPhotoManager';
+import { LabelDesignerStudio } from '../components/LabelDesignerStudio';
+import { AssetLabelPrintModal, DirectLabelPrintStudio } from '../components/AssetLabelPrintModal';
+import { Printer, Settings } from 'lucide-react';
 
 export const Assets: React.FC = () => {
   const { 
@@ -43,6 +46,48 @@ export const Assets: React.FC = () => {
   const [editForm, setEditForm] = useState<Partial<Asset>>({});
   const [showHistoryToggle, setShowHistoryToggle] = useState(false);
   const [isSavingAsset, setIsSavingAsset] = useState(false);
+
+  // ── 🏷️ [렌탈 자산 라벨 출력 & 서식 디자인 상태] ──
+  const [viewMode, setViewMode] = useState<'LIST' | 'SCAN_PRINT' | 'LABEL_DESIGNER'>('LIST');
+  const [selectedAssetIds, setSelectedAssetIds] = useState<Set<string>>(new Set());
+  const [isLabelModalOpen, setIsLabelModalOpen] = useState<boolean>(false);
+  const [labelModalTargetAssets, setLabelModalTargetAssets] = useState<Asset[]>([]);
+
+  const toggleSelectAssetId = (id: string) => {
+    setSelectedAssetIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const openLabelPrintModalFor = (targetList?: Asset[]) => {
+    if (targetList && targetList.length > 0) {
+      setLabelModalTargetAssets(targetList);
+      setIsLabelModalOpen(true);
+      return;
+    }
+    if (selectedAssetIds.size > 0) {
+      const picked = assets.filter(a => selectedAssetIds.has(a.id));
+      if (picked.length > 0) {
+        setLabelModalTargetAssets(picked);
+        setIsLabelModalOpen(true);
+        return;
+      }
+    }
+    if (selectedAsset) {
+      setLabelModalTargetAssets([selectedAsset]);
+      setIsLabelModalOpen(true);
+      return;
+    }
+    if (assets.length > 0) {
+      setLabelModalTargetAssets([assets[0]]);
+      setIsLabelModalOpen(true);
+    } else {
+      showToast('출력할 자산 데이터가 없습니다.', 'error');
+    }
+  };
 
   // ── 🌟 [초고속 O(1) 룩업 인덱싱 해시맵: 헌장 1.1] ──
   const customerMap = useMemo(() => new Map((customers || []).map(c => [c.id, c.name])), [customers]);
@@ -557,10 +602,92 @@ export const Assets: React.FC = () => {
           <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
             총 <strong>{assets.length}</strong>대 (조회 <strong>{filtered.length}</strong>대)
           </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '8px', backgroundColor: 'var(--bg-app)', padding: '3px', borderRadius: '6px', border: '1px solid var(--border-color)' }}>
+            <button
+              type="button"
+              data-mid="tab-asset-list-view"
+              onClick={() => setViewMode('LIST')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '12px',
+                fontWeight: viewMode === 'LIST' ? 700 : 500,
+                borderRadius: '4px',
+                border: 'none',
+                backgroundColor: viewMode === 'LIST' ? 'var(--primary)' : 'transparent',
+                color: viewMode === 'LIST' ? '#ffffff' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              자산 목록
+            </button>
+            <button
+              type="button"
+              data-mid="tab-asset-scan-print-view"
+              onClick={() => setViewMode('SCAN_PRINT')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '12px',
+                fontWeight: viewMode === 'SCAN_PRINT' ? 700 : 500,
+                borderRadius: '4px',
+                border: 'none',
+                backgroundColor: viewMode === 'SCAN_PRINT' ? 'var(--primary)' : 'transparent',
+                color: viewMode === 'SCAN_PRINT' ? '#ffffff' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <Printer size={12} /> 라벨 스캔 출력
+            </button>
+            <button
+              type="button"
+              data-mid="tab-asset-label-designer-view"
+              onClick={() => setViewMode('LABEL_DESIGNER')}
+              style={{
+                padding: '4px 10px',
+                fontSize: '12px',
+                fontWeight: viewMode === 'LABEL_DESIGNER' ? 700 : 500,
+                borderRadius: '4px',
+                border: 'none',
+                backgroundColor: viewMode === 'LABEL_DESIGNER' ? 'var(--primary)' : 'transparent',
+                color: viewMode === 'LABEL_DESIGNER' ? '#ffffff' : 'var(--text-secondary)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                whiteSpace: 'nowrap'
+              }}
+            >
+              <Settings size={12} /> 라벨 서식 디자인
+            </button>
+          </div>
+          <span style={{ display: 'none' }}>
+          </span>
         </div>
 
         {/* 우상단 파이프라인 버튼군 - 표준 횡배치: 조회 -> 엑셀다운로드 */}
         <div data-mid="asset-header-actions" className="toolbar-actions">
+          <button
+            type="button"
+            className="btn-primary"
+            data-mid="btn-asset-label-print"
+            onClick={() => openLabelPrintModalFor()}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+          >
+            <Printer size={13} /> {selectedAssetIds.size > 0 ? `라벨 출력 (${selectedAssetIds.size}건)` : '라벨 출력'}
+          </button>
+          <button
+            type="button"
+            className="btn-secondary"
+            data-mid="btn-asset-label-designer"
+            onClick={() => setViewMode(prev => prev === 'LABEL_DESIGNER' ? 'LIST' : 'LABEL_DESIGNER')}
+            style={{ display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+          >
+            <Settings size={13} /> {viewMode === 'LABEL_DESIGNER' ? '자산 목록 복귀' : '라벨 서식 디자인'}
+          </button>
           <button
             className="btn-query"
             data-mid="btn-asset-search"
@@ -578,6 +705,19 @@ export const Assets: React.FC = () => {
         </div>
       </div>
 
+      {viewMode === 'SCAN_PRINT' ? (
+        <DirectLabelPrintStudio
+          assets={assets}
+          products={products}
+          onOpenDesigner={() => setViewMode('LABEL_DESIGNER')}
+          showToast={showToast}
+        />
+      ) : viewMode === 'LABEL_DESIGNER' ? (
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden' }}>
+          <LabelDesignerStudio />
+        </div>
+      ) : (
+        <>
       {/* ② 자산 운용 KPI 요약 바 (Scope) */}
       <div data-mid="asset-kpi-summary" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '6px', flexShrink: 0 }}>
         <div style={{ padding: '7px 12px', backgroundColor: 'var(--bg-card)', borderRadius: '6px', border: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -745,7 +885,27 @@ export const Assets: React.FC = () => {
             <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
               <tr style={{ backgroundColor: 'var(--bg-app)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)', fontWeight: 600 }}>
                 {/* 1. 상세 (고정) */}
-                <th style={{ padding: '7px 8px', width: '50px', textAlign: 'center', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 12, backgroundColor: 'var(--bg-app)' }}>상세</th>
+                <th style={{ padding: '7px 8px', width: '74px', textAlign: 'center', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 12, backgroundColor: 'var(--bg-app)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '5px' }}>
+                    <input
+                      type="checkbox"
+                      data-mid="chk-asset-select-all"
+                      checked={visibleAssets.length > 0 && visibleAssets.every(a => selectedAssetIds.has(a.id))}
+                      onChange={e => {
+                        const checked = e.target.checked;
+                        setSelectedAssetIds(prev => {
+                          const next = new Set(prev);
+                          visibleAssets.forEach(a => {
+                            if (checked) next.add(a.id);
+                            else next.delete(a.id);
+                          });
+                          return next;
+                        });
+                      }}
+                    />
+                    <span>상세</span>
+                  </div>
+                </th>
                 {/* 2. 자산번호 (고정) */}
                 <SortableTh sortKey="assetNo" currentSort={sortConfig} onSort={requestSort} style={{ padding: '7px 8px', width: '90px', position: 'sticky', left: '50px', zIndex: 12, backgroundColor: 'var(--bg-app)' }}>자산번호</SortableTh>
                 {/* 3. 모델명 */}
@@ -832,6 +992,14 @@ export const Assets: React.FC = () => {
                     >
                       {/* 1. 상세 버튼 (고정) */}
                       <td style={{ padding: '6px 8px', textAlign: 'center', whiteSpace: 'nowrap', position: 'sticky', left: 0, zIndex: 2, backgroundColor: 'var(--bg-card)' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', marginRight: '5px', verticalAlign: 'middle' }} onClick={e => e.stopPropagation()}>
+                          <input
+                            type="checkbox"
+                            data-mid={idx === 0 ? "chk-asset-row-0" : undefined}
+                            checked={selectedAssetIds.has(a.id)}
+                            onChange={() => toggleSelectAssetId(a.id)}
+                          />
+                        </span>
                         <button
                           data-mid={idx === 0 ? "asset-detail-action" : undefined}
                           onClick={(e) => { e.stopPropagation(); handleSelectAsset(a); }}
@@ -1088,6 +1256,19 @@ export const Assets: React.FC = () => {
         </div>
       </div>
 
+        </>
+      )}
+
+      {/* 🏷️ 자산 라벨 인쇄 모달 */}
+      <AssetLabelPrintModal
+        isOpen={isLabelModalOpen}
+        onClose={() => setIsLabelModalOpen(false)}
+        selectedAssets={labelModalTargetAssets}
+        products={products}
+        onOpenDesigner={() => setViewMode('LABEL_DESIGNER')}
+        showToast={showToast}
+      />
+
       {/* ⑥ 서랍형 상세 Dossier 슬라이드오버 (헌장 3.6 마스터-디테일 스튜디오) */}
       {selectedAsset && (() => {
         const isReturned = Boolean(selectedAsset.actualRentReturnDate) || selectedAsset.status === 'RENTED_RETURNED';
@@ -1136,6 +1317,17 @@ export const Assets: React.FC = () => {
               </div>
 
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                {!isEditing && (
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    data-mid="btn-dossier-label-print"
+                    onClick={() => openLabelPrintModalFor([selectedAsset])}
+                    style={{ padding: '3px 8px', fontSize: '11px', display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap' }}
+                  >
+                    <Printer size={12} /> 라벨 출력
+                  </button>
+                )}
                 {canEdit && !isEditing && (
                   <button
                     className="btn-primary"

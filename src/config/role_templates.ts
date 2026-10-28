@@ -8,10 +8,9 @@ export interface MenuPermissionRule {
 
 export type PermissionRuleMap = Record<string, MenuPermissionRule>;
 
-// 1. 공통 기본 권한 (모든 직원 공통: 대시보드, 본인 연차신청, 차량운행일지, 가용재고조회)
+// 1. 공통 기본 권한 (모든 직원 공통: 대시보드, 본인 연차신청, 차량운행일지)
 const BASE_COMMON_PERMISSIONS: PermissionRuleMap = {
   dashboard: { canView: true, canSave: false },
-  available_inventory: { canView: true, canSave: false },
   leave_application: { canView: true, canSave: true }, // 모든 직원 공통 연차신청
   leave_ot: { canView: true, canSave: true },          // 레거시 호환
   vehicle_log: { canView: true, canSave: true },
@@ -44,12 +43,9 @@ export const ACCOUNTING_TEMPLATE: PermissionRuleMap = {
   data_formation: { canView: true, canSave: true },
   acquisition_disposal: { canView: true, canSave: true },
   // 열람만 허용 (영업/자산 상태 대사)
-  sales_journal: { canView: true, canSave: true },
   customer: { canView: true, canSave: false },
-  site_options: { canView: true, canSave: false },
   contract: { canView: true, canSave: false },
   public_construction_permits: { canView: true, canSave: false },
-  available_inventory: { canView: true, canSave: false },
   product: { canView: true, canSave: false },
   asset: { canView: true, canSave: false },
   daily_inout: { canView: true, canSave: false },
@@ -58,15 +54,13 @@ export const ACCOUNTING_TEMPLATE: PermissionRuleMap = {
   consumable_inout: { canView: true, canSave: true },
   consumable_stock: { canView: true, canSave: true },
   consumable: { canView: true, canSave: true },
-  as_route_tracking: { canView: true, canSave: false },
   // 에이전트 배지: 관리부 로컬 출력 및 전자문서 연동 허용
   agent_badge: { canView: true, canSave: false }
 };
 
-// 3. 영업부 (고객 / 계약 / 출고의뢰 / AS의뢰 / 유통계약) - DEPT-0000003
+// 3. 영업부 (고객 / 계약 / 출고의뢰 / AS의뢰) - DEPT-0000003
 export const SALES_TEMPLATE: PermissionRuleMap = {
   ...BASE_COMMON_PERMISSIONS,
-  // 영업-유통 (유통계약 관련 모든 권한)
   trade_products: { canView: true, canSave: true },
   trade_purchases: { canView: true, canSave: true },
   trade_contracts: { canView: true, canSave: true },
@@ -75,22 +69,18 @@ export const SALES_TEMPLATE: PermissionRuleMap = {
   trade_billing: { canView: true, canSave: true },
   trade_returns: { canView: true, canSave: true },
   trade_profitability: { canView: true, canSave: true },
-  sales_journal: { canView: true, canSave: true },
   customer: { canView: true, canSave: true },
-  site_options: { canView: true, canSave: true },
   contract: { canView: true, canSave: true },
   smart_dispatch: { canView: true, canSave: true },
   smart_dispatch4: { canView: true, canSave: true },
   smart_return: { canView: true, canSave: true },
   smart_as_request: { canView: true, canSave: true },
-  as_route_tracking: { canView: true, canSave: false },
   receivable: { canView: true, canSave: true }, // 외상미수금 확인 및 독촉
   delinquency: { canView: true, canSave: true }, // 미수 채권 연체 관리
   public_construction_permits: { canView: true, canSave: true }, // 인허가 건축공정 조회
   daily_inout: { canView: true, canSave: false },
   // 열람만 허용
   billing: { canView: true, canSave: false },
-  available_inventory: { canView: true, canSave: false },
   product: { canView: true, canSave: false },
   asset: { canView: true, canSave: false },
   rent_asset: { canView: true, canSave: false },
@@ -108,10 +98,8 @@ export const LOGISTICS_TEMPLATE: PermissionRuleMap = {
   asset_inout_history: { canView: true, canSave: true },
   daily_inout: { canView: true, canSave: true },
   print_queue_monitor: { canView: true, canSave: true },
-  site_options: { canView: true, canSave: false },
   // 열람만 허용
   smart_dispatch4: { canView: true, canSave: false },
-  available_inventory: { canView: true, canSave: false },
   product: { canView: true, canSave: false },
   asset: { canView: true, canSave: false },
   rent_asset: { canView: true, canSave: false },
@@ -130,8 +118,6 @@ export const MECHANIC_TEMPLATE: PermissionRuleMap = {
   consumable_inout: { canView: true, canSave: true },
   consumable_stock: { canView: true, canSave: true },
   consumable: { canView: true, canSave: true },
-  field_as: { canView: true, canSave: true },
-  as_route_tracking: { canView: true, canSave: true },
   repair: { canView: true, canSave: true },
   inspection_checklist_manage: { canView: true, canSave: true },
   smart_as_request: { canView: true, canSave: true },
@@ -139,9 +125,7 @@ export const MECHANIC_TEMPLATE: PermissionRuleMap = {
   asset_inout_history: { canView: true, canSave: true },
   daily_inout: { canView: true, canSave: false },
   print_queue_monitor: { canView: true, canSave: true },
-  site_options: { canView: true, canSave: false },
   // 열람만 허용
-  available_inventory: { canView: true, canSave: false },
   asset: { canView: true, canSave: false },
   product: { canView: true, canSave: false },
   // 에이전트 배지: AS팀은 출고검수 서류 프린트 필수 → 노출

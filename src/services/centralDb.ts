@@ -41,58 +41,10 @@ export async function fetchCentralTenants(): Promise<Tenant[]> {
 
     return (data || []).map(row => {
       const decrypted = decryptEntityPrivacyFields('tenants', row);
-      const defaultSpecialFeatures = ['tab:truck_dispatch:audit_settle', 'btn:truck_dispatch:bulk_approve', 'btn:courier_dispatch:direct_dispatch', 'btn:contracts:trade_outbound'];
-      const rawSpecialFeatures = decrypted.specialFeatures || decrypted.features?.specialFeatures || (row.id === 'tenant-giyeonlift' ? defaultSpecialFeatures : undefined);
-      const explicitContractTrade = (decrypted as any).allowContractTradeOutbound ?? decrypted.features?.allowContractTradeOutbound;
-      const resolvedAllowContractTradeOutbound = typeof explicitContractTrade === 'boolean' ? explicitContractTrade : true;
-      let specialFeatures = Array.isArray(rawSpecialFeatures)
-        ? (resolvedAllowContractTradeOutbound && !rawSpecialFeatures.includes('btn:contracts:trade_outbound') && explicitContractTrade !== false
-            ? [...rawSpecialFeatures, 'btn:contracts:trade_outbound']
-            : [...rawSpecialFeatures])
-        : rawSpecialFeatures;
-      if (row.id === 'tenant-giyeonlift' && Array.isArray(specialFeatures)) {
-        if (!specialFeatures.includes('tab:truck_dispatch:audit_settle')) {
-          specialFeatures.push('tab:truck_dispatch:audit_settle');
-        }
-        if (!specialFeatures.includes('btn:truck_dispatch:bulk_approve')) {
-          specialFeatures.push('btn:truck_dispatch:bulk_approve');
-        }
-      }
+      const specialFeatures = decrypted.specialFeatures || decrypted.features?.specialFeatures || (row.id === 'tenant-giyeonlift' ? ['tab:truck_dispatch:audit_settle', 'btn:truck_dispatch:bulk_approve', 'btn:courier_dispatch:direct_dispatch'] : undefined);
       const po = decrypted.privacyOfficer || decrypted.features?.privacyOfficer;
-      const rawAllowedPages = Array.isArray((decrypted as any).allowedPages)
-        ? [...(decrypted as any).allowedPages]
-        : undefined;
-      let rawHiddenPages = Array.isArray((decrypted as any).hiddenPages)
-        ? [...(decrypted as any).hiddenPages]
-        : undefined;
-      if (Array.isArray(rawAllowedPages) && rawAllowedPages.length > 0 && !rawAllowedPages.includes('as_route_tracking')) {
-        rawAllowedPages.push('as_route_tracking');
-      }
-      if (row.id === 'tenant-giyeonlift' || row.id === 'tenant-ebro-awp') {
-        const tradeMenus = [
-          'trade_products',
-          'trade_purchases',
-          'trade_contracts',
-          'trade_outbounds',
-          'courier_dispatch',
-          'trade_billing',
-          'trade_returns',
-          'trade_profitability'
-        ];
-        if (Array.isArray(rawAllowedPages) && rawAllowedPages.length > 0) {
-          tradeMenus.forEach(tm => {
-            if (!rawAllowedPages.includes(tm)) rawAllowedPages.push(tm);
-          });
-        }
-        if (Array.isArray(rawHiddenPages)) {
-          rawHiddenPages = rawHiddenPages.filter(hm => !tradeMenus.includes(hm));
-        }
-      }
       return {
         ...decrypted,
-        ...(rawAllowedPages ? { allowedPages: rawAllowedPages } : {}),
-        ...(rawHiddenPages ? { hiddenPages: rawHiddenPages } : {}),
-        allowContractTradeOutbound: resolvedAllowContractTradeOutbound,
         specialFeatures,
         excelMappingRules: decrypted.excelMappingRules || decrypted.features?.excelMappingRules,
         r2Config: (decrypted as any).r2Config || decrypted.features?.r2Config,
@@ -132,10 +84,6 @@ export async function saveCentralTenant(tenant: Partial<Tenant> & { id: string }
 
     if (payload.specialFeatures !== undefined) {
       mergedFeatures.specialFeatures = payload.specialFeatures;
-      featuresTouched = true;
-    }
-    if (payload.allowContractTradeOutbound !== undefined) {
-      mergedFeatures.allowContractTradeOutbound = payload.allowContractTradeOutbound;
       featuresTouched = true;
     }
     if (payload.excelMappingRules !== undefined) {
@@ -272,7 +220,7 @@ export interface EquipmentManualItem {
 }
 
 /**
- * 솔루션 업종에 맞는 공통 장비 매뉴얼 조회
+ * 솔루션 업종(AWP vs IT)에 맞는 공통 장비 매뉴얼 조회
  */
 export async function fetchCentralEquipmentManuals(solutionType: 'AWP' | 'IT' = 'AWP'): Promise<EquipmentManualItem[]> {
   try {
@@ -318,7 +266,7 @@ export async function fetchCentralManualAnnotations(solutionType: 'AWP' | 'IT' =
 }
 
 // ──────────────────────────────────────────────
-// 4. 시스템 화면 메뉴별 공통 매뉴얼
+// 4. 시스템 화면 메뉴별 공통 매뉴얼 (system_manuals)
 // ──────────────────────────────────────────────
 
 export interface SystemManualItem {
@@ -380,7 +328,7 @@ export async function saveCentralSystemManual(manual: any): Promise<boolean> {
 }
 
 // ──────────────────────────────────────────────
-// 5. 법적 통고문 / 내용증명 표준 서식
+// 5. 법적 통고문 / 내용증명 표준 서식 (legal_notice_templates)
 // ──────────────────────────────────────────────
 
 export interface LegalNoticeTemplateItem {
@@ -457,11 +405,11 @@ export async function saveCentralLegalNoticeTemplate(template: any): Promise<boo
 }
 
 // ──────────────────────────────────────────────
-// 6. 모바일 앱 공식 배포 버전 원장
+// 6. 모바일 앱(APK) 공식 배포 버전 원장 (apk_releases)
 // ──────────────────────────────────────────────
 
 /**
- * 최신 공식 모바일 앱 배포 버전 조회
+ * 최신 공식 모바일 앱(APK) 배포 버전 조회
  */
 export async function fetchCentralLatestApk(): Promise<any> {
   try {
@@ -485,7 +433,7 @@ export async function fetchCentralLatestApk(): Promise<any> {
 }
 
 // ──────────────────────────────────────────────
-// 7. 개발자 권한 물리 단말기 인가 대장
+// 7. 개발자 권한 물리 단말기 인가 대장 (developer_authorized_devices)
 // 🌐 멀티 테넌트 독립 중앙 플랫폼 SSOT (테넌트 계약과 무관한 영구 보존 Control Plane)
 // ──────────────────────────────────────────────
 
@@ -506,28 +454,18 @@ export async function fetchCentralDeveloperDevices(): Promise<any[]> {
     }
   } catch {}
 
-  // 2순위: 중앙 테넌트 원장의 글로벌 메타 조회 (모든 테넌트 행의 인가 목록 통합 병합)
+  // 2순위: 중앙 테넌트 원장의 글로벌 메타(features.developerAuthorizedDevices) 조회
   try {
     const { data: tenantRows } = await centralSupabase
       .from('tenants')
       .select('features')
-      .limit(20);
+      .limit(10);
 
     if (Array.isArray(tenantRows)) {
-      const mergedMap = new Map<string, any>();
       for (const row of tenantRows) {
-        if (row.features && Array.isArray(row.features.developerAuthorizedDevices)) {
-          for (const dev of row.features.developerAuthorizedDevices) {
-            if (!dev) continue;
-            const key = dev.id || dev.deviceId || `${dev.macAddress || ''}_${dev.hardwareFingerprint || ''}`;
-            if (key && !mergedMap.has(key)) {
-              mergedMap.set(key, dev);
-            }
-          }
+        if (row.features && Array.isArray(row.features.developerAuthorizedDevices) && row.features.developerAuthorizedDevices.length > 0) {
+          return row.features.developerAuthorizedDevices;
         }
-      }
-      if (mergedMap.size > 0) {
-        return Array.from(mergedMap.values());
       }
     }
   } catch (err: any) {
@@ -555,35 +493,30 @@ export async function saveCentralDeveloperDevice(device: any): Promise<boolean> 
     if (!error) saved = true;
   } catch {}
 
-  // 2. 중앙 테넌트 글로벌 메타 영구 동기화 (모든 테넌트 행에 일괄 반영하여 테넌트 간 편차 원천 차단)
+  // 2. 중앙 테넌트 글로벌 메타(features.developerAuthorizedDevices) 영구 동기화
   try {
-    const { data: tenantRows } = await centralSupabase
+    const { data: tenantRow } = await centralSupabase
       .from('tenants')
       .select('id, features')
-      .limit(20);
+      .limit(1)
+      .maybeSingle();
 
-    if (Array.isArray(tenantRows)) {
-      for (const tenantRow of tenantRows) {
-        const curFeatures = tenantRow.features || {};
-        const list = Array.isArray(curFeatures.developerAuthorizedDevices) ? [...curFeatures.developerAuthorizedDevices] : [];
-        const idx = list.findIndex(
-          (d: any) =>
-            d.id === cleanDev.id ||
-            (d.hardwareFingerprint && cleanDev.hardwareFingerprint && d.hardwareFingerprint === cleanDev.hardwareFingerprint)
-        );
-        if (idx >= 0) {
-          list[idx] = { ...list[idx], ...cleanDev };
-        } else {
-          list.unshift(cleanDev);
-        }
-        curFeatures.developerAuthorizedDevices = list;
-        const { error: updErr } = await centralSupabase
-          .from('tenants')
-          .update({ features: curFeatures })
-          .eq('id', tenantRow.id);
-
-        if (!updErr) saved = true;
+    if (tenantRow) {
+      const curFeatures = tenantRow.features || {};
+      const list = Array.isArray(curFeatures.developerAuthorizedDevices) ? [...curFeatures.developerAuthorizedDevices] : [];
+      const idx = list.findIndex((d: any) => d.id === cleanDev.id || (d.macAddress && d.macAddress === cleanDev.macAddress));
+      if (idx >= 0) {
+        list[idx] = { ...list[idx], ...cleanDev };
+      } else {
+        list.unshift(cleanDev);
       }
+      curFeatures.developerAuthorizedDevices = list;
+      const { error: updErr } = await centralSupabase
+        .from('tenants')
+        .update({ features: curFeatures })
+        .eq('id', tenantRow.id);
+
+      if (!updErr) saved = true;
     }
   } catch (err: any) {
     console.warn('[Central DB] Global meta sync warn:', err.message);
