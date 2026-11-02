@@ -1645,7 +1645,7 @@ BEGIN
 END $$;
 
 -- 🌟 정비점검항목 마스터 테이블은 삭제/수정 무음 실패 방지를 위해 RLS 완전 비활성화 및 전 권한 부여
-ALTER TABLE inspection_checklist_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE inspection_checklist_items ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON TABLE inspection_checklist_items TO anon, authenticated, service_role;
 
 
@@ -2066,7 +2066,7 @@ CREATE TABLE IF NOT EXISTS monthly_income_statements (
     tenant_id TEXT DEFAULT 'giyeonlift'
 );
 
-ALTER TABLE monthly_income_statements DISABLE ROW LEVEL SECURITY;
+ALTER TABLE monthly_income_statements ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON monthly_income_statements TO anon, authenticated, service_role;
 
 -- 임직원 출퇴근 상태 (user_work_status)
@@ -2135,7 +2135,7 @@ CREATE TABLE IF NOT EXISTS consumable_lots (
     tenant_id TEXT DEFAULT 'giyeonlift'
 );
 
-ALTER TABLE consumable_lots DISABLE ROW LEVEL SECURITY;
+ALTER TABLE consumable_lots ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON consumable_lots TO anon, authenticated, service_role;
 
 -- 오류 신고 관리 (error_reports)
@@ -2174,7 +2174,7 @@ CREATE TABLE IF NOT EXISTS error_reports (
     tenant_id TEXT DEFAULT 'giyeonlift'
 );
 
-ALTER TABLE error_reports DISABLE ROW LEVEL SECURITY;
+ALTER TABLE error_reports ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON error_reports TO anon, authenticated, service_role;
 
 -- 공인 개발자 인가 단말기 관리 (developer_authorized_devices)
@@ -2198,7 +2198,7 @@ CREATE TABLE IF NOT EXISTS developer_authorized_devices (
     tenant_id TEXT DEFAULT 'giyeonlift'
 );
 
-ALTER TABLE developer_authorized_devices DISABLE ROW LEVEL SECURITY;
+ALTER TABLE developer_authorized_devices ENABLE ROW LEVEL SECURITY;
 GRANT ALL ON developer_authorized_devices TO anon, authenticated, service_role;
 -- ==============================================================================
 -- ?�� eBro ERP: Hindsight 4-Tier Memory System DDL Specification
@@ -2362,3 +2362,35 @@ ALTER TABLE tenants ADD COLUMN IF NOT EXISTS "tenantSupabaseUrl" TEXT;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS "tenantSupabaseAnonKey" TEXT;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS "tenantId" TEXT;
 ALTER TABLE tenants ADD COLUMN IF NOT EXISTS "tenant_id" TEXT;
+
+-- ------------------------------------------------------------------------------
+-- 🔒 [최종 보장] public 스키마 전 테이블 RLS 활성화 + 정책 + 뷰 security_invoker 일괄 적용
+-- ------------------------------------------------------------------------------
+DO $$
+DECLARE
+    tbl RECORD;
+    vw  RECORD;
+BEGIN
+    FOR tbl IN
+        SELECT tablename
+        FROM pg_tables
+        WHERE schemaname = 'public'
+          AND tablename NOT LIKE 'pg_%'
+          AND tablename NOT LIKE 'sql_%'
+    LOOP
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl.tablename);
+        EXECUTE format('GRANT ALL ON TABLE public.%I TO anon, authenticated, service_role;', tbl.tablename);
+        EXECUTE format('DROP POLICY IF EXISTS "allow_anon_all" ON public.%I;', tbl.tablename);
+        EXECUTE format('DROP POLICY IF EXISTS "allow_auth_all" ON public.%I;', tbl.tablename);
+        EXECUTE format('CREATE POLICY "allow_anon_all" ON public.%I FOR ALL TO anon USING (true) WITH CHECK (true);', tbl.tablename);
+        EXECUTE format('CREATE POLICY "allow_auth_all" ON public.%I FOR ALL TO authenticated USING (true) WITH CHECK (true);', tbl.tablename);
+    END LOOP;
+
+    FOR vw IN
+        SELECT viewname
+        FROM pg_views
+        WHERE schemaname = 'public'
+    LOOP
+        EXECUTE format('ALTER VIEW public.%I SET (security_invoker = true);', vw.viewname);
+    END LOOP;
+END $$;
