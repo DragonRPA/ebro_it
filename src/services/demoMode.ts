@@ -2,12 +2,12 @@
 // ebro_awp 데모 모드 감지, 설정 및 리셋 서비스
 
 import goldenData from './demo_golden_dataset.json';
-import { createClient } from '@supabase/supabase-js';
+import { createPrefixedSupabaseClient, DRAGONRPA_HUB_SUPABASE } from '../lib/supabasePrefixProxy';
 
 export const DEMO_SUPABASE_CONFIG = {
-  url: 'https://uvmhqwpkmzxrrlkeguul.supabase.co',
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InV2bWhxd3BrbXp4cnJsa2VndXVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk2MzIyNjgsImV4cCI6MjEwNTIwODI2OH0.vqPtbWpsMEVDnZqzVqzB1onKd-pL5T53qsRB3-IIjZU',
-  projectRef: 'uvmhqwpkmzxrrlkeguul'
+  url: DRAGONRPA_HUB_SUPABASE.url,
+  anonKey: DRAGONRPA_HUB_SUPABASE.anonKey,
+  projectRef: DRAGONRPA_HUB_SUPABASE.projectRef
 };
 
 /** 실운영 프로덕션 도메인 판별 (e-Bro IT 전용 도메인) */
@@ -96,7 +96,7 @@ export function exitDemoMode() {
 
 /** 데모 전용 Supabase 클라이언트 인스턴스 생성 */
 export function getDemoSupabaseClient() {
-  return createClient(DEMO_SUPABASE_CONFIG.url, DEMO_SUPABASE_CONFIG.anonKey);
+  return createPrefixedSupabaseClient(DEMO_SUPABASE_CONFIG.url, DEMO_SUPABASE_CONFIG.anonKey, 'it_');
 }
 
 /** 데모 데이터 골든 데이터셋으로 초기화(Reset) */

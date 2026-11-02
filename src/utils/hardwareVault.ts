@@ -194,6 +194,12 @@ export function getAuthorizedDeveloperDevices(): DeveloperDeviceProfile[] {
  */
 export async function fetchAuthorizedDeveloperDevicesLive(): Promise<DeveloperDeviceProfile[]> {
   try {
+    const centralDevices = await fetchCentralDeveloperDevices();
+    if (Array.isArray(centralDevices) && centralDevices.length > 0) {
+      return centralDevices as DeveloperDeviceProfile[];
+    }
+  } catch {}
+  try {
     if (supabase) {
       const { data } = await supabase
         .from('developer_authorized_devices')
@@ -299,7 +305,13 @@ export async function isCurrentDeviceAuthorizedForDeveloper(): Promise<{
         liveData = data;
       }
     }
-    if (liveData.length === 0 && centralSupabase) {
+    if (centralSupabase) {
+      const centralData = await fetchCentralDeveloperDevices();
+      if (Array.isArray(centralData) && centralData.length > 0) {
+        liveData = [...centralData.filter((d: any) => d.status === 'ACTIVE'), ...liveData];
+      }
+    }
+    if (false && centralSupabase) {
       const centralData = await fetchCentralDeveloperDevices();
       if (Array.isArray(centralData) && centralData.length > 0) {
         liveData = centralData.filter((d: any) => d.status === 'ACTIVE');

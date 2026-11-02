@@ -9,8 +9,8 @@ const crypto = require('crypto');
 const https = require('https');
 const { exec } = require('child_process');
 
-const SUPABASE_URL = 'https://nyfashwbdcepncpdwpdb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55ZmFzaHdiZGNlcG5jcGR3cGRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExOTUwMjgsImV4cCI6MjEwNjc3MTAyOH0.xw2XKKzjPj_HjQzPJDMKkkbaO7htojYioIMGt4l8VLM';
+const SUPABASE_URL = 'https://lkohpffieaanwhohttbu.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxrb2hwZmZpZWFhbndob2h0dGJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5ODkxOTQsImV4cCI6MjEwODU2NTE5NH0.lOXz6JWfLNcfH4ApH74F7qtlPky8lVwGiAqY_ybSZ6E';
 const DEFAULT_MASTER_KEY = 'ebro-dev-master-2026!';
 const EMERGENCY_BREAK_GLASS_KEY = 'ebro-breakglass-recovery-2026!';
 const VAULT_CIPHER_KEY = 0x4f;
@@ -103,7 +103,7 @@ async function main() {
 
   // 기존 등록 여부 확인
   console.log('\n[Supabase DB] 기존 등록 기기 조회 중...');
-  const existing = await makeSupabaseRequest(`/rest/v1/developer_authorized_devices?macAddress=eq.${primaryMac}&select=id`);
+  const existing = await makeSupabaseRequest(`/rest/v1/core_developer_authorized_devices?macAddress=eq.${primaryMac}&select=id`);
   let finalId = deviceId;
   if (Array.isArray(existing.data) && existing.data.length > 0) {
     finalId = existing.data[0].id;
@@ -127,7 +127,7 @@ async function main() {
   };
 
   console.log('[Supabase DB] developer_authorized_devices 테이블에 업서트 중...');
-  const res = await makeSupabaseRequest('/rest/v1/developer_authorized_devices', 'POST', payload, {
+  const res = await makeSupabaseRequest('/rest/v1/core_developer_authorized_devices', 'POST', payload, {
     'Prefer': 'resolution=merge-duplicates,return=representation'
   });
 

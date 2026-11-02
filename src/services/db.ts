@@ -1,7 +1,7 @@
 // @ts-nocheck
-import { createClient } from '@supabase/supabase-js';
 import { isDemoMode, DEMO_SUPABASE_CONFIG } from './demoMode';
 import { centralSupabase } from './centralDb';
+import { createPrefixedSupabaseClient } from '../lib/supabasePrefixProxy';
 import { 
   encryptEntityPrivacyFields, 
   decryptEntityPrivacyFields,
@@ -12,11 +12,11 @@ import {
 } from '../utils/cryptoVault';
 
 const isDemo = isDemoMode();
-const supabaseUrl = isDemo ? DEMO_SUPABASE_CONFIG.url : import.meta.env?.VITE_SUPABASE_URL;
-const supabaseAnonKey = isDemo ? DEMO_SUPABASE_CONFIG.anonKey : import.meta.env?.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = isDemo ? DEMO_SUPABASE_CONFIG.url : (import.meta.env?.VITE_SUPABASE_URL || DEMO_SUPABASE_CONFIG.url);
+const supabaseAnonKey = isDemo ? DEMO_SUPABASE_CONFIG.anonKey : (import.meta.env?.VITE_SUPABASE_ANON_KEY || DEMO_SUPABASE_CONFIG.anonKey);
 
 export const supabase = supabaseUrl && supabaseAnonKey
-  ? createClient(supabaseUrl, supabaseAnonKey)
+  ? createPrefixedSupabaseClient(supabaseUrl, supabaseAnonKey, 'it_')
   : null;
 
 // 🌐 중앙 플랫폼 DB(ebro-platform-core) 직통 라우팅 대상 테이블 목록
@@ -26,7 +26,8 @@ export const CENTRAL_TABLE_NAMES = new Set([
   'system_manuals',
   'manual_annotations',
   'legal_notice_templates',
-  'apk_releases'
+  'apk_releases',
+  'developer_authorized_devices'
 ]);
 
 // 법인 표기어 및 공백 제거 정규화 파서

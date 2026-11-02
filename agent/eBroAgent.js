@@ -2508,10 +2508,10 @@ async function autoSyncFromCloudflare() {
 // =========================================================================
 //  [분산 원격 인쇄 큐 워커 엔진 (Headless Distributed Queue Worker)]
 // =========================================================================
-const SUPABASE_REST_URL = 'https://wywgkikkjgbnlljkkmnz.supabase.co/rest/v1';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind5d2draWtramdibmxsamtrbW56Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQzNjcxMzgsImV4cCI6MjA5OTk0MzEzOH0.gSftxhQjFmWUQzikx-Q5UsdgNKSZISZqJvUGeLBOCqU';
-const CENTRAL_SUPABASE_REST_URL = 'https://nyfashwbdcepncpdwpdb.supabase.co/rest/v1';
-const CENTRAL_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55ZmFzaHdiZGNlcG5jcGR3cGRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExOTUwMjgsImV4cCI6MjEwNjc3MTAyOH0.xw2XKKzjPj_HjQzPJDMKkkbaO7htojYioIMGt4l8VLM';
+const SUPABASE_REST_URL = 'https://lkohpffieaanwhohttbu.supabase.co/rest/v1';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxrb2hwZmZpZWFhbndob2h0dGJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5ODkxOTQsImV4cCI6MjEwODU2NTE5NH0.lOXz6JWfLNcfH4ApH74F7qtlPky8lVwGiAqY_ybSZ6E';
+const CENTRAL_SUPABASE_REST_URL = 'https://lkohpffieaanwhohttbu.supabase.co/rest/v1';
+const CENTRAL_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imxrb2hwZmZpZWFhbndob2h0dGJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTI5ODkxOTQsImV4cCI6MjEwODU2NTE5NH0.lOXz6JWfLNcfH4ApH74F7qtlPky8lVwGiAqY_ybSZ6E';
 
 
 let isQueueProcessing = false;
@@ -2552,7 +2552,7 @@ async function checkAndProcessPrintQueue() {
   let job = null;
   try {
     const stationId = encodeURIComponent(activeStationConfig.stationId);
-    const queryUrl = `${SUPABASE_REST_URL}/print_queue?stationId=eq.${stationId}&status=eq.PENDING&order=requestedAt.asc&limit=1`;
+    const queryUrl = `${SUPABASE_REST_URL}/it_print_queue?stationId=eq.${stationId}&status=eq.PENDING&order=requestedAt.asc&limit=1`;
 
     const res = await httpRequestJson(queryUrl, {
       method: 'GET',
@@ -2573,7 +2573,7 @@ async function checkAndProcessPrintQueue() {
 
     // 1. 작업 상태를 PRINTING으로 선점 잠금 (중복 실행 방지)
     try {
-      await httpRequestJson(`${SUPABASE_REST_URL}/print_queue?id=eq.${encodeURIComponent(job.id)}`, {
+      await httpRequestJson(`${SUPABASE_REST_URL}/it_print_queue?id=eq.${encodeURIComponent(job.id)}`, {
         method: 'PATCH',
         headers: {
           'apikey': SUPABASE_ANON_KEY,
@@ -2595,7 +2595,7 @@ async function checkAndProcessPrintQueue() {
     await sendHtmlToPhysicalPrinter(job.documentHtml, printerName, title);
 
     // 3. 완료 상태 업데이트
-    await httpRequestJson(`${SUPABASE_REST_URL}/print_queue?id=eq.${encodeURIComponent(job.id)}`, {
+    await httpRequestJson(`${SUPABASE_REST_URL}/it_print_queue?id=eq.${encodeURIComponent(job.id)}`, {
       method: 'PATCH',
       headers: {
         'apikey': SUPABASE_ANON_KEY,
@@ -2616,7 +2616,7 @@ async function checkAndProcessPrintQueue() {
     if (job) {
       agentLog('ERROR', `원격 인쇄 작업 [${job.id}] 실패: ${printErr.message || printErr}`);
       try {
-        await httpRequestJson(`${SUPABASE_REST_URL}/print_queue?id=eq.${encodeURIComponent(job.id)}`, {
+        await httpRequestJson(`${SUPABASE_REST_URL}/it_print_queue?id=eq.${encodeURIComponent(job.id)}`, {
           method: 'PATCH',
           headers: {
             'apikey': SUPABASE_ANON_KEY,
@@ -2674,7 +2674,7 @@ async function sendAgentHeartbeat() {
       updated_at: new Date().toISOString()
     };
     
-    await httpRequestJson(`${SUPABASE_REST_URL}/agent_heartbeats`, {
+    await httpRequestJson(`${SUPABASE_REST_URL}/it_agent_heartbeats`, {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_ANON_KEY,
@@ -2691,7 +2691,7 @@ async function sendStationHeartbeat() {
   if (!activeStationConfig || !activeStationConfig.stationId) return;
   try {
     const stationId = encodeURIComponent(activeStationConfig.stationId);
-    await httpRequestJson(`${SUPABASE_REST_URL}/print_stations?id=eq.${stationId}`, {
+    await httpRequestJson(`${SUPABASE_REST_URL}/it_print_stations?id=eq.${stationId}`, {
       method: 'PATCH',
       headers: {
         'apikey': SUPABASE_ANON_KEY,

@@ -2,16 +2,18 @@
 // 🌐 eBro Platform Central Database Service (ebro-platform-core)
 // Tier 1: Control Plane & Global Knowledge Base SSOT
 
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { SupabaseClient } from '@supabase/supabase-js';
 import type { Tenant } from './db';
 import { encryptEntityPrivacyFields, decryptEntityPrivacyFields } from '../utils/cryptoVault';
+import { createPrefixedSupabaseClient, DRAGONRPA_HUB_SUPABASE } from '../lib/supabasePrefixProxy';
 
-const CENTRAL_SUPABASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CENTRAL_SUPABASE_URL) || (typeof process !== 'undefined' && process.env?.VITE_CENTRAL_SUPABASE_URL) || 'https://nyfashwbdcepncpdwpdb.supabase.co';
-const CENTRAL_SUPABASE_ANON_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CENTRAL_SUPABASE_ANON_KEY) || (typeof process !== 'undefined' && process.env?.VITE_CENTRAL_SUPABASE_ANON_KEY) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im55ZmFzaHdiZGNlcG5jcGR3cGRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTExOTUwMjgsImV4cCI6MjEwNjc3MTAyOH0.xw2XKKzjPj_HjQzPJDMKkkbaO7htojYioIMGt4l8VLM';
+const CENTRAL_SUPABASE_URL = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CENTRAL_SUPABASE_URL) || (typeof process !== 'undefined' && process.env?.VITE_CENTRAL_SUPABASE_URL) || DRAGONRPA_HUB_SUPABASE.url;
+const CENTRAL_SUPABASE_ANON_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_CENTRAL_SUPABASE_ANON_KEY) || (typeof process !== 'undefined' && process.env?.VITE_CENTRAL_SUPABASE_ANON_KEY) || DRAGONRPA_HUB_SUPABASE.anonKey;
 
-export const centralSupabase: SupabaseClient = createClient(
+export const centralSupabase: SupabaseClient = createPrefixedSupabaseClient(
   CENTRAL_SUPABASE_URL,
   CENTRAL_SUPABASE_ANON_KEY,
+  'core_',
   {
     auth: {
       persistSession: true,
