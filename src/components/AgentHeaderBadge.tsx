@@ -12,7 +12,7 @@ interface Props {
 }
 
 export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
-  const { officialMailConfigs, hasPermission, currentTenant } = useApp();
+  const { officialMailConfigs, hasPermission, currentTenant, users, currentUser: appCurrentUser } = useApp();
   const [agentStatus, setAgentStatus] = useState<'ONLINE' | 'OFFLINE'>(() => isAgentOnlineGlobal() ? 'ONLINE' : 'OFFLINE');
   const [agentVersion, setAgentVersion] = useState<string>('');
   const [agentCallsign, setAgentCallsign] = useState<string>('');
@@ -75,12 +75,47 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
     };
   }, [currentUser]);
 
-  // ── 접속 테넌트 변경 또는 에이전트 온라인 전환 시 현재 테넌트 정체성 자동 핫 동기화 ──
+  // ── 접속 테넌트 변경, 로그인 직원 변경, 백업 권한 변경 또는 에이전트 온라인 전환 시 정책 자동 핫 동기화 ──
+  const liveUserRecord = React.useMemo(() => {
+    const uid = appCurrentUser?.id || (currentUser as any)?.id;
+    const lid = appCurrentUser?.loginId || currentUser?.loginId;
+    if (!uid && !lid) return null;
+    return (users || []).find(u => (uid && u.id === uid) || (lid && u.loginId === lid)) || appCurrentUser || null;
+  }, [users, appCurrentUser, currentUser]);
+
   useEffect(() => {
-    if (agentStatus === 'ONLINE' && currentTenant) {
-      syncTenantPolicyToAgent(currentTenant).catch(() => {});
+    if (agentStatus === 'ONLINE' && (currentTenant || liveUserRecord)) {
+      syncTenantPolicyToAgent(
+        currentTenant,
+        liveUserRecord
+          ? {
+              autoBackupEnabled: Boolean(liveUserRecord.autoBackupEnabled),
+              autoBackupTime: liveUserRecord.autoBackupTime || '09:00',
+              autoBackupRetentionDays: liveUserRecord.autoBackupRetentionDays || 30,
+              backupUserId: liveUserRecord.id || '',
+              backupUserName: liveUserRecord.name || ''
+            }
+          : {
+              autoBackupEnabled: false,
+              autoBackupTime: '09:00',
+              autoBackupRetentionDays: 30,
+              backupUserId: '',
+              backupUserName: ''
+            }
+      ).catch(() => {});
     }
-  }, [agentStatus, currentTenant?.id, currentTenant?.tenantCode, currentTenant?.displayName, currentTenant?.corporateName, currentTenant?.features?.agentAiEnabled]);
+  }, [
+    agentStatus,
+    currentTenant?.id,
+    currentTenant?.tenantCode,
+    currentTenant?.displayName,
+    currentTenant?.corporateName,
+    currentTenant?.features?.agentAiEnabled,
+    liveUserRecord?.id,
+    liveUserRecord?.autoBackupEnabled,
+    liveUserRecord?.autoBackupTime,
+    liveUserRecord?.autoBackupRetentionDays
+  ]);
 
   // 외부 클릭 시 메뉴 닫기
   useEffect(() => {
@@ -185,7 +220,7 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
   // 🚀 무음 스마트 백그라운드 자동 업데이트 실행
   const handleSelfUpdate = async () => {
     setIsUpdatingSelf(true);
-    setUpdateMsg('최신 버전(v2.0.0.Build.2) 백그라운드 다운로드 중...');
+    setUpdateMsg('최신 버전 백그라운드 다운로드 중...');
     try {
       const res = await triggerAgentSelfUpdate(true);
       if (res.success) {
@@ -205,11 +240,10 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
     }
   };
 
-  // 버전 약식 변환 헬퍼 (예: v1.100.0.Build.217 -> v1.100)
+  // 버전 표시 헬퍼 (빌드 번호까지 명확히 표기하여 버전 불일치 즉시 식별)
   const toShortVer = (ver: string) => {
     if (!ver) return '';
-    const match = ver.match(/v\d+\.\d+/);
-    return match ? match[0] : ver.split('.Build')[0];
+    return ver;
   };
 
   const shortCurrent = toShortVer(agentVersion);
@@ -401,11 +435,17 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-muted)' }}>현재 버전:</span>
-              <span style={{ fontWeight: '700' }}>{agentVersion || '없음'}</span>
+              <span style={{ fontWeight: '700', color: isOutdated ? '#d97706' : 'var(--text-primary)' }}>{agentVersion || '없음'}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-muted)' }}>최신 요구 버전:</span>
               <span style={{ fontWeight: '800', color: 'var(--primary)' }}>{EXPECTED_AGENT_VERSION}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: 'var(--text-muted)' }}>버전 일치 여부:</span>
+              <span style={{ fontWeight: '800', color: agentStatus !== 'ONLINE' ? '#64748b' : (isLatest ? '#16a34a' : '#dc2626') }}>
+                {agentStatus !== 'ONLINE' ? '⚪ 확인 불가 (미실행)' : (isLatest ? '🟢 최신 버전 일치' : '⚠️ 버전 불일치 · 업데이트 필요')}
+              </span>
             </div>
             {agentCallsign && (
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -415,7 +455,7 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
             )}
           </div>
 
-          {/* 🏢 AI 활성 시 스튜디오 열기 / 비활성(Silent Core) 시 로컬 문서고 폴더 열기 */}
+          {/* 🏢 AI 활성 시 스튜디오 열기 / 비활성 시 로컬 문서고 폴더 열기 */}
           {agentStatus === 'ONLINE' && (
             Boolean(currentTenant?.features?.agentAiEnabled) ? (
               <button
@@ -645,7 +685,7 @@ export const AgentHeaderBadge: React.FC<Props> = ({ currentUser }) => {
                   }}
                 >
                   <Download size={13} color="var(--primary)" />
-                  <span>eBro 통합 에이전트 설치 (.exe) 다운로드</span>
+                  <span>eBro 통합 에이전트 설치 다운로드</span>
                 </button>
               </>
             )}

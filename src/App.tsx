@@ -8,10 +8,10 @@ import {
   Truck, Wrench, Shield, ShoppingBag, CreditCard, LogOut, Sun, Moon, Menu, X, Zap, Settings, Database as DatabaseIcon,
   TrendingUp, Clock, AlertTriangle, Building2, ChevronDown, ChevronRight, ChevronLeft, Briefcase, Box, FolderKanban, ShieldAlert, Terminal, ArrowLeftRight, CheckSquare,
   Smartphone, Monitor, Car, FileText, Search, Printer, PackagePlus, Boxes, Calendar, Camera, BookOpen,
-  FileCheck, ShieldCheck, Bot, Download, Bell, ClipboardList, Brain
+  FileCheck, ShieldCheck, Bot, Download, Bell, ClipboardList, Brain, RefreshCw
 , CheckCircle, Settings as SettingsIcon, SlidersHorizontal, Mail, Mic } from 'lucide-react';
 const OfficialMailPage = React.lazy(() => import('./pages/OfficialMailPage').then(module => ({ default: module.OfficialMailPage })));
-import { getTenantAgentInstallerInfo, triggerTenantAgentDownload, AGENT_CERT_URL, syncTenantPolicyToAgent } from './services/agentService';
+import { getTenantAgentInstallerInfo, triggerTenantAgentDownload, AGENT_CERT_URL, syncTenantPolicyToAgent, startGlobalAgentHealthMonitor, EXPECTED_AGENT_VERSION, subscribeAgentStatus, triggerAgentSelfUpdate } from './services/agentService';
 
 import { JobAlertModal } from './components/JobAlertModal';
 import { PersistentJobAlertToast } from './components/PersistentJobAlertToast';
@@ -526,6 +526,10 @@ const App: React.FC = () => {
 
   // 🚀 에이전틱 AI 및 MCP 자동화를 위한 시스템 Ready 상태 공표
   useEffect(() => {
+    const callsign = currentUser?.loginId || currentUser?.name || 'admin';
+    startGlobalAgentHealthMonitor(callsign);
+  }, [currentUser]);
+  useEffect(() => {
     if (currentUser) {
       markErpReady({
         user: currentUser,
@@ -541,11 +545,49 @@ const App: React.FC = () => {
   }, [currentUser, activeTab, currentTenant]);
 
   const [installerDownloadMsg, setInstallerDownloadMsg] = useState<string | null>(null);
+  const [loginAgentOnline, setLoginAgentOnline] = useState<boolean>(false);
+  const [loginAgentVer, setLoginAgentVer] = useState<string>('');
+  const [latestServerAgentVer, setLatestServerAgentVer] = useState<string>(EXPECTED_AGENT_VERSION);
+  const [isLoginAgentUpdating, setIsLoginAgentUpdating] = useState<boolean>(false);
+
+  useEffect(() => {
+    const unsub = subscribeAgentStatus((online, info) => {
+      setLoginAgentOnline(online);
+      setLoginAgentVer(online && info?.version ? info.version : '');
+    });
+    fetch(`/downloads/version.json?_cb=${Date.now()}`, { cache: 'no-store' })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.version) setLatestServerAgentVer(data.version);
+      })
+      .catch(() => {});
+    return () => { unsub(); };
+  }, []);
+
+  const handleLoginAgentQuickUpdate = async () => {
+    setIsLoginAgentUpdating(true);
+    setInstallerDownloadMsg(`최신 버전(${latestServerAgentVer}) 자동 업데이트 진행 중...`);
+    try {
+      const res = await triggerAgentSelfUpdate(true);
+      if (res.success) {
+        setInstallerDownloadMsg(`최신 버전(${latestServerAgentVer}) 업데이트 요청 완료. 잠시 후 재연결됩니다.`);
+      } else {
+        setInstallerDownloadMsg(res.message || '업데이트 요청 실패');
+      }
+    } catch (e: any) {
+      setInstallerDownloadMsg(e?.message || '업데이트 통신 실패');
+    } finally {
+      setTimeout(() => {
+        setIsLoginAgentUpdating(false);
+      }, 4500);
+      setTimeout(() => setInstallerDownloadMsg(null), 6000);
+    }
+  };
 
   const handleAgentInstallerDownload = () => {
     const info = getTenantAgentInstallerInfo(currentTenant);
     triggerTenantAgentDownload(currentTenant);
-    setInstallerDownloadMsg(`[${info.tenantName}] 설치 프로그램 다운로드가 시작되었습니다.`);
+    setInstallerDownloadMsg(`[${info.tenantName}] 설치 프로그램(${latestServerAgentVer}) 다운로드가 시작되었습니다.`);
     setTimeout(() => setInstallerDownloadMsg(null), 4000);
   };
 
@@ -1328,6 +1370,88 @@ const App: React.FC = () => {
               </span>
             </div>
 
+            {/* 🔍 에이전트 최신 버전 및 내 PC 실행 버전 일치 여부 실시간 대조 영역 */}
+            {(() => {
+              const isVerMatch = loginAgentOnline && Boolean(loginAgentVer) && loginAgentVer === latestServerAgentVer;
+              const isVerMismatch = loginAgentOnline && Boolean(loginAgentVer) && loginAgentVer !== latestServerAgentVer;
+              return (
+                <div style={{
+                  padding: '8px 10px',
+                  borderRadius: '8px',
+                  backgroundColor: isVerMismatch ? 'rgba(245, 158, 11, 0.1)' : (isVerMatch ? 'rgba(16, 185, 129, 0.08)' : 'var(--bg-card)'),
+                  border: `1px solid ${isVerMismatch ? 'rgba(245, 158, 11, 0.45)' : (isVerMatch ? 'rgba(16, 185, 129, 0.35)' : 'var(--border-color)')}`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '4px',
+                  fontSize: '11.5px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>최신 배포 버전</span>
+                    <span style={{ color: 'var(--primary)', fontWeight: 800 }}>{latestServerAgentVer}</span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', whiteSpace: 'nowrap' }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>내 PC 실행 버전</span>
+                    <span style={{
+                      fontWeight: 800,
+                      color: isVerMismatch ? '#d97706' : (isVerMatch ? '#16a34a' : 'var(--text-muted)')
+                    }}>
+                      {loginAgentOnline ? (loginAgentVer || '확인 중') : '미실행'}
+                    </span>
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    paddingTop: '4px',
+                    marginTop: '2px',
+                    borderTop: '1px dashed var(--border-color)',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    <span style={{ color: 'var(--text-secondary)', fontWeight: 600 }}>버전 대조 상태</span>
+                    <span style={{
+                      fontWeight: 800,
+                      color: isVerMismatch ? '#dc2626' : (isVerMatch ? '#16a34a' : 'var(--text-secondary)')
+                    }}>
+                      {isVerMismatch
+                        ? '⚠️ 버전 불일치 · 업데이트 필요'
+                        : (isVerMatch ? '🟢 최신 버전 일치' : '⚪ 에이전트 미실행')}
+                    </span>
+                  </div>
+                  {isVerMismatch && (
+                    <button
+                      type="button"
+                      disabled={isLoginAgentUpdating}
+                      onClick={handleLoginAgentQuickUpdate}
+                      style={{
+                        marginTop: '4px',
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        backgroundColor: '#d97706',
+                        color: '#ffffff',
+                        fontSize: '12px',
+                        fontWeight: 800,
+                        cursor: isLoginAgentUpdating ? 'wait' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '6px',
+                        whiteSpace: 'nowrap'
+                      }}
+                    >
+                      <RefreshCw size={13} className={isLoginAgentUpdating ? 'animate-spin' : ''} style={{ flexShrink: 0 }} />
+                      <span>{isLoginAgentUpdating ? '최신 코어 업데이트 진행 중...' : `최신 버전(${latestServerAgentVer}) 즉시 업데이트`}</span>
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+            <div style={{ display: 'none' }}>
+              <span>
+              </span>
+            </div>
+
             <div>
               <button
                 type="button"
@@ -1353,12 +1477,12 @@ const App: React.FC = () => {
                 title="PC 백그라운드 에이전트 설치 패키지 다운로드"
               >
                 <Download size={15} color="#ffffff" style={{ flexShrink: 0 }} />
-                <span>eBro 통합 에이전트 설치 (.exe)</span>
+                <span>eBro 통합 에이전트 설치 ({latestServerAgentVer})</span>
               </button>
             </div>
 
             {/* 🧩 크롬 웹스토어 웹 확장프로그램 연동 링크 (테넌트 설정에서 AI/웹 확장 기능이 활성화된 테넌트에만 노출) */}
-            {Boolean(currentTenant?.features?.agentAiEnabled) && (
+            {false && Boolean(currentTenant?.features?.agentAiEnabled) && (
               <div style={{ marginTop: '2px' }}>
                 <a
                   href="https://chromewebstore.google.com/detail/bjljgkmnehpfnocaflfdhioanigljfmb"

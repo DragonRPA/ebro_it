@@ -1,9 +1,10 @@
 import type { TenantFeatures } from './db';
 
-export const EXPECTED_AGENT_VERSION = 'v2.0.0.Build.12';
+export const EXPECTED_AGENT_VERSION: string = 'v2.0.0.Build.32';
+export const EXPECTED_CORE_HASH: string = '99fa5b3f988d';
 // 🚀 GitHub Releases 글로벌 초고속 CDN (Azure/Fastly 한국 PoP 8~10MB/s 3초 다운로드)
 export const DEFAULT_GITHUB_RELEASE_BASE_URL = 'https://github.com/DragonRPA/ebro_awp/releases/download/agent-v2.0.0';
-// 🌐 Cloudflare R2 보조 엔드포인트 (Fallback)
+// 🌐 Cloudflare R2 보조 엔드포인트
 export const DEFAULT_CF_R2_BASE_URL = 'https://pub-55a68547bdf24600b80d27782912c83e.r2.dev';
 
 export const AGENT_INSTALLER_BASE_URL = `${DEFAULT_GITHUB_RELEASE_BASE_URL}/eBroAgent_Setup.exe`; // Inno Setup 16MB 초고속 정식 인스톨러
@@ -103,7 +104,7 @@ export function triggerTenantAgentDownload(tenant?: {
 }
 
 /**
- * 🚀 브라우저(사이트)에서 로컬 에이전트(BroAgent.js) 기동 트리거
+ * 🚀 브라우저(사이트)에서 로컬 에이전트 기동 트리거
  */
 export function launchLocalAgentFromBrowser(): void {
   try {
@@ -144,6 +145,7 @@ export async function openAgentStudio(): Promise<boolean> {
 export interface AgentHealthInfo {
   status: 'ONLINE' | 'OFFLINE';
   version?: string;
+  coreHash?: string;
   callsign?: string;
   machineName?: string;
   archiveRoot?: string;
@@ -168,35 +170,43 @@ export interface AgentHealthInfo {
 /**
  * 🌐 테넌트 관리 센터의 기능 정책을 로컬 에이전트에 실시간 핫 동기화
  */
-export async function syncTenantPolicyToAgent(tenant?: {
-  tenantCode?: string;
-  subdomain?: string;
-  displayName?: string;
-  tradeName?: string;
-  corporateName?: string;
-  businessNumber?: string;
-  representativeName?: string;
-  tel?: string;
-  fax?: string;
-  salesPhone?: string;
-  businessAddress?: string;
-  businessCategory?: string;
-  businessItem?: string;
-  bankAccounts?: Array<{ bankName: string; accountNumber: string; accountHolder: string }>;
-  stampImageUrl?: string;
-  features?: TenantFeatures;
-} | null): Promise<boolean> {
-  if (!tenant) return false;
+export async function syncTenantPolicyToAgent(
+  tenant?: {
+    tenantCode?: string;
+    subdomain?: string;
+    displayName?: string;
+    tradeName?: string;
+    corporateName?: string;
+    businessNumber?: string;
+    representativeName?: string;
+    tel?: string;
+    fax?: string;
+    salesPhone?: string;
+    businessAddress?: string;
+    businessCategory?: string;
+    businessItem?: string;
+    bankAccounts?: Array<{ bankName: string; accountNumber: string; accountHolder: string }>;
+    stampImageUrl?: string;
+    features?: TenantFeatures;
+  } | null,
+  backupPolicy?: {
+    autoBackupEnabled?: boolean;
+    autoBackupTime?: string;
+    autoBackupRetentionDays?: number;
+    backupUserId?: string;
+    backupUserName?: string;
+  } | null
+): Promise<boolean> {
+  if (!tenant && !backupPolicy) return false;
   try {
-    const isAiEnabled = Boolean(tenant.features?.agentAiEnabled);
-    const code = tenant.tenantCode || 'GIYEONLIFT';
-    const sub = tenant.subdomain || (code === 'GIYEONLIFT' || code === 'GIYEUN' ? 'giyeon' : code.toLowerCase());
-    const tenantName = tenant.displayName || tenant.tradeName || tenant.corporateName || code;
-    const corporateName = tenant.corporateName || tenant.tradeName || tenantName;
-    const res = await fetchWithAgentFallback('/api/policy/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    const payload: Record<string, any> = {};
+    if (tenant) {
+      const isAiEnabled = Boolean(tenant.features?.agentAiEnabled);
+      const code = tenant.tenantCode || 'GIYEONLIFT';
+      const sub = tenant.subdomain || (code === 'GIYEONLIFT' || code === 'GIYEUN' ? 'giyeon' : code.toLowerCase());
+      const tenantName = tenant.displayName || tenant.tradeName || tenant.corporateName || code;
+      const corporateName = tenant.corporateName || tenant.tradeName || tenantName;
+      Object.assign(payload, {
         agentAiEnabled: isAiEnabled,
         tenantCode: code,
         subdomain: sub,
@@ -212,7 +222,19 @@ export async function syncTenantPolicyToAgent(tenant?: {
         businessItem: tenant.businessItem || '',
         bankAccounts: tenant.bankAccounts || [],
         stampImageUrl: tenant.stampImageUrl || ''
-      })
+      });
+    }
+    if (backupPolicy) {
+      if (backupPolicy.autoBackupEnabled !== undefined) payload.autoBackupEnabled = Boolean(backupPolicy.autoBackupEnabled);
+      if (backupPolicy.autoBackupTime !== undefined) payload.autoBackupTime = backupPolicy.autoBackupTime || '09:00';
+      if (backupPolicy.autoBackupRetentionDays !== undefined) payload.autoBackupRetentionDays = Number(backupPolicy.autoBackupRetentionDays) || 30;
+      if (backupPolicy.backupUserId !== undefined) payload.backupUserId = backupPolicy.backupUserId || '';
+      if (backupPolicy.backupUserName !== undefined) payload.backupUserName = backupPolicy.backupUserName || '';
+    }
+    const res = await fetchWithAgentFallback('/api/policy/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
     });
     return res.ok;
   } catch (e) {
@@ -274,7 +296,7 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * 🌐 브라우저 확장 프로그램(ebro web agent) 존재 여부 감지
+ * 🌐 브라우저 확장 프로그램 존재 여부 감지
  */
 export function isExtensionBridgeAvailable(): boolean {
   if (typeof document === 'undefined') return false;
@@ -283,7 +305,7 @@ export function isExtensionBridgeAvailable(): boolean {
 }
 
 /**
- * 🌐 브라우저 확장 프로그램(ebro web agent) 프록시를 통한 에이전트 통신
+ * 🌐 브라우저 확장 프로그램 프록시를 통한 에이전트 통신
  * Chrome Private Network Access (PNA) 및 Mixed Content 제약을 우회하여 로컬 에이전트와 완벽 통신
  */
 export async function fetchViaExtensionBridge(pathOrUrl: string, init?: RequestInit): Promise<Response> {
@@ -384,17 +406,18 @@ export interface AgentFetchOptions extends RequestInit {
 
 export async function fetchWithAgentFallback(path: string, init?: AgentFetchOptions): Promise<Response> {
   const isHealthCheck = path.startsWith('/health');
-  // 헬스체크(/health)만 빠른 응답 확인용 기본 타임아웃(2500ms)을 두고, 실제 본 작업은 타임아웃 제한을 두지 않음(0)
+  // 헬스체크만 빠른 응답 확인용 기본 타임아웃을 두고, 실제 본 작업은 타임아웃 제한을 두지 않음(0)
   const effectiveTimeout = isHealthCheck ? (init?.timeout || 2500) : (init?.timeout ?? 0);
   const requireAgent = Boolean(init?.requireAgent);
   const actionName = init?.actionName || '로컬 연동 작업';
   const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:' && !window.location.hostname.includes('localhost');
   const hasExtension = isExtensionBridgeAvailable();
 
-  // 🛡️ [1단계: 사전 실행 상태 확인 (Pre-flight Health Check)]
-  // 본 작업을 실행하기 전에 먼저 짧은 /health 핑으로 로컬 에이전트가 실행 중인지 확인합니다.
+  // 🛡️ [1단계: 사전 실행 상태 확인 (Pre-flight Health Check & 구버전 코어 즉시 핫패치 동기화 가드)]
+  // 본 작업을 실행하기 전에 먼저 짧은 /health 핑으로 로컬 에이전트가 실행 중인지, 코어가 최신인지 확인합니다.
   if (!isHealthCheck && !init?.skipPrecheck) {
     let alive = false;
+    let detectedOutdatedHost: string | null = null;
 
     // 0-1. 직접 루프백 /health 핑 최우선 확인 (가장 빠르고 확실함, 2500ms 여유 부여)
     const precheckHosts = ['http://127.0.0.1:5175', 'http://localhost:5175'];
@@ -408,7 +431,45 @@ export async function fetchWithAgentFallback(path: string, init?: AgentFetchOpti
           alive = true;
           activeAgentBaseUrl = h;
           setGlobalAgentStatus(true);
+          try {
+            const pingData = await pingRes.json();
+            const verOutdated = pingData?.version && isExpectedNewer(EXPECTED_AGENT_VERSION, pingData.version);
+            const agentAlreadyNewer = pingData?.version && isExpectedNewer(pingData.version, EXPECTED_AGENT_VERSION);
+            const hashMismatch = !agentAlreadyNewer && Boolean(EXPECTED_CORE_HASH && EXPECTED_CORE_HASH !== 'auto' && pingData?.coreHash !== EXPECTED_CORE_HASH);
+            if (verOutdated || hashMismatch) {
+              detectedOutdatedHost = h;
+            }
+          } catch {}
           break;
+        }
+      } catch {}
+    }
+
+    // 0-1b. 작업 실행 직전에 구버전 코어가 감지된 경우, 즉시 핫패치를 트리거하고 재기동 완료까지 최대 6.5초 대기
+    const isUpdateCall = path.startsWith('/api/check-update');
+    const isCriticalCoreJob = path.startsWith('/api/generate-') || path.startsWith('/api/send-email') || path.startsWith('/api/trigger-sync') || path.startsWith('/api/policy/sync');
+    if (alive && detectedOutdatedHost && !isUpdateCall) {
+      try {
+        await fetch(`${detectedOutdatedHost}/api/check-update`, { method: 'POST', cache: 'no-store' }).catch(() => {});
+        if (isCriticalCoreJob) {
+          const waitStart = Date.now();
+          while (Date.now() - waitStart < 6500) {
+            await new Promise(r => setTimeout(r, 600));
+            try {
+              const c = new AbortController();
+              const t = setTimeout(() => c.abort(), 1500);
+              const checkRes = await fetch(`${detectedOutdatedHost}/health`, { method: 'GET', signal: c.signal, cache: 'no-store' });
+              clearTimeout(t);
+              if (checkRes.ok) {
+                const checkData = await checkRes.json();
+                const stillOldVer = checkData?.version && isExpectedNewer(EXPECTED_AGENT_VERSION, checkData.version);
+                const stillOldHash = Boolean(EXPECTED_CORE_HASH && EXPECTED_CORE_HASH !== 'auto' && checkData?.coreHash !== EXPECTED_CORE_HASH);
+                if (!stillOldVer && !stillOldHash) {
+                  break;
+                }
+              }
+            } catch {}
+          }
         }
       } catch {}
     }
@@ -432,7 +493,7 @@ export async function fetchWithAgentFallback(path: string, init?: AgentFetchOpti
       if (requireAgent) {
         notifyAgentRequired(actionName);
       }
-      throw new Error(`로컬 에이전트(eBroAgent)가 실행되고 있지 않습니다. PC에서 eBroAgent를 실행한 후 다시 시도해 주십시오.`);
+      throw new Error(`로컬 에이전트가 실행되고 있지 않습니다. PC에서 eBroAgent를 실행한 후 다시 시도해 주십시오.`);
     }
   }
 
@@ -494,16 +555,51 @@ export async function fetchWithAgentFallback(path: string, init?: AgentFetchOpti
     notifyAgentRequired(actionName);
   }
 
-  throw lastErr || new Error('로컬 에이전트(eBroAgent)와 통신할 수 없습니다. 에이전트 실행 상태를 확인해 주십시오.');
+  throw lastErr || new Error('로컬 에이전트와 통신할 수 없습니다. 에이전트 실행 상태를 확인해 주십시오.');
 }
 
-// ── 🌐 단일 전역 에이전트 헬스체크 매니저 (Single Global Autonomous Poller) ──
+// ── 🌐 단일 전역 에이전트 헬스체크 매니저 ──
 let globalHealthCheckTimer: any = null;
+let activeMonitorCallsign: string = 'admin';
 let consecutiveFailures = 0;
 let isCheckingHealth = false;
+let lastAutoUpdateTriggerAt = 0;
+let lastAutoR2SyncTriggerAt = 0;
 
 /**
- * 2-Strike 확인 기반 가짜 오프라인(Flapping) 방지 헬스체크
+ * ☁️ 로컬 에이전트에 Cloudflare R2 변경 파일 즉시 동기화 명령 전송
+ */
+export async function triggerAgentCloudflareSync(): Promise<boolean> {
+  try {
+    const res = await fetchWithAgentFallback('/api/trigger-sync', {
+      method: 'POST',
+      skipPrecheck: true
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+function isExpectedNewer(expectedVer: string, currentVer: string): boolean {
+  const parse = (v: string) => {
+    const cleaned = String(v || '').trim().replace(/^v/i, '');
+    const parts = cleaned.split('.Build.');
+    const semver = (parts[0] || '0').split('.').map(n => parseInt(n, 10) || 0);
+    const build = parts[1] ? (parseInt(parts[1], 10) || 0) : 0;
+    return [semver[0] || 0, semver[1] || 0, semver[2] || 0, build];
+  };
+  const e = parse(expectedVer);
+  const c = parse(currentVer);
+  for (let i = 0; i < 4; i++) {
+    if (e[i] > c[i]) return true;
+    if (e[i] < c[i]) return false;
+  }
+  return false;
+}
+
+/**
+ * 2-Strike 확인 기반 가짜 오프라인 방지 헬스체크
  */
 export async function pingLocalAgentHealth(callsign: string = 'admin'): Promise<AgentHealthInfo> {
   if (isCheckingHealth) {
@@ -525,6 +621,7 @@ export async function pingLocalAgentHealth(callsign: string = 'admin'): Promise<
       const info: AgentHealthInfo = {
         status: 'ONLINE',
         version: data.version || 'v2.0.0',
+        coreHash: data.coreHash,
         callsign: data.callsign || callsign,
         machineName: data.machineName,
         archiveRoot: data.archiveRoot,
@@ -536,10 +633,31 @@ export async function pingLocalAgentHealth(callsign: string = 'admin'): Promise<
         timestamp: data.timestamp
       };
       setGlobalAgentStatus(true, info);
+
+      // 🚀 로컬 에이전트 버전이 배포 버전보다 낮거나(동일 버전 내 해시 변경 시) 원격 업데이트 트리거 (구버전 브라우저 탭이 신버전 에이전트를 역공격하지 않도록 방어)
+      const isVersionOutdated = Boolean(data.version && isExpectedNewer(EXPECTED_AGENT_VERSION, data.version));
+      const isAgentAlreadyNewer = Boolean(data.version && isExpectedNewer(data.version, EXPECTED_AGENT_VERSION));
+      const isHashOutdated = !isAgentAlreadyNewer && Boolean(EXPECTED_CORE_HASH && EXPECTED_CORE_HASH !== 'auto' && data.coreHash !== EXPECTED_CORE_HASH);
+      if (isVersionOutdated || isHashOutdated) {
+        if (
+          data.updateState?.status !== 'downloading' &&
+          data.updateState?.status !== 'installing' &&
+          Date.now() - lastAutoUpdateTriggerAt > 5 * 60 * 1000
+        ) {
+          lastAutoUpdateTriggerAt = Date.now();
+          lastAutoR2SyncTriggerAt = 0; // 코어 업데이트 완료 직후 R2 동기화가 즉시 실행되도록 초기화
+          triggerAgentSelfUpdate(false).catch(() => {});
+        }
+      } else if (Date.now() - lastAutoR2SyncTriggerAt > 5 * 60 * 1000) {
+        // ☁️ 최신 에이전트 코어 온라인 확인 즉시 (및 5분 주기) Cloudflare R2 변경 파일 자동 동기화 트리거
+        lastAutoR2SyncTriggerAt = Date.now();
+        triggerAgentCloudflareSync().catch(() => {});
+      }
+
       return info;
     }
   } catch (err) {
-    // 💡 1회 실패 시 즉각 OFFLINE으로 단정하지 않고 400ms 후 즉시 1회 재시도 (2-Strike Flapping Prevention)
+    // 💡 1회 실패 시 즉각 OFFLINE으로 단정하지 않고 400ms 후 즉시 1회 재시도
     consecutiveFailures++;
     if (consecutiveFailures === 1) {
       try {
@@ -582,25 +700,31 @@ export async function pingLocalAgentHealth(callsign: string = 'admin'): Promise<
 /**
  * 단일 전역 에이전트 헬스체크 모니터 가동
  * - 3.5초 주기 단일 폴링으로 소켓 경합 원천 제거
- * - 탭 포커스 복귀(window.focus) 및 화면 복원(visibilitychange) 시 0.1초 즉시 헬스체크 트리거
+ * - 탭 포커스 복귀 및 화면 복원 시 0.1초 즉시 헬스체크 트리거
  */
 export function startGlobalAgentHealthMonitor(callsign: string = 'admin'): void {
   if (typeof window === 'undefined') return;
-  if (globalHealthCheckTimer) return;
+  if (callsign && callsign.trim()) {
+    activeMonitorCallsign = callsign.trim();
+  }
+  if (globalHealthCheckTimer) {
+    pingLocalAgentHealth(activeMonitorCallsign);
+    return;
+  }
 
   // 1. 즉시 1회 검사
-  pingLocalAgentHealth(callsign);
+  pingLocalAgentHealth(activeMonitorCallsign);
 
   // 2. 단일 주기적 폴링 (3.5초)
   globalHealthCheckTimer = setInterval(() => {
-    pingLocalAgentHealth(callsign);
+    pingLocalAgentHealth(activeMonitorCallsign);
   }, 3500);
 
   // 3. 브라우저 창/탭 복원 시 즉시 재검사 (트레이에서 올라왔을 때 0.1초 즉시 초록불 복귀)
-  window.addEventListener('focus', () => { pingLocalAgentHealth(callsign); });
+  window.addEventListener('focus', () => { pingLocalAgentHealth(activeMonitorCallsign); });
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') {
-      pingLocalAgentHealth(callsign);
+      pingLocalAgentHealth(activeMonitorCallsign);
     }
   });
 }
@@ -686,4 +810,215 @@ export function notifyAgentRequired(actionName: string = '로컬 연동 작업')
     window.dispatchEvent(new CustomEvent('ebro:agent_required', { detail: { actionName } }));
   }
 }
+
+export interface LocalBackupStatus {
+  success: boolean;
+  autoBackupEnabled?: boolean;
+  autoBackupTime?: string;
+  autoBackupRetentionDays?: number;
+  backupUserId?: string;
+  backupUserName?: string;
+  lastAutoBackupAt?: string | null;
+  hasTodayBackup?: boolean;
+  isRunning?: boolean;
+  lastError?: string | null;
+  backupDir?: string;
+  backupCount?: number;
+  recentBackups?: Array<{
+    fileName: string;
+    filePath: string;
+    sizeBytes: number;
+    modifiedAt: string;
+  }>;
+  error?: string;
+}
+
+/**
+ * 🛡️ 로컬 에이전트의 DB 백업 현황 및 정책 상태 조회
+ */
+export async function getAgentLocalBackupStatus(): Promise<LocalBackupStatus> {
+  try {
+    const res = await fetchWithAgentFallback('/api/backup/status', {
+      method: 'GET',
+      timeout: 3000
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    return { success: false, error: `HTTP ${res.status}` };
+  } catch (e: any) {
+    return { success: false, error: e?.message || '에이전트 연결 실패' };
+  }
+}
+
+/**
+ * 🛡️ 로컬 에이전트에 즉시 전체 DB 백업 실행 명령 전송
+ */
+export async function triggerAgentLocalBackupNow(backupPolicy?: {
+  autoBackupEnabled?: boolean;
+  autoBackupTime?: string;
+  autoBackupRetentionDays?: number;
+  backupUserId?: string;
+  backupUserName?: string;
+}): Promise<{
+  success: boolean;
+  fileName?: string;
+  filePath?: string;
+  tableCount?: number;
+  totalRowsCount?: number;
+  fileSizeMb?: number;
+  completedAt?: string;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const res = await fetchWithAgentFallback('/api/backup/run-now', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(backupPolicy || {}),
+      timeout: 120000
+    });
+    return await res.json();
+  } catch (e: any) {
+    return { success: false, error: e?.message || '에이전트 통신 실패' };
+  }
+}
+
+/**
+ * 📂 로컬 PC 백업 폴더(C:\eBroAgent\문서고\DB백업) 탐색기 열기
+ */
+export async function openAgentLocalBackupFolder(): Promise<boolean> {
+  try {
+    const res = await fetchWithAgentFallback('/api/backup/open-folder', {
+      method: 'POST',
+      timeout: 3000
+    });
+    return res.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
+export type AgentAiProviderType = 'LOCAL_OLLAMA' | 'GEMINI' | 'OPENAI' | 'ANTHROPIC' | 'GROQ' | 'JEV_OPENROUTER';
+
+export interface AgentByokProfile {
+  scope?: string;
+  tenant_code: string;
+  user_id?: string;
+  provider: AgentAiProviderType;
+  model: string;
+  has_api_key?: boolean;
+  masked_api_key?: string;
+  vision_fallback_enabled?: boolean;
+  custom_endpoint?: string;
+  jev_enabled?: boolean;
+  has_jev_api_key?: boolean;
+  masked_jev_api_key?: string;
+  jev_model?: string;
+  jev_endpoint?: string;
+}
+
+/**
+ * 🔐 테넌트(기업) 또는 임직원(개인) 단위 AI 모델 및 API 키 프로필을 로컬 에이전트(5175 / 9002)에 암호화 저장 (BYOK + Jev System 1 선택 지원)
+ */
+export async function saveAgentByokProfile(params: {
+  tenantCode: string;
+  userId?: string;
+  provider: AgentAiProviderType;
+  model: string;
+  apiKey?: string;
+  visionFallbackEnabled?: boolean;
+  customEndpoint?: string;
+  jevEnabled?: boolean;
+  jevApiKey?: string;
+  jevModel?: string;
+  jevEndpoint?: string;
+}): Promise<{ success: boolean; profile?: AgentByokProfile; error?: string }> {
+  const payload = JSON.stringify({
+    tenant_code: params.tenantCode || 'DEFAULT',
+    user_id: params.userId || '',
+    provider: params.provider,
+    model: params.model,
+    api_key: params.apiKey,
+    vision_fallback_enabled: params.visionFallbackEnabled ?? true,
+    custom_endpoint: params.customEndpoint || '',
+    jev_enabled: params.jevEnabled,
+    jev_api_key: params.jevApiKey,
+    jev_model: params.jevModel || 'typesafe/jev',
+    jev_endpoint: params.jevEndpoint || '',
+  });
+
+  // 1순위: eBroAgent 표준 포트(5175) 및 확장 브릿지 호출
+  try {
+    const res = await fetchWithAgentFallback('/api/ai-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+      skipPrecheck: true,
+    });
+    if (res.ok) {
+      // Python 코어(9002)가 함께 구동 중인 경우 백그라운드 미러링
+      fetch('http://127.0.0.1:9002/ai-profile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: payload,
+      }).catch(() => {});
+      return await res.json();
+    }
+  } catch {}
+
+  // 2순위: Python 코어(9002) 직접 호출 폴백
+  try {
+    const res = await fetch('http://127.0.0.1:9002/ai-profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    return { success: false, error: `HTTP ${res.status}` };
+  } catch (e: any) {
+    return { success: false, error: e?.message || '로컬 에이전트 연결 실패' };
+  }
+}
+
+/**
+ * 🔐 현재 테넌트/임직원에 적용되는 유효 AI 모델 및 마스킹된 API 키 프로필 조회
+ */
+export async function getAgentByokProfile(params?: {
+  tenantCode?: string;
+  userId?: string;
+}): Promise<{ success: boolean; profile?: AgentByokProfile; error?: string }> {
+  const q = new URLSearchParams({
+    tenant_code: params?.tenantCode || 'DEFAULT',
+    user_id: params?.userId || '',
+  });
+
+  // 1순위: eBroAgent 표준 포트(5175) 및 확장 브릿지 호출
+  try {
+    const res = await fetchWithAgentFallback(`/api/ai-profile?${q.toString()}`, {
+      method: 'GET',
+      skipPrecheck: true,
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch {}
+
+  // 2순위: Python 코어(9002) 직접 호출 폴백
+  try {
+    const res = await fetch(`http://127.0.0.1:9002/ai-profile?${q.toString()}`, {
+      method: 'GET',
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+    return { success: false, error: `HTTP ${res.status}` };
+  } catch (e: any) {
+    return { success: false, error: e?.message || '로컬 에이전트 연결 실패' };
+  }
+}
+
+
 
